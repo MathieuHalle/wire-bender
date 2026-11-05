@@ -1,6 +1,7 @@
 import type { BoardFile, Side, Trail } from './schema'
 import { holeKey, holeName, parseHole, straightRun, type Hole } from './holes'
 import { placePart } from './footprints'
+import { buildConnectivity } from './connectivity'
 
 export interface Drawing { trailId: string; side: Side }
 export type EditResult = { ok: true; board: BoardFile; drawing: Drawing | null } | { ok: false; reason: string }
@@ -64,6 +65,37 @@ function rejection(board: BoardFile, side: Side, h: Hole): string | null {
 const addJoint = (t: Trail, name: string): Trail =>
   t.joints.includes(name) ? t : { ...t, joints: [...t.joints, name] }
 
+const isEnd = (t: Trail, name: string) => t.points[0] === name || t.points[t.points.length - 1] === name
+
+/** The pencil landed on other trails at `name`: they get the joint too (spec §9b, the tool adds it). */
+function jointOthers(trails: Trail[], side: Side, h: Hole, exceptId: string): Trail[] {
+  const name = holeName(h)
+  return trails.map(t => (t.side === side && t.id !== exceptId && !isEnd(t, name) && trailPasses(t, h) ? addJoint(t, name) : t))
+}
+
+/**
+ * Joints for the leads a new straight run passes over (ends excluded): a lead of the
+ * trail's net, or the first lead with a net when the trail has none yet. A lead of
+ * another net gets none (the check reports the short); NC leads never get one.
+ */
+function leadJoints(board: BoardFile, t: Trail, from: Hole, to: Hole): Trail {
+  const nets = buildConnectivity(board).groups.find(g => g.conductors.some(c => c.kind === 'trail' && c.id === t.id))?.nets ?? []
+  if (nets.length > 1) return t // already shorted: don't add more
+  let net: string | null = nets[0] ?? null
+  const netsAt = new Map<string, string[]>()
+  for (const p of board.parts)
+    for (const pin of placePart(p).pins)
+      if (pin.net !== null) netsAt.set(holeKey(pin.hole), [...(netsAt.get(holeKey(pin.hole)) ?? []), pin.net])
+  let out = t
+  for (const h of straightRun(from, to).slice(1, -1)) {
+    const here = netsAt.get(holeKey(h))
+    if (!here) continue
+    if (net === null) net = here[0]!
+    if (here.includes(net)) out = addJoint(out, holeName(h))
+  }
+  return out
+}
+
 export function pencilClick(board: BoardFile, side: Side, hole: Hole, drawing: Drawing | null): EditResult {
   const reason = rejection(board, side, hole)
   if (reason) return fail(reason)
@@ -72,8 +104,10 @@ export function pencilClick(board: BoardFile, side: Side, hole: Hole, drawing: D
   if (!drawing) {
     const id = nextTrailId(board)
     const t: Trail = { id, side, points: [name], joints: [] }
-    const joint = hasLead(board, hole) || hasOtherTrace(board, side, hole, id)
-    return { ok: true, board: withTrails(board, [...board.trails, joint ? addJoint(t, name) : t]), drawing: { trailId: id, side } }
+    const traced = hasOtherTrace(board, side, hole, id)
+    const joint = hasLead(board, hole) || traced
+    const others = traced ? jointOthers(board.trails, side, hole, id) : board.trails
+    return { ok: true, board: withTrails(board, [...others, joint ? addJoint(t, name) : t]), drawing: { trailId: id, side } }
   }
 
   const cur = board.trails.find(t => t.id === drawing.trailId)
@@ -90,11 +124,12 @@ export function pencilClick(board: BoardFile, side: Side, hole: Hole, drawing: D
     return fail('Trails run along a row or a column: click a hole in the same row or column.')
   }
   const traced = hasOtherTrace(board, side, hole, cur.id)
-  let next: Trail = { ...cur, points: [...cur.points, name] }
+  let next: Trail = leadJoints(board, { ...cur, points: [...cur.points, name] }, lh, hole)
   if (traced || hasLead(board, hole)) next = addJoint(next, name)
+  const others = traced ? jointOthers(board.trails, side, hole, cur.id) : board.trails
   return {
     ok: true,
-    board: withTrails(board, board.trails.map(t => (t.id === cur.id ? next : t))),
+    board: withTrails(board, others.map(t => (t.id === cur.id ? next : t))),
     drawing: traced ? null : drawing
   }
 }
@@ -143,11 +178,16 @@ export function eraseSegment(board: BoardFile, side: Side, a: Hole, b: Hole): Ed
   return none
 }
 
-/** Add a joint at `hole` on every trail of this side that passes it, or remove it if all have one. */
+/**
+ * Add a joint at `hole` on every trail of this side that passes it, or remove it if all
+ * have one. A trail ending there is soldered anyway and left alone.
+ */
 export function toggleJoint(board: BoardFile, side: Side, hole: Hole): EditResult {
   const name = holeName(hole)
-  const over = board.trails.filter(t => t.side === side && trailPasses(t, hole))
-  if (over.length === 0) return fail(`No trail on this side at ${name}.`)
+  const passing = board.trails.filter(t => t.side === side && trailPasses(t, hole))
+  if (passing.length === 0) return fail(`No trail on this side at ${name}.`)
+  const over = passing.filter(t => !isEnd(t, name))
+  if (over.length === 0) return fail('Trail ends are always soldered.')
   const remove = over.every(t => t.joints.includes(name))
   const trails = board.trails.map(t => {
     if (!over.includes(t)) return t

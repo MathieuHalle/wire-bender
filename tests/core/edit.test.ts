@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { pencilClick, eraseSegment, toggleJoint, nextTrailId, type Drawing, type EditResult } from '~core/edit'
 import type { BoardFile } from '~core/schema'
 import { parseHole } from '~core/holes'
+import { runCheck } from '~core/check'
 import { mk, axial, trail } from './helpers'
 
 const H = parseHole
@@ -66,6 +67,42 @@ describe('pencilClick', () => {
     expect(s.drawing).not.toBeNull()
   })
 
+  it('pencil T-join: the trail it lands on gets the joint too, so no missingJoint is left', () => {
+    const b = mk({ parts: [axial('R1', 'B2', 'B5', 'N'), axial('R2', 'H2', 'H5', 'N')], trails: [trail('T1', ['B5', 'H5'])] })
+    const r = clicks(b, 'bottom', ['E9', 'E5'])
+    expect(r.drawing).toBeNull()
+    expect(r.board.trails.map(t => [t.id, t.points, t.joints])).toEqual([
+      ['T1', ['B5', 'H5'], ['E5']],
+      ['T2', ['E9', 'E5'], ['E5']]
+    ])
+    expect(runCheck(r.board).findings.filter(f => f.rule === 'missingJoint')).toEqual([])
+  })
+
+  it('pencil starting on an existing trail adds the joint to that trail too', () => {
+    const b = mk({ trails: [trail('T1', ['B5', 'H5'])] })
+    const r = clicks(b, 'bottom', ['E5', 'E9', 'E9'])
+    expect(r.board.trails.map(t => [t.id, t.joints])).toEqual([['T1', ['E5']], ['T2', ['E5']]])
+  })
+
+  it('pencil adds joints on same-net leads it passes over, not on other-net or NC leads', () => {
+    const b = mk({
+      parts: [axial('R1', 'A5', 'A8', 'N'), axial('R2', 'C5', 'C8', 'N'), axial('R3', 'E5', 'E8', 'M'), axial('R4', 'G5', 'G8', null)]
+    })
+    const r = clicks(b, 'bottom', ['A5', 'I5', 'I5'])
+    expect(r.board.trails[0]!.points).toEqual(['A5', 'I5'])
+    expect(r.board.trails[0]!.joints).toEqual(['A5', 'C5'])
+    const f = runCheck(r.board).findings
+    expect(f.filter(x => x.rule === 'short')).toHaveLength(1)
+    expect(f.filter(x => x.rule === 'missingJoint')).toEqual([])
+  })
+
+  it('a trail with no net yet takes a joint on the first lead it passes, then only that net', () => {
+    const b = mk({ parts: [axial('R1', 'C3', 'F3', 'N'), axial('R2', 'C6', 'F6', 'M'), axial('R3', 'C8', 'F8', 'N')] })
+    const r = clicks(b, 'bottom', ['C1', 'C10', 'C10'])
+    expect(r.board.trails[0]!.points).toEqual(['C1', 'C10'])
+    expect(r.board.trails[0]!.joints).toEqual(['C3', 'C8'])
+  })
+
   it('pencil adds a joint on a lead', () => {
     const b = mk({ parts: [axial('R1', 'C5', 'C8', 'N')] })
     const r = clicks(b, 'bottom', ['C2', 'C5', 'F5'])
@@ -109,6 +146,15 @@ describe('toggleJoint', () => {
     if (!r2.ok) throw new Error(r2.reason)
     expect(r2.board.trails[0]!.joints).toEqual([])
     expect(toggleJoint(b, 'bottom', H('B5'))).toEqual({ ok: false, reason: 'No trail on this side at B5.' })
+  })
+
+  it('toggleJoint on a hole that ends every trail there refuses: ends are always soldered', () => {
+    const b = mk({ trails: [trail('T1', ['A1', 'A5']), trail('T2', ['A5', 'E5'])] })
+    expect(toggleJoint(b, 'bottom', H('A5'))).toEqual({ ok: false, reason: 'Trail ends are always soldered.' })
+    const c = mk({ trails: [trail('T1', ['A1', 'A5']), trail('T2', ['A3', 'E3'])] })
+    const r = toggleJoint(c, 'bottom', H('A3'))
+    if (!r.ok) throw new Error(r.reason)
+    expect(r.board.trails.map(t => t.joints)).toEqual([['A3'], []])
   })
 })
 
