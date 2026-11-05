@@ -60,6 +60,7 @@ plus our own Python scripts, and printed instruction sheets. It worked, but:
 - Real 3D models from an online parts database (for example EasyEDA / LCSC).
 - Dragging parts in the editor.
 - Stripboard, breadboard, or ordering a manufactured PCB.
+- A hosted version for other users and a published board-format standard (milestone 4).
 
 ### Anti-goals (would make it a failure even if it works)
 
@@ -270,7 +271,17 @@ point for the content and look of these sheets.
    and the channel board 2 import underneath it). The owner plays with board 2 on screen
    before building it; board 2 waits for this.
 2. **Bench export** next: printed 1:1 sheets and the offline HTML file.
-3. **3D view** last.
+3. **3D view**.
+4. **Hosted static version and an open board format** (added 2026-11-05 by the owner):
+   - The same app built as a static site (Nuxt static generation) that anyone can open:
+     load a board file by drag-and-drop, file picker or link; edit, check and export the
+     bench sheet entirely in the browser; save by download (or back to the same file where
+     the browser allows it). Board files never leave the user's machine; no accounts.
+   - Local mode (live file sync with Claude, the current setup) stays as is; both modes
+     share the same core and UI.
+   - `wirebender/1` becomes a documented, versioned standard: a format spec page, a
+     generated JSON Schema, example boards, and rules for future versions (new fields are
+     additive; breaking changes bump the version with a migration).
 
 ## 12. Where things live
 
