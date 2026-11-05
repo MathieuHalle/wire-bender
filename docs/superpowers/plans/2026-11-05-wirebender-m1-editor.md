@@ -138,7 +138,8 @@ interface BoardFile {
 }
 interface Part { ref: string; footprint: string; at: HoleName; to?: HoleName;   // `to` = second lead of a 2-lead part
                  rotation: 0 | 90 | 180 | 270; flip?: boolean; standing?: boolean;
-                 value?: string; label?: string; pins: Record<string, string | null> }  // pin -> net; null = NC
+                 value?: string; label?: string; pins: Record<string, string | null>   // pin -> net; null = NC
+                 roles?: Record<string, PinRole> }                                    // overrides footprint pin roles
 interface Trail { id: string; side: Side; points: HoleName[]; joints: HoleName[] }
 interface Wire  { id: string; kind: 'laid' | 'flying'; side: Side; points: HoleName[];   // >= 2, first = start
                   color?: string; bareSegments: number[]; joints: HoleName[] }            // indexes into points pairs
@@ -181,6 +182,7 @@ interface PlacedPart { part: Part; fp: Footprint; pins: { name: string; hole: Ho
 placePart(part: Part): PlacedPart
 ```
   - Rotation is clockwise seen from the top, about pin 1: `(dx,dy) → (-dy,dx)` per 90°. `flip` mirrors `dx → -dx` before rotation. For `twoLead` parts, `to` sets lead b and rotation is ignored; `standing: true` puts the body over lead a only (circle of the body diameter).
+  - Pin `role` = `part.roles[pin]`, else the footprint's, else `passive`.
   - `bodyHoles` = holes whose centre lies strictly inside `bodyRectMm` shrunk by 0.3 mm, minus the part's own pin holes.
   - Library (values for v1; pin offsets reproduce channel board 2 exactly):
 
@@ -199,7 +201,7 @@ placePart(part: Part): PlacedPart
 
 - [ ] **Step 1: Write the failing tests.**
   - `relay at D3 rotation 0` → pin 16 at `D6`, pin 9 at `K6`.
-  - `dip8 rotation 90 at W8`-style: placing `dip8` with `at` and rotation chosen so pins land on channel board 2's U1 holes. Compute the expected holes in the test from channel_board.py: `U1_HOLES = rotate({"1":"W11","2":"V11","3":"U11","4":"T11","5":"T8","6":"U8","7":"V8","8":"W8"}, 1)` (copy the resulting 8 hole names into the test literal by running that one Python expression once in `light-ctrl/re/boards`).
+  - `dip8 matches channel board 2 U1`: placing `dip8` with the `at` and `rotation` that put pin 1 on U1's pin 1 hole lands all 8 pins on channel board 2's U1 holes. Compute the expected holes in the test from channel_board.py: `U1_HOLES = rotate({"1":"W11","2":"V11","3":"U11","4":"T11","5":"T8","6":"U8","7":"V8","8":"W8"}, 1)` (copy the resulting 8 hole names into the test literal by running that one Python expression once in `light-ctrl/re/boards`).
   - `terminal body covers the row below`: `terminal-2p-508` at `A3` → `bodyHoles` contains `B3`, `B4`, `B5`, `A4`, not `A3`, `A5`.
   - `standing axial body only around lead a`: `axial` `at: L2, to: L1, standing: true` → `bodyHoles` empty.
   - `rotation 180 then 0 is identity` for every footprint.
@@ -242,7 +244,7 @@ buildConnectivity(board: BoardFile): Connectivity
   - Group `nets` = distinct nets of the leads in the group.
 
 - [ ] **Step 1: Write the failing tests** (small hand-made boards, 10 x 10, built with a test helper `mk(partial)` that fills defaults):
-  - `trail joins two leads`: R1 axial C2–C5, R2 axial F2–F5, nets A on C5 and F2… trail bottom `C5,F5? ` — use: R1.b at `C5` net N, R2.a at `F5` net N, trail `[C5, F5]` → R1.b and R2.a in one group.
+  - `trail joins two leads`: R1 `axial` at `C2` to `C5` (pin b net N), R2 `axial` at `F5` to `F8` (pin a net N), bottom trail `[C5, F5]` → `R1.b` and `R2.a` in one group.
   - `trail over other-net leg is a short`: trail `[C2, C8]` bottom, nets N at C2 and C8, a lead of net M at `C5` → one group with nets `[M, N]`.
   - `trail over empty hole makes no contact`: same without the lead at C5 → group nets `[N]`, `contacts` empty.
   - `proposed joint for same-net leg passed over`: lead of net N at C5 → `proposedJoints` = `[{trailId, hole: C5}]`.
@@ -348,7 +350,7 @@ nextTrailId(board: BoardFile): string                       // "T1", "T2", ... f
   - `BARE` paths → `trails` on `bottom` with the same points; joints = every point that holds a lead plus both ends. The two-hole lift-chain links between consecutive diodes (`_br_a`, `_br_b` from `lift_chain`) → `legFolds` (cathode of diode i folded to the anode hole of diode i+1), not trails.
   - Wires from `channel_board.json` `wires` → `kind: 'flying'`, `side: 'bottom'`, points `[a.hole, b.hole]`, `bareSegments: []`; an end with `bridgeTo` adds a `solderBridges` entry `{side:'bottom', a: hole, b: bridgeTo}`.
   - Nets/classes/rules from `audit_board.py` `BOARD_CFG`: classes `GND` (from `PWR`), `HV12`, `LOGIC`; `keepAway [{a:'LOGIC', b:'HV12', holes:1}]`; `adjacency [{classes:['HV12','GND'],level:'supply'}, {classes:['HV12','LOGIC'],level:'mcu'}]`; net colours from `NET_COLORS`.
-  - Pin roles from the source `pinTypes` override footprint defaults: add an optional `roles?: Record<string, PinRole>` to `Part` in `core/schema.ts` for this.
+  - Pin roles: source `pinTypes` → `Part.roles` (`in`, `out`, `oc`; `pwr` and `pwr_in` → `pwr`).
 
 - [ ] **Step 1:** Write `tools/import_channel_board.py` and generate `data/channel-board-2.wirebender.json`. Run `python3 -c "import json;json.load(open('data/channel-board-2.wirebender.json'))"` → no error.
 - [ ] **Step 2: Write the failing tests:**
@@ -395,7 +397,7 @@ nextTrailId(board: BoardFile): string                       // "T1", "T2", ... f
 - [ ] **Step 1:** Implement `useBoard` and `BoardSide`, render channel board 2 in `index.vue`.
 - [ ] **Step 2:** `pnpm typecheck` → no errors; `pnpm test` → PASS.
 - [ ] **Step 3: Verify in the browser** (claude-in-chrome, `pnpm dev`): both sides visible; relay, TO-220, terminals and header bodies at real size; `G13`-style labels correct (check U1 pin 6 sits at the hole channel_board.py says); bottom side mirrored; hovering `JH` pin 2 highlights the IN_A group on both sides. Screenshot to the owner.
-- [ ] **Step 4: Verify live sync:** with the page open, change a net colour in the data file with a text edit → page updates within ~1 s, `rev` unchanged by external edits that don't touch `revision`… (external edits keep whatever `revision` they write; the page reloads on any change). Write invalid JSON → error banner, last good board still shown; fix it → banner gone.
+- [ ] **Step 4: Verify live sync:** with the page open, change a net colour in the data file with a text edit → page updates within ~1 s (the page reloads on any external change, whatever `revision` the file has). Write invalid JSON → error banner, last good board still shown; fix it → banner gone.
 - [ ] **Step 5:** Commit `feat(app): both-sides board view with live file sync`.
 
 ### Task 10: Tools, findings panel and conflict banner
@@ -413,7 +415,7 @@ nextTrailId(board: BoardFile): string                       // "T1", "T2", ... f
   - Conflict banner (when `status === 'conflict'`): "The board file changed on disk while you were editing." Buttons: `Load the file` (`reloadFromDisk`, discards local edits after a confirm in the banner itself, no browser dialog) and `Keep my version` (`keepMine`: saves with the current disk revision as base, so the file gets the owner's board with a new revision).
 - [ ] **Step 1:** Implement `useTools`, `Toolbar`, `FindingsPanel`, and the banner.
 - [ ] **Step 2:** `pnpm typecheck` and `pnpm test` → PASS.
-- [ ] **Step 3: Verify in the browser** (record a GIF with gif_creator, `wirebender_m1_tools.gif`): draw an L trail on the bottom with the pencil, end it with a double click on the last hole; erase its middle segment → two trails; toggle a joint; undo three times → original board; try a diagonal click → toast with the reason; draw a trail across another net's leg → `Short` appears in Errors and highlights the holes. Then from the terminal change the file (e.g. with `pnpm check`'s neighbour: edit a trail point by hand) while an edit is pending → conflict banner appears, both buttons behave as described.
+- [ ] **Step 3: Verify in the browser** (record a GIF with gif_creator, `wirebender_m1_tools.gif`): draw an L trail on the bottom with the pencil, end it with a double click on the last hole; erase its middle segment → two trails; toggle a joint; undo three times → original board; try a diagonal click → toast with the reason; draw a trail across another net's leg → `Short` appears in Errors and highlights the holes. Then, within the 400 ms autosave window of a browser edit, change a trail point in the file from the terminal (a `sed` on the data file) → conflict banner appears; both buttons behave as described.
 - [ ] **Step 4:** Run `pnpm check data/channel-board-2.wirebender.json` after editing in the browser → the CLI output matches the findings panel counts.
 - [ ] **Step 5:** Commit `feat(app): pencil, erase and joint tools with live check and conflict handling`.
 
