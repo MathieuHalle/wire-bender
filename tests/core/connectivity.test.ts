@@ -1,29 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildConnectivity, type Connectivity } from '~core/connectivity'
 import { holeName, parseHole } from '~core/holes'
-import { parseBoard, type BoardFile } from '~core/schema'
-
-type Partial2 = Omit<Partial<BoardFile>, 'board'> & { board?: Partial<BoardFile['board']> }
-
-/** A valid 10 x 10 one-sided board with `over` merged in, validated by parseBoard. */
-function mk(over: Partial2 = {}): BoardFile {
-  const { board, ...rest } = over
-  const raw = {
-    format: 'wirebender/1', revision: 0, name: 'test',
-    board: { cols: 10, rows: 10, pitchMm: 2.54, type: 'one-sided', blocked: [], ...board },
-    netClasses: {}, nets: {}, rules: { keepAway: [], adjacency: [] },
-    parts: [], trails: [], wires: [], legFolds: [], solderBridges: [],
-    ...rest
-  }
-  const res = parseBoard(raw)
-  if (!res.ok) throw new Error(res.errors.join('\n'))
-  return res.board
-}
-
-const axial = (ref: string, at: string, to: string, a: string | null, b: string | null = null) =>
-  ({ ref, footprint: 'axial', at, to, rotation: 0 as const, pins: { a, b } })
-const trail = (id: string, points: string[], side: 'top' | 'bottom' = 'bottom', joints: string[] = []) =>
-  ({ id, side, points, joints })
+import { mk, axial, trail } from './helpers'
 
 const groupOfTrail = (c: Connectivity, id: string) =>
   c.groups.findIndex(g => g.conductors.some(x => x.kind === 'trail' && x.id === id))
