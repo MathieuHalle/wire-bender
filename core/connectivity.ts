@@ -25,8 +25,8 @@ export interface Connectivity {
   /**
    * A bare conductor touching something at a hole where it has no joint. `trailId` is the
    * trail (or laid wire, for a bare segment) that passes over; `with` is the lead id, wire id,
-   * trail id, or the source of the solder it touches. `sameNet` is true when the two sides
-   * carry no conflicting nets (at most one net between them, before contacts are applied).
+   * trail id, or the source of the solder it touches. `sameNet` is true when the final
+   * group (after every contact) carries at most one net; a shorted group makes every contact in it false.
    */
   contacts: { hole: Hole; side: Side; trailId: string; with: string; sameNet: boolean }[]
   /** Joints the contact rule needs that the trail doesn't list yet (same-net contacts). */
@@ -210,20 +210,9 @@ export function buildConnectivity(board: BoardFile): Connectivity {
       bareAt.set(k, [...(bareAt.get(k) ?? []), c])
     }
 
-  // Nets of each group before any contact is applied, to judge same-net vs short.
-  const netsByRoot = new Map<string, Set<string>>()
-  for (const [id, net] of leadNet) {
-    if (net === null) continue
-    const r = uf.find(leadNode(id))
-    const s = netsByRoot.get(r) ?? new Set<string>()
-    s.add(net)
-    netsByRoot.set(r, s)
-  }
-  const baseNets = (node: string) => netsByRoot.get(uf.find(node)) ?? new Set<string>()
-
-  const contacts: Connectivity['contacts'] = []
-  const proposedJoints: Connectivity['proposedJoints'] = []
-  const pendingUnions: [string, string][] = []
+  // Contacts are collected first and judged after every contact union, so a short made
+  // through contacts (or a chain of them) is never called same-net.
+  const found: { hole: Hole; side: Side; trailId: string; with: string; node: string }[] = []
   for (const c of bare) {
     for (const h of c.holes) {
       const k = holeKey(h)
@@ -238,21 +227,35 @@ export function buildConnectivity(board: BoardFile): Connectivity {
       }
       for (const o of bareAt.get(`${k}|${c.side}`) ?? [])
         if (o !== c && !touched.some(t => t.with === o.id)) touched.push({ node: o.node, with: o.id })
-      if (!touched.length) continue
-      const mine = baseNets(c.node)
-      let proposed = false
       for (const t of touched) {
-        const sameNet = new Set([...mine, ...baseNets(t.node)]).size <= 1
-        contacts.push({ hole: h, side: c.side, trailId: c.id, with: t.with, sameNet })
-        pendingUnions.push([c.node, t.node])
-        if (sameNet && !proposed) {
-          proposedJoints.push({ trailId: c.id, hole: h })
-          proposed = true
-        }
+        found.push({ hole: h, side: c.side, trailId: c.id, with: t.with, node: c.node })
+        uf.union(c.node, t.node)
       }
     }
   }
-  for (const [a, b] of pendingUnions) uf.union(a, b)
+
+  // Nets of each final group (after contacts).
+  const netsByRoot = new Map<string, Set<string>>()
+  for (const [id, net] of leadNet) {
+    if (net === null) continue
+    const r = uf.find(leadNode(id))
+    const s = netsByRoot.get(r) ?? new Set<string>()
+    s.add(net)
+    netsByRoot.set(r, s)
+  }
+
+  const contacts: Connectivity['contacts'] = []
+  const proposedJoints: Connectivity['proposedJoints'] = []
+  const proposedKeys = new Set<string>()
+  for (const f of found) {
+    const sameNet = (netsByRoot.get(uf.find(f.node))?.size ?? 0) <= 1
+    contacts.push({ hole: f.hole, side: f.side, trailId: f.trailId, with: f.with, sameNet })
+    const pk = `${f.trailId}|${holeKey(f.hole)}`
+    if (sameNet && !proposedKeys.has(pk)) {
+      proposedKeys.add(pk)
+      proposedJoints.push({ trailId: f.trailId, hole: f.hole })
+    }
+  }
 
   // ---- Groups --------------------------------------------------------------------
   const groupIndex = new Map<string, number>()

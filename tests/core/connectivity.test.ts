@@ -102,6 +102,35 @@ describe('buildConnectivity', () => {
     expect(c.groups[groupOfTrail(c, 'T1')]!.nets).toEqual(['M', 'N'])
   })
 
+  it('floating trail over two legs of different nets is a short, not two same-net contacts', () => {
+    const c = buildConnectivity(mk({
+      parts: [axial('R1', 'C3', 'F3', 'N'), axial('R2', 'C6', 'F6', 'M')],
+      trails: [trail('T1', ['C1', 'C9'])]
+    }))
+    expect(c.groups[groupOfTrail(c, 'T1')]!.nets).toEqual(['M', 'N'])
+    expect(c.contacts).toEqual([
+      { hole: parseHole('C3'), side: 'bottom', trailId: 'T1', with: 'R1.a', sameNet: false },
+      { hole: parseHole('C6'), side: 'bottom', trailId: 'T1', with: 'R2.a', sameNet: false }
+    ])
+    expect(c.proposedJoints).toEqual([])
+  })
+
+  it('short through a chain of contacts proposes no joints', () => {
+    // T1 carries N; floating T2 crosses it at C4 and passes over an M leg at F4.
+    const c = buildConnectivity(mk({
+      parts: [...rowC(false), axial('R3', 'F4', 'F7', 'M')],
+      trails: [trail('T1', ['C2', 'C8']), trail('T2', ['A4', 'H4'])]
+    }))
+    expect(groupOfTrail(c, 'T1')).toBe(groupOfTrail(c, 'T2'))
+    expect(c.groups[groupOfTrail(c, 'T1')]!.nets).toEqual(['M', 'N'])
+    expect(c.contacts.length).toBeGreaterThan(0)
+    expect(c.contacts.every(x => !x.sameNet)).toBe(true)
+    expect(c.contacts.map(x => [x.trailId, x.with, holeName(x.hole)]).sort()).toEqual([
+      ['T1', 'T2', 'C4'], ['T2', 'R3.a', 'F4'], ['T2', 'T1', 'C4']
+    ])
+    expect(c.proposedJoints).toEqual([])
+  })
+
   it('two bare trails crossing at a hole touch', () => {
     const c = buildConnectivity(mk({
       trails: [trail('T1', ['B3', 'F3']), trail('T2', ['D1', 'D6'])]
