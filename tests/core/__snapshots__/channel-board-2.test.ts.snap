@@ -1,0 +1,21 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`channel board 2 import > supply and mcu adjacency findings (snapshot) 1`] = `
+[
+  "supply: Adjacent: GND at C7 next to V12 at D7 (shorts the supply)",
+  "supply: Adjacent: LIFT_A4 at P2 next to GND at P3 (shorts the supply)",
+  "supply: Adjacent: GND at P15 next to LIFT_B4 at P16 (shorts the supply)",
+  "supply: Adjacent: LIFT_A3 at Q1 next to GND at R1 (shorts the supply)",
+  "supply: Adjacent: LIFT_A4 at Q2 next to GND at Q3 (shorts the supply)",
+  "supply: Adjacent: LIFT_A4 at Q2 next to GND at R2 (shorts the supply)",
+  "supply: Adjacent: GND at Q15 next to LIFT_B4 at Q16 (shorts the supply)",
+  "supply: Adjacent: LIFT_B4 at Q16 next to GND at R16 (shorts the supply)",
+  "supply: Adjacent: LIFT_B3 at Q17 next to GND at R17 (shorts the supply)",
+  "supply: Adjacent: GND at R9 next to DRV_A at S9 (shorts the supply)",
+  "supply: Adjacent: GND at R11 next to V12 at S11 (shorts the supply)",
+  "supply: Adjacent: DRV_B at T11 next to GND at U11 (shorts the supply)",
+  "supply: Adjacent: DRV_B at T12 next to GND at U12 (shorts the supply)",
+  "supply: Adjacent: DRV_B at T13 next to GND at U13 (shorts the supply)",
+  "supply: Adjacent: GND at U15 next to COIL_B at V15 (shorts the supply)",
+]
+`;
