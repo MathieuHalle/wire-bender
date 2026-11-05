@@ -57,7 +57,7 @@ const hole = z.string()
 const side = z.enum(['top', 'bottom'])
 const role = z.enum(['in', 'out', 'pwr', 'oc', 'passive'])
 
-const partSchema = z.object({
+const partSchema = z.strictObject({
   ref: z.string().min(1),
   footprint: z.string().min(1),
   at: hole,
@@ -73,26 +73,26 @@ const partSchema = z.object({
 
 const benchDefaults = { endLeadMm: 5, bendAllowanceMm: 1, spareMm: 5, flyingSlackMm: 10, roundToMm: 5 }
 
-const boardFileSchema = z.object({
+const boardFileSchema = z.strictObject({
   format: z.literal('wirebender/1'),
   revision: z.number().int().default(0),
   name: z.string(),
-  board: z.object({
+  board: z.strictObject({
     cols: z.number().int().positive(),
     rows: z.number().int().positive(),
     pitchMm: z.number().positive(),
     type: z.enum(['one-sided', 'two-sided']),
-    blocked: z.array(z.object({ holes: z.array(hole), reason: z.string() }))
+    blocked: z.array(z.strictObject({ holes: z.array(hole), reason: z.string() }))
   }),
-  netClasses: z.record(z.string(), z.object({ color: z.string().optional() })),
-  nets: z.record(z.string(), z.object({ class: z.string().optional(), color: z.string().optional() })),
-  rules: z.object({
-    keepAway: z.array(z.object({ a: z.string(), b: z.string(), holes: z.number().int().positive() })),
-    adjacency: z.array(z.object({ classes: z.tuple([z.string(), z.string()]), level: z.enum(['supply', 'mcu']) }))
+  netClasses: z.record(z.string(), z.strictObject({ color: z.string().optional() })),
+  nets: z.record(z.string(), z.strictObject({ class: z.string().optional(), color: z.string().optional() })),
+  rules: z.strictObject({
+    keepAway: z.array(z.strictObject({ a: z.string(), b: z.string(), holes: z.number().int().positive() })),
+    adjacency: z.array(z.strictObject({ classes: z.tuple([z.string(), z.string()]), level: z.enum(['supply', 'mcu']) }))
   }),
   parts: z.array(partSchema),
-  trails: z.array(z.object({ id: z.string(), side, points: z.array(hole), joints: z.array(hole) })),
-  wires: z.array(z.object({
+  trails: z.array(z.strictObject({ id: z.string(), side, points: z.array(hole), joints: z.array(hole) })),
+  wires: z.array(z.strictObject({
     id: z.string(),
     kind: z.enum(['laid', 'flying']),
     side,
@@ -101,9 +101,9 @@ const boardFileSchema = z.object({
     bareSegments: z.array(z.number().int()),
     joints: z.array(hole)
   })),
-  legFolds: z.array(z.object({ lead: z.string(), to: hole })),
-  solderBridges: z.array(z.object({ side, a: hole, b: hole })),
-  bench: z.object({
+  legFolds: z.array(z.strictObject({ lead: z.string(), to: hole })),
+  solderBridges: z.array(z.strictObject({ side, a: hole, b: hole })),
+  bench: z.strictObject({
     endLeadMm: z.number().default(benchDefaults.endLeadMm),
     bendAllowanceMm: z.number().default(benchDefaults.bendAllowanceMm),
     spareMm: z.number().default(benchDefaults.spareMm),

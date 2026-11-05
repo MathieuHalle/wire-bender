@@ -73,4 +73,17 @@ describe('parseBoard', () => {
     expect(r.ok).toBe(false)
     if (!r.ok) expect(r.errors[0]).toContain('board.cols')
   })
+  it('reports unknown keys with a path instead of dropping them', () => {
+    const j: any = minimal()
+    j.parts = [{ ref: 'R1', footprint: 'axial', at: 'A1', rotaton: 90, rotation: 0, pins: {} }]
+    j.extra = 1
+    j.bench.spare = 2
+    const r = parseBoard(j)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.errors.some(e => e.startsWith('parts[0]') && e.includes('rotaton'))).toBe(true)
+      expect(r.errors.some(e => e.includes('extra'))).toBe(true)
+      expect(r.errors.some(e => e.startsWith('bench') && e.includes('spare'))).toBe(true)
+    }
+  })
 })
