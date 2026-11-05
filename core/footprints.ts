@@ -7,23 +7,23 @@ export interface Footprint {
   id: string
   name: string
   /** Offsets in holes from pin 1, rotation 0. */
-  pins: { name: string; dx: number; dy: number; role?: PinRole }[]
+  pins: { name: string, dx: number, dy: number, role?: PinRole }[]
   /** Holes between `at` and `to`; pins are 'a' (at) and 'b' (to). */
-  twoLead?: { minSpan: number; maxSpan: number }
+  twoLead?: { minSpan: number, maxSpan: number }
   /**
    * Rotation 0, mm, relative to pin 1 centre; x right, y down. For twoLead parts
    * the rect is centred on the origin (the lead midpoint) with w along the lead axis.
    */
-  body: { rect: { x: number; y: number; w: number; h: number }; heightMm: number; round?: boolean; side: 'top' }
+  body: { rect: { x: number, y: number, w: number, h: number }, heightMm: number, round?: boolean, side: 'top' }
   mark?: 'pin1' | 'stripe-b' | 'flat' | 'tab'
 }
 
-export interface Rect { x: number; y: number; w: number; h: number }
+export interface Rect { x: number, y: number, w: number, h: number }
 
 export interface PlacedPart {
   part: Part
   fp: Footprint
-  pins: { name: string; hole: Hole; net: string | null; role: PinRole }[]
+  pins: { name: string, hole: Hole, net: string | null, role: PinRole }[]
   /** Holes under the body, excluding the part's own pins. */
   bodyHoles: Hole[]
   /** Board mm, after rotation/flip. */
@@ -48,7 +48,7 @@ export const FOOTPRINTS: Record<string, Footprint> = {
     pins: [p('G', 0, 0), p('D', 0, 1), p('S', 0, 2)],
     body: { rect: { x: 1.27, y: PITCH - 5, w: 4.5, h: 10.0 }, heightMm: 15.5, side: 'top' }, mark: 'tab'
   },
-  dip8: {
+  'dip8': {
     id: 'dip8', name: 'DIP-8',
     pins: [p('1', 0, 0), p('2', 0, 1), p('3', 0, 2), p('4', 0, 3), p('5', 3, 3), p('6', 3, 2), p('7', 3, 1), p('8', 3, 0)],
     body: { rect: centred(3, 3, 6.35, 9.8), heightMm: 4.5, side: 'top' }, mark: 'pin1'
@@ -68,7 +68,7 @@ export const FOOTPRINTS: Record<string, Footprint> = {
     pins: [p('a', 0, 0), p('b', 2, 0)], twoLead: { minSpan: 2, maxSpan: 2 },
     body: { rect: centredOrigin(8.9, 3.0), heightMm: 13, side: 'top' }
   },
-  axial: {
+  'axial': {
     id: 'axial', name: 'Axial (resistor, diode)',
     pins: [p('a', 0, 0), p('b', 3, 0)], twoLead: { minSpan: 3, maxSpan: 6 },
     body: { rect: centredOrigin(6.3, 2.5), heightMm: 2.5, side: 'top' }, mark: 'stripe-b'
@@ -85,14 +85,14 @@ const STANDING_DIAMETER_MM = 2.7
 const STANDING_HEIGHT_MM = 7
 
 /** Rotate clockwise seen from the top by `rot` degrees: (dx,dy) -> (-dy,dx) per 90 degrees. */
-export function rotateOffset(dx: number, dy: number, rot: number): { dx: number; dy: number } {
+export function rotateOffset(dx: number, dy: number, rot: number): { dx: number, dy: number } {
   let x = dx
   let y = dy
   for (let i = 0; i < (((rot % 360) + 360) % 360) / 90; i++) [x, y] = [-y, x] as [number, number]
   return { dx: x + 0, dy: y + 0 } // + 0 normalises -0
 }
 
-function boxOf(corners: { x: number; y: number }[]): Rect {
+function boxOf(corners: { x: number, y: number }[]): Rect {
   const xs = corners.map(c => c.x)
   const ys = corners.map(c => c.y)
   const x = Math.min(...xs)
@@ -115,7 +115,7 @@ export function placePart(part: Part): PlacedPart {
 
   let pins: PlacedPart['pins']
   let local: Rect // mm, relative to the origin point `originMm`
-  let originMm: { x: number; y: number }
+  let originMm: { x: number, y: number }
   let angle = 0 // radians, for twoLead axis
 
   if (fp.twoLead) {

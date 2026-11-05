@@ -8,9 +8,9 @@ export const DEFAULT_BOARD = 'data/channel-board-2.wirebender.json'
 
 /** `hash` is the sha256 hex of the file bytes: what a PUT must name as its base. */
 export type ReadResult = { ok: true, board: BoardFile, hash: string } | { ok: false, errors: string[] }
-export type WriteResult =
-  | { ok: true, revision: number, hash: string }
-  | { ok: false, conflict: true, current: number | null, hash?: string }
+export type WriteResult
+  = | { ok: true, revision: number, hash: string }
+    | { ok: false, conflict: true, current: number | null, hash?: string }
 
 export function hashBytes(bytes: Buffer | string): string {
   return createHash('sha256').update(bytes).digest('hex')

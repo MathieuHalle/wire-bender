@@ -1,4 +1,4 @@
-export type Hole = { col: number; row: number }
+export type Hole = { col: number, row: number }
 
 const NAME_RE = /^([A-Z]+)([1-9][0-9]*)$/
 
@@ -43,7 +43,7 @@ export function holeKey(h: Hole): string {
   return `${h.col},${h.row}`
 }
 
-export function holeMm(h: Hole, pitchMm = 2.54): { x: number; y: number } {
+export function holeMm(h: Hole, pitchMm = 2.54): { x: number, y: number } {
   return { x: (h.col - 1) * pitchMm, y: (h.row - 1) * pitchMm }
 }
 

@@ -3,8 +3,8 @@ import { holeKey, holeName, parseHole, straightRun, walkHoles, type Hole } from 
 import { placePart } from './footprints'
 import { buildConnectivity } from './connectivity'
 
-export interface Drawing { trailId: string; side: Side }
-export type EditResult = { ok: true; board: BoardFile; drawing: Drawing | null } | { ok: false; reason: string }
+export interface Drawing { trailId: string, side: Side }
+export type EditResult = { ok: true, board: BoardFile, drawing: Drawing | null } | { ok: false, reason: string }
 
 const fail = (reason: string): EditResult => ({ ok: false, reason })
 
@@ -180,7 +180,7 @@ export function toggleJoint(board: BoardFile, side: Side, hole: Hole): EditResul
   const over = passing.filter(t => !isEnd(t, name))
   if (over.length === 0) return fail('Trail ends are always soldered.')
   const remove = over.every(t => t.joints.includes(name))
-  const trails = board.trails.map(t => {
+  const trails = board.trails.map((t) => {
     if (!over.includes(t)) return t
     return remove ? { ...t, joints: t.joints.filter(j => j !== name) } : addJoint(t, name)
   })

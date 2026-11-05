@@ -387,7 +387,9 @@ describe('useBoard', () => {
       if ((o?.method ?? 'GET') === 'GET' && holdOne) {
         holdOne = false
         const stale = await real(u, o) // read the disk now, answer later
-        await new Promise<void>((r) => { releaseGet = r })
+        await new Promise<void>((r) => {
+          releaseGet = r
+        })
         return stale
       }
       return real(u, o)

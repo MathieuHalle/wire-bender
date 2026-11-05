@@ -10,10 +10,6 @@ export default defineNuxtConfig({
     enabled: true
   },
 
-  alias: {
-    '~core': fileURLToPath(new URL('./core', import.meta.url))
-  },
-
   app: {
     head: {
       title: 'WireBender',
@@ -24,6 +20,10 @@ export default defineNuxtConfig({
   },
 
   css: ['~/assets/css/main.css'],
+
+  alias: {
+    '~core': fileURLToPath(new URL('./core', import.meta.url))
+  },
 
   compatibilityDate: '2026-06-30',
 

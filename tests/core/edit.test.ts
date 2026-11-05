@@ -7,7 +7,10 @@ import { mk, axial, trail } from './helpers'
 
 const H = parseHole
 const deepFreeze = <T>(o: T): T => {
-  if (o && typeof o === 'object') { Object.values(o).forEach(deepFreeze); Object.freeze(o) }
+  if (o && typeof o === 'object') {
+    Object.values(o).forEach(deepFreeze)
+    Object.freeze(o)
+  }
   return o
 }
 function clicks(board: BoardFile, side: 'top' | 'bottom', names: string[]) {
@@ -16,7 +19,8 @@ function clicks(board: BoardFile, side: 'top' | 'bottom', names: string[]) {
   for (const n of names) {
     const r: EditResult = pencilClick(b, side, H(n), d)
     if (!r.ok) throw new Error(r.reason)
-    b = r.board; d = r.drawing
+    b = r.board
+    d = r.drawing
   }
   return { board: b, drawing: d }
 }
@@ -165,7 +169,7 @@ describe('nextTrailId', () => {
 })
 
 describe('purity', () => {
-  it("edit functions don't mutate input", () => {
+  it('edit functions don\'t mutate input', () => {
     const b = deepFreeze(mk({
       parts: [axial('R1', 'C5', 'C8', 'N')],
       trails: [trail('T1', ['A1', 'A9'], 'bottom', ['A5'])]

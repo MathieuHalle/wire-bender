@@ -12,15 +12,15 @@ import { holeKey, parseHole, pathHoles, type Hole } from './holes'
 import { placePart } from './footprints'
 import type { BoardFile, Side } from './schema'
 
-export type Conductor =
-  | { kind: 'lead'; id: string }
-  | { kind: 'trail'; id: string }
-  | { kind: 'wire'; id: string }
-  | { kind: 'pad'; hole: Hole; side: Side }
+export type Conductor
+  = | { kind: 'lead', id: string }
+    | { kind: 'trail', id: string }
+    | { kind: 'wire', id: string }
+    | { kind: 'pad', hole: Hole, side: Side }
 
 export interface Connectivity {
   /** Electrically joined sets. `nets` and `leads` are sorted. */
-  groups: { conductors: Conductor[]; nets: string[]; leads: string[] }[]
+  groups: { conductors: Conductor[], nets: string[], leads: string[] }[]
   groupOfLead: Map<string, number>
   /**
    * A bare conductor touching something at a hole where it has no joint. `trailId` is the
@@ -28,9 +28,9 @@ export interface Connectivity {
    * trail id, or the source of the solder it touches. `sameNet` is true when the final
    * group (after every contact) carries at most one net; a shorted group makes every contact in it false.
    */
-  contacts: { hole: Hole; side: Side; trailId: string; with: string; sameNet: boolean }[]
+  contacts: { hole: Hole, side: Side, trailId: string, with: string, sameNet: boolean }[]
   /** Joints the contact rule needs that the trail doesn't list yet (same-net contacts, never on an NC leg). */
-  proposedJoints: { trailId: string; hole: Hole }[]
+  proposedJoints: { trailId: string, hole: Hole }[]
   /**
    * The group at that hole on that side, most specific first: the pad on that side, then
    * what goes through the hole (lead, wire end), then a trail or laid wire lying over it.
@@ -54,6 +54,7 @@ class UnionFind {
     }
     return r
   }
+
   union(a: string, b: string) {
     const ra = this.find(a)
     const rb = this.find(b)
@@ -66,7 +67,7 @@ const trailNode = (id: string) => `trail:${id}`
 const wireNode = (id: string) => `wire:${id}`
 const padNode = (h: Hole, side: Side) => `pad:${holeKey(h)}:${side}`
 
-interface Bare { node: string; id: string; side: Side; holes: Hole[]; joined: Set<string> }
+interface Bare { node: string, id: string, side: Side, holes: Hole[], joined: Set<string> }
 
 export function buildConnectivity(board: BoardFile): Connectivity {
   const twoSided = board.board.type === 'two-sided'
@@ -112,7 +113,7 @@ export function buildConnectivity(board: BoardFile): Connectivity {
   }
 
   // ---- Which pads carry solder, and who put it there ---------------------------
-  const solder = new Map<string, { hole: Hole; side: Side; by: string[] }>()
+  const solder = new Map<string, { hole: Hole, side: Side, by: string[] }>()
   const addSolder = (h: Hole, side: Side, by: string) => {
     if (side === 'top' && !twoSided) return // one-sided boards have no top pads
     const node = padNode(h, side)
@@ -207,12 +208,12 @@ export function buildConnectivity(board: BoardFile): Connectivity {
 
   // Contacts are collected first and judged after every contact union, so a short made
   // through contacts (or a chain of them) is never called same-net.
-  const found: { hole: Hole; side: Side; trailId: string; with: string; node: string }[] = []
+  const found: { hole: Hole, side: Side, trailId: string, with: string, node: string }[] = []
   for (const c of bare) {
     for (const h of c.holes) {
       const k = holeKey(h)
       if (c.joined.has(k)) continue
-      const touched: { node: string; with: string }[] = []
+      const touched: { node: string, with: string }[] = []
       for (const id of leadsAt.get(k) ?? []) touched.push({ node: leadNode(id), with: id })
       for (const id of wireEnds.get(k) ?? []) if (wireNode(id) !== c.node) touched.push({ node: wireNode(id), with: id })
       const pad = solder.get(padNode(h, c.side))

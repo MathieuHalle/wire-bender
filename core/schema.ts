@@ -19,7 +19,7 @@ export interface Part {
   pins: Record<string, string | null>
   roles?: Record<string, PinRole>
 }
-export interface Trail { id: string; side: Side; points: HoleName[]; joints: HoleName[] }
+export interface Trail { id: string, side: Side, points: HoleName[], joints: HoleName[] }
 export interface Wire {
   id: string
   kind: 'laid' | 'flying'
@@ -38,20 +38,20 @@ export interface BoardFile {
     rows: number
     pitchMm: number
     type: 'one-sided' | 'two-sided'
-    blocked: { holes: HoleName[]; reason: string }[]
+    blocked: { holes: HoleName[], reason: string }[]
   }
   netClasses: Record<string, { color?: string }>
-  nets: Record<string, { class?: string; color?: string }>
+  nets: Record<string, { class?: string, color?: string }>
   rules: {
-    keepAway: { a: string; b: string; holes: number }[]
-    adjacency: { classes: [string, string]; level: 'supply' | 'mcu' }[]
+    keepAway: { a: string, b: string, holes: number }[]
+    adjacency: { classes: [string, string], level: 'supply' | 'mcu' }[]
   }
   parts: Part[]
   trails: Trail[]
   wires: Wire[]
-  legFolds: { lead: string; to: HoleName }[]
-  solderBridges: { side: Side; a: HoleName; b: HoleName }[]
-  bench: { endLeadMm: number; bendAllowanceMm: number; spareMm: number; flyingSlackMm: number; roundToMm: number }
+  legFolds: { lead: string, to: HoleName }[]
+  solderBridges: { side: Side, a: HoleName, b: HoleName }[]
+  bench: { endLeadMm: number, bendAllowanceMm: number, spareMm: number, flyingSlackMm: number, roundToMm: number }
 }
 
 const hole = z.string()
@@ -113,7 +113,7 @@ const boardFileSchema = z.strictObject({
   }).default(benchDefaults)
 })
 
-export type ParseResult = { ok: true; board: BoardFile } | { ok: false; errors: string[] }
+export type ParseResult = { ok: true, board: BoardFile } | { ok: false, errors: string[] }
 
 const fmtPath = (path: ReadonlyArray<PropertyKey>): string =>
   path.reduce<string>((acc, p) => typeof p === 'number' ? `${acc}[${p}]` : acc ? `${acc}.${String(p)}` : String(p), '')
@@ -169,7 +169,9 @@ function checkStraight(b: BoardFile): string[] {
     }
   }
   b.trails.forEach((t, i) => walk(`trails[${i}]`, t.points))
-  b.wires.forEach((w, i) => { if (w.kind !== 'flying') walk(`wires[${i}]`, w.points) })
+  b.wires.forEach((w, i) => {
+    if (w.kind !== 'flying') walk(`wires[${i}]`, w.points)
+  })
   return errors
 }
 
@@ -208,7 +210,9 @@ function checkTopSide(b: BoardFile): string[] {
   if (b.board.type !== 'one-sided') return []
   const errors: string[] = []
   const msg = 'this board has no pads on the top side'
-  b.trails.forEach((t, i) => { if (t.side === 'top') errors.push(`trails[${i}].side: ${msg}`) })
+  b.trails.forEach((t, i) => {
+    if (t.side === 'top') errors.push(`trails[${i}].side: ${msg}`)
+  })
   b.wires.forEach((w, i) => {
     if (w.side === 'top') w.joints.forEach((_, j) => errors.push(`wires[${i}].joints[${j}]: ${msg}`))
   })

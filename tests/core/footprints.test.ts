@@ -71,7 +71,7 @@ describe('placePart', () => {
 })
 
 describe('body geometry', () => {
-  const close = (r: { x: number; y: number; w: number; h: number }, e: number[]) => {
+  const close = (r: { x: number, y: number, w: number, h: number }, e: number[]) => {
     expect(r.x).toBeCloseTo(e[0]!, 6)
     expect(r.y).toBeCloseTo(e[1]!, 6)
     expect(r.w).toBeCloseTo(e[2]!, 6)
