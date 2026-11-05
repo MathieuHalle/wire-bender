@@ -70,6 +70,46 @@ describe('placePart', () => {
   })
 })
 
+describe('body geometry', () => {
+  const close = (r: { x: number; y: number; w: number; h: number }, e: number[]) => {
+    expect(r.x).toBeCloseTo(e[0]!, 6)
+    expect(r.y).toBeCloseTo(e[1]!, 6)
+    expect(r.w).toBeCloseTo(e[2]!, 6)
+    expect(r.h).toBeCloseTo(e[3]!, 6)
+  }
+  const bh = (p: Part) => placePart(p).bodyHoles.map(holeName).sort()
+
+  it('relay at rotation 90 swaps the box to 20.5 x 10.1', () => {
+    const r = placePart(part({ footprint: 'relay-g5v2', at: 'D10', rotation: 90 })).bodyRectMm
+    close(r, [22.86 - 19.14, 7.62 - 1.24, 20.5, 10.1])
+  })
+
+  it('vertical axial body is 2.5 x 6.3 centred on the lead midpoint', () => {
+    const r = placePart(part({ footprint: 'axial', at: 'C2', to: 'F2' })).bodyRectMm
+    close(r, [2.54 - 1.25, 8.89 - 3.15, 2.5, 6.3])
+  })
+
+  it('horizontal axial body is 6.3 x 2.5', () => {
+    const r = placePart(part({ footprint: 'axial', at: 'C2', to: 'C5' })).bodyRectMm
+    close(r, [2.54 + 3.81 - 3.15, 5.08 - 1.25, 6.3, 2.5])
+  })
+
+  it('dip8 bodyHoles at rotation 0', () => {
+    expect(bh(part({ footprint: 'dip8', at: 'D5' }))).toEqual(
+      ['D6', 'D7', 'E6', 'E7', 'F6', 'F7', 'G6', 'G7'])
+  })
+
+  it('dip8 bodyHoles at rotation 270', () => {
+    expect(bh(part({ footprint: 'dip8', at: 'W8', rotation: 270 }))).toEqual(
+      ['U10', 'U11', 'U8', 'U9', 'V10', 'V11', 'V8', 'V9'])
+  })
+
+  it('flipped dip8 body extends to the left of pin 1', () => {
+    const r = placePart(part({ footprint: 'dip8', at: 'D10', flip: true })).bodyRectMm
+    close(r, [22.86 - 6.985, 7.62 - 1.09, 6.35, 9.8])
+  })
+})
+
 describe('schema footprint check', () => {
   it('rejects unknown footprint', () => {
     const r = parseBoard({
