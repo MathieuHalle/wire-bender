@@ -6,3 +6,10 @@ dist/
 reference/
 .superpowers/
 Screenshot*.png
+.data
+.nitro
+.cache
+.env
+.env.*
+!.env.example
+*.log
