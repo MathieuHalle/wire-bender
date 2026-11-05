@@ -74,17 +74,16 @@ export function netRules(ctx: CheckContext): Finding[] {
   conn.groups.forEach((g, gi) => {
     if (g.nets.length >= 2) {
       const netLeads = g.leads.filter(id => ctx.leadById.get(id)?.net != null)
-      const cause = contacts.filter(c => !c.sameNet && groupOfRun(ctx, c.trailId) === gi)
-      let why: string
-      if (cause.length) why = cause.map(c => describeContact(ctx, c)).join('; ')
-      else {
-        const runs = g.conductors.flatMap(x => (x.kind === 'trail' || x.kind === 'wire') ? [`${x.kind} ${x.id}`] : [])
-        why = runs.length ? `${joinAnd(netLeads)} via ${joinAnd(runs)}` : joinAnd(netLeads)
-      }
+      // sameNet is judged per group, so in a shorted group every contact is false, even a
+      // harmless pass over a lead of the trail's own net. Contacts are listed as extra
+      // information only, never as the cause.
+      const touches = contacts.filter(c => !c.sameNet && groupOfRun(ctx, c.trailId) === gi)
+      const perNet = g.nets.map(net => `${net}: ${netLeads.filter(id => ctx.leadById.get(id)!.net === net).join(', ')}`)
+      const extra = touches.length ? ` Touches: ${touches.map(c => describeContact(ctx, c)).join('; ')}.` : ''
       out.push({
         rule: 'short', severity: 'error',
-        holes: names([...cause.map(c => c.hole), ...netLeads.map(holeOf)]),
-        message: `Short: nets ${joinAnd(g.nets)} are joined (${why})`
+        holes: names([...touches.map(c => c.hole), ...netLeads.map(holeOf)]),
+        message: `Short: nets ${joinAnd(g.nets)} are joined. ${perNet.join('; ')}.${extra}`
       })
     }
     const outs = g.leads.filter(id => ctx.leadById.get(id)?.role === 'out')

@@ -40,15 +40,35 @@ describe('runCheck', () => {
     expect(shorts[0]!.holes).toEqual(expect.arrayContaining(['A2', 'A5']))
   })
 
-  it('short names the trail, the lead and the hole of the contact', () => {
+  it('short lists the leads per net and the contacts it touches', () => {
     const { findings } = check({
       parts: [axial('R1', 'C2', 'F2', 'N'), axial('R2', 'C8', 'F8', 'N'), axial('R3', 'C5', 'F5', 'M')],
       trails: [trail('T1', ['C2', 'C8'])]
     })
     const shorts = only(findings, 'short')
     expect(shorts).toHaveLength(1)
-    expect(shorts[0]!.message).toBe('Short: nets M and N are joined (trail T1 passes over R3.a at C5)')
+    expect(shorts[0]!.message).toBe('Short: nets M and N are joined. M: R3.a; N: R1.a, R2.a. Touches: trail T1 passes over R3.a at C5.')
     expect(shorts[0]!.holes[0]).toBe('C5')
+  })
+
+  it('short lists the leads per net and never presents a same-net pass as the cause', () => {
+    const { findings } = check({
+      parts: [axial('R1', 'C2', 'F2', 'N'), axial('R2', 'C5', 'F5', 'N'), axial('R3', 'C8', 'F8', 'M')],
+      trails: [trail('T1', ['C2', 'C8'])]
+    })
+    const shorts = only(findings, 'short')
+    expect(shorts).toHaveLength(1)
+    expect(shorts[0]!.message).toContain('M: R3.a')
+    expect(shorts[0]!.message).toContain('N: R1.a, R2.a')
+    expect(shorts[0]!.message).toBe('Short: nets M and N are joined. M: R3.a; N: R1.a, R2.a. Touches: trail T1 passes over R2.a at C5.')
+  })
+
+  it('short without contacts has no Touches part', () => {
+    const { findings } = check({
+      parts: [axial('R1', 'A2', 'D2', 'N'), axial('R3', 'A5', 'D5', 'M')],
+      trails: [trail('T1', ['A2', 'A5'])]
+    })
+    expect(only(findings, 'short').map(f => f.message)).toEqual(['Short: nets M and N are joined. M: R3.a; N: R1.a.'])
   })
 
   it('a crossing is named once in the short', () => {
