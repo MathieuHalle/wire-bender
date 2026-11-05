@@ -1,5 +1,5 @@
 import type { BoardFile, Side, Trail } from './schema'
-import { holeKey, holeName, parseHole, straightRun, type Hole } from './holes'
+import { holeKey, holeName, parseHole, straightRun, walkHoles, type Hole } from './holes'
 import { placePart } from './footprints'
 import { buildConnectivity } from './connectivity'
 
@@ -17,16 +17,7 @@ export function nextTrailId(board: BoardFile): string {
 }
 
 /** Every hole a trail passes over, in order, corners not repeated. */
-function expand(points: string[]): Hole[] {
-  const hs = points.map(parseHole)
-  if (hs.length === 1) return [hs[0]!]
-  const out: Hole[] = []
-  for (let i = 0; i + 1 < hs.length; i++) {
-    const run = straightRun(hs[i]!, hs[i + 1]!)
-    out.push(...(i === 0 ? run : run.slice(1)))
-  }
-  return out
-}
+const expand = (points: string[]): Hole[] => walkHoles(points.map(parseHole))
 
 const trailPasses = (t: Trail, h: Hole) => expand(t.points).some(x => holeKey(x) === holeKey(h))
 

@@ -1,8 +1,8 @@
 // View helpers for the board drawing: geometry (mm, optionally mirrored), net colours,
-// and which connectivity group sits at a hole. Pure functions over core/ results.
-import { holeKey, holeMm, parseHole, straightRun, type Hole } from '~core/holes'
+// and lit sets for a highlighted group. Pure functions over core/ results (which group
+// sits at a hole is core's `groupAtHole`).
+import { holeKey, holeMm, type Hole } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
-import type { PlacedPart } from '~core/footprints'
 import type { Conductor, Connectivity } from '~core/connectivity'
 
 export type Tool = 'inspect' | 'pencil' | 'erase' | 'joint'
@@ -53,49 +53,6 @@ export function netColor(board: BoardFile, net: string | null | undefined): stri
 
 export function conductorKey(c: Conductor): string {
   return c.kind === 'pad' ? `pad:${holeKey(c.hole)}:${c.side}` : `${c.kind}:${c.id}`
-}
-
-/** Holes on a polyline, bends included, no repeats. */
-export function polyHoles(points: Hole[]): Hole[] {
-  if (points.length === 1) return [points[0]!]
-  const seen = new Map<string, Hole>()
-  for (let i = 0; i + 1 < points.length; i++)
-    for (const h of straightRun(points[i]!, points[i + 1]!)) seen.set(holeKey(h), h)
-  return [...seen.values()]
-}
-
-/**
- * `holeKey|side` -> group index. Most specific first: the pad on that side, then
- * what goes through the hole (lead, wire end), then a trail or laid wire lying over it.
- */
-export function holeGroups(board: BoardFile, conn: Connectivity, placed: PlacedPart[]): Map<string, number> {
-  const groupOf = new Map<string, number>()
-  conn.groups.forEach((g, i) => g.conductors.forEach(c => groupOf.set(conductorKey(c), i)))
-  const out = new Map<string, number>()
-  const set = (h: Hole, side: Side, gi: number | undefined) => {
-    const k = `${holeKey(h)}|${side}`
-    if (gi !== undefined && !out.has(k)) out.set(k, gi)
-  }
-  for (const [k, gi] of groupOf) {
-    if (!k.startsWith('pad:')) continue
-    const [, key, side] = k.split(':') as [string, string, Side]
-    const [col, row] = key.split(',').map(Number) as [number, number]
-    set({ col, row }, side, gi)
-  }
-  for (const p of placed)
-    for (const pin of p.pins)
-      for (const side of ['top', 'bottom'] as const) set(pin.hole, side, groupOf.get(`lead:${p.part.ref}.${pin.name}`))
-  for (const w of board.wires) {
-    const pts = w.points.map(parseHole)
-    for (const end of [pts[0]!, pts[pts.length - 1]!])
-      for (const side of ['top', 'bottom'] as const) set(end, side, groupOf.get(`wire:${w.id}`))
-  }
-  for (const t of board.trails)
-    for (const h of polyHoles(t.points.map(parseHole))) set(h, t.side, groupOf.get(`trail:${t.id}`))
-  for (const w of board.wires)
-    if (w.kind === 'laid')
-      for (const h of polyHoles(w.points.map(parseHole))) set(h, w.side, groupOf.get(`wire:${w.id}`))
-  return out
 }
 
 /** What a highlighted group lights up, as lookup sets. */

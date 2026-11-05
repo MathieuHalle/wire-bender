@@ -4,7 +4,7 @@ import type { Side } from '~core/schema'
 import type { Finding } from '~core/check'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
-import { holeGroups, jointSide } from '~/utils/boardView'
+import { jointSide } from '~/utils/boardView'
 
 const { board, errors, errorKind, path, revision, status, canUndo, canRedo, undo, redo, reloadFromDisk, keepMine } = useBoard()
 const { tool, drawing, onHoleClick, onSegmentClick, addJoint } = useTools()
@@ -15,14 +15,13 @@ const view = ref<'both' | Side>('both')
 
 const placed = computed(() => board.value?.parts.map(placePart) ?? [])
 const conn = computed(() => (board.value ? buildConnectivity(board.value) : null))
-const groupsAt = computed(() => (board.value && conn.value ? holeGroups(board.value, conn.value, placed.value) : null))
 
 const hover = ref<{ side: Side, hole: Hole } | null>(null)
 const highlight = computed(() => {
   const h = hover.value
-  if (!h || !groupsAt.value || !conn.value) return null
-  const gi = groupsAt.value.get(`${h.hole.col},${h.hole.row}|${h.side}`)
-  return gi === undefined ? null : conn.value.groups[gi]!
+  if (!h || !conn.value) return null
+  const gi = conn.value.groupAtHole(h.hole, h.side)
+  return gi === null ? null : conn.value.groups[gi]!
 })
 
 /** The finding picked in the panel; its holes are ringed on both sides. */

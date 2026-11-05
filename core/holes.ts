@@ -57,3 +57,26 @@ export function straightRun(a: Hole, b: Hole): Hole[] {
   for (let i = 0; i <= n; i++) out.push({ col: a.col + dc * i, row: a.row + dr * i })
   return out
 }
+
+/**
+ * Every hole along a polyline in walking order, bend points once, revisits kept. With
+ * `segments`, only those stretches (by index of their first point) are walked.
+ */
+export function walkHoles(points: Hole[], segments?: number[]): Hole[] {
+  if (points.length === 1 && !segments) return [points[0]!]
+  const out: Hole[] = []
+  for (let i = 0; i + 1 < points.length; i++) {
+    if (segments && !segments.includes(i)) continue
+    const run = straightRun(points[i]!, points[i + 1]!)
+    const last = out[out.length - 1]
+    out.push(...(last && holeKey(last) === holeKey(run[0]!) ? run.slice(1) : run))
+  }
+  return out
+}
+
+/** Every hole on a polyline (or on its `segments`), bend points included, without repeats. */
+export function pathHoles(points: Hole[], segments?: number[]): Hole[] {
+  const seen = new Map<string, Hole>()
+  for (const h of walkHoles(points, segments)) if (!seen.has(holeKey(h))) seen.set(holeKey(h), h)
+  return [...seen.values()]
+}

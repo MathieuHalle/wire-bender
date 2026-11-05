@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseHole, holeName, holeMm, straightRun, holeKey, tryParseHole } from '~core/holes'
+import { parseHole, holeName, holeMm, straightRun, holeKey, tryParseHole, walkHoles, pathHoles } from '~core/holes'
 
 describe('holes', () => {
   it('parses names', () => {
@@ -38,5 +38,19 @@ describe('tryParseHole', () => {
     expect(tryParseHole('G13')).toEqual({ col: 13, row: 7 })
     expect(tryParseHole('A0')).toBeNull()
     expect(tryParseHole('13')).toBeNull()
+  })
+})
+
+describe('walkHoles / pathHoles', () => {
+  const pts = (...ns: string[]) => ns.map(parseHole)
+  it('walk: every hole in order, corners once, revisits kept; path drops revisits', () => {
+    const p = pts('A1', 'A3', 'C3', 'C2', 'A2')
+    expect(walkHoles(p).map(holeName)).toEqual(['A1', 'A2', 'A3', 'B3', 'C3', 'C2', 'B2', 'A2'])
+    expect(pathHoles(p).map(holeName)).toEqual(['A1', 'A2', 'A3', 'B3', 'C3', 'C2', 'B2'])
+  })
+  it('a single point is itself; segments pick stretches', () => {
+    expect(pathHoles(pts('D4')).map(holeName)).toEqual(['D4'])
+    expect(pathHoles(pts('A1', 'A3', 'C3', 'C5'), [0, 2]).map(holeName)).toEqual(['A1', 'A2', 'A3', 'C3', 'C4', 'C5'])
+    expect(pathHoles(pts('A1', 'A3'), [])).toEqual([])
   })
 })

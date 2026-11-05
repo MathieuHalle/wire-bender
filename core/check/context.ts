@@ -4,7 +4,7 @@
 // hole, where each trail and wire runs, and the connectivity graph.
 import { buildConnectivity, type Connectivity } from '../connectivity'
 import { placePart, type PlacedPart } from '../footprints'
-import { holeKey, holeName, parseHole, straightRun, type Hole } from '../holes'
+import { holeKey, holeName, parseHole, pathHoles, type Hole } from '../holes'
 import type { BoardFile, HoleName, PinRole, Side } from '../schema'
 
 export type Severity = 'error' | 'warning' | 'caution'
@@ -49,15 +49,6 @@ export interface CheckContext {
   /** Sides that have pads: bottom only on a one-sided board. */
   sides: Side[]
   onBoard(h: Hole): boolean
-}
-
-/** Every hole on a polyline, bend points included, without repeats. */
-export function pathHoles(points: Hole[]): Hole[] {
-  if (points.length === 1) return [points[0]!]
-  const seen = new Map<string, Hole>()
-  for (let i = 0; i + 1 < points.length; i++)
-    for (const h of straightRun(points[i]!, points[i + 1]!)) seen.set(holeKey(h), h)
-  return [...seen.values()]
 }
 
 const push = <K, V>(m: Map<K, V[]>, k: K, v: V) => {

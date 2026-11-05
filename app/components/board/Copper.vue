@@ -1,11 +1,11 @@
 <script setup lang="ts">
 // Solder-side copper of one side: trails (thick lines, joints as blobs, holes passed
 // over keep their ring), solder bridges and leg-folds.
-import { holeKey, parseHole, type Hole } from '~core/holes'
+import { holeKey, parseHole, pathHoles, type Hole } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
 import type { PlacedPart } from '~core/footprints'
 import type { Connectivity } from '~core/connectivity'
-import { conductorKey, netColor, NO_NET, polyHoles, type Geo, type Lit } from '~/utils/boardView'
+import { conductorKey, netColor, NO_NET, type Geo, type Lit } from '~/utils/boardView'
 
 const props = defineProps<{
   board: BoardFile
@@ -36,7 +36,7 @@ const trails = computed(() => props.board.trails.filter(t => t.side === props.si
   const ends = [pts[0]!, pts[pts.length - 1]!]
   const jointKeys = new Set([...ends, ...t.joints.map(parseHole)].map(holeKey))
   const joints = [...new Map([...ends, ...t.joints.map(parseHole)].map(h => [holeKey(h), h])).values()]
-  const over = polyHoles(pts).filter(h => !jointKeys.has(holeKey(h)))
+  const over = pathHoles(pts).filter(h => !jointKeys.has(holeKey(h)))
   const id = `trail:${t.id}`
   return {
     id: t.id,

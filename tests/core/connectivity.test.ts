@@ -232,4 +232,24 @@ describe('buildConnectivity', () => {
     expect(c.contacts.map(x => [x.trailId, x.with, holeName(x.hole)])).toEqual([['T1', 'R3.a', 'D2']])
     expect(c.proposedJoints).toEqual([])
   })
+
+  it('groupAtHole: the pad on that side, then what goes through, then what lies over', () => {
+    const c = buildConnectivity(mk({
+      board: { type: 'two-sided' },
+      parts: [axial('R1', 'B2', 'B5', 'N'), axial('R2', 'H2', 'H5', 'M')],
+      trails: [trail('T1', ['B5', 'E5']), trail('T2', ['G1', 'G9'], 'top')],
+      wires: [{ id: 'W1', kind: 'laid', side: 'bottom', points: ['J1', 'J9'], bareSegments: [], joints: [] }]
+    }))
+    const at = (n: string, side: 'top' | 'bottom' = 'bottom') => c.groupAtHole(parseHole(n), side)
+    expect(at('B5')).toBe(groupOfTrail(c, 'T1')) // pad
+    expect(at('B5', 'top')).toBe(c.groupOfLead.get('R1.b')) // lead through the hole, no top pad
+    expect(at('H2', 'top')).toBe(c.groupOfLead.get('R2.a'))
+    expect(at('C5')).toBe(groupOfTrail(c, 'T1')) // over
+    expect(at('G4', 'top')).toBe(groupOfTrail(c, 'T2'))
+    expect(at('G4')).toBeNull()
+    expect(at('J4')).toBe(groupOfWire(c, 'W1'))
+    expect(at('A9')).toBeNull()
+    expect(c.netAtHole(parseHole('C5'), 'bottom')).toBeNull() // T1 joins only the NC leg R1.b
+    expect(c.netAtHole(parseHole('B2'), 'top')).toBe('N')
+  })
 })

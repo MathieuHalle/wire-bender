@@ -8,7 +8,7 @@
 // Contact rule (spec §9b): a bare conductor (a trail, or a bare segment of a laid
 // wire) on side S that passes over a hole touches whatever is there on side S: a
 // lead or wire end in the hole, solder on that pad, or another bare conductor.
-import { holeKey, parseHole, straightRun, type Hole } from './holes'
+import { holeKey, parseHole, pathHoles, type Hole } from './holes'
 import { placePart } from './footprints'
 import type { BoardFile, Side } from './schema'
 
@@ -31,6 +31,12 @@ export interface Connectivity {
   contacts: { hole: Hole; side: Side; trailId: string; with: string; sameNet: boolean }[]
   /** Joints the contact rule needs that the trail doesn't list yet (same-net contacts, never on an NC leg). */
   proposedJoints: { trailId: string; hole: Hole }[]
+  /**
+   * The group at that hole on that side, most specific first: the pad on that side, then
+   * what goes through the hole (lead, wire end), then a trail or laid wire lying over it.
+   * null when nothing is there.
+   */
+  groupAtHole(h: Hole, side: Side): number | null
   /** The single net at that hole on that side; null when none or when it is shorted. */
   netAtHole(h: Hole, side: Side): string | null
 }
@@ -59,17 +65,6 @@ const leadNode = (id: string) => `lead:${id}`
 const trailNode = (id: string) => `trail:${id}`
 const wireNode = (id: string) => `wire:${id}`
 const padNode = (h: Hole, side: Side) => `pad:${holeKey(h)}:${side}`
-
-/** Every hole on a polyline, bend points included, without repeats. */
-function pathHoles(points: Hole[], segments?: number[]): Hole[] {
-  if (points.length === 1 && !segments) return [points[0]!]
-  const seen = new Map<string, Hole>()
-  for (let i = 0; i + 1 < points.length; i++) {
-    if (segments && !segments.includes(i)) continue
-    for (const h of straightRun(points[i]!, points[i + 1]!)) seen.set(holeKey(h), h)
-  }
-  return [...seen.values()]
-}
 
 interface Bare { node: string; id: string; side: Side; holes: Hole[]; joined: Set<string> }
 
@@ -287,7 +282,7 @@ export function buildConnectivity(board: BoardFile): Connectivity {
   const groupOfLead = new Map<string, number>()
   for (const id of leadNet.keys()) groupOfLead.set(id, groupOfNode(leadNode(id)))
 
-  // ---- netAtHole -----------------------------------------------------------------
+  // ---- groupAtHole / netAtHole -----------------------------------------------------
   // Most specific first: the pad on that side, then what goes through the hole, then
   // conductors lying over it on that side (laid wires count along their whole path).
   const overAt = new Map<string, string[]>() // "key|side" -> trail/wire nodes over that hole
@@ -302,19 +297,26 @@ export function buildConnectivity(board: BoardFile): Connectivity {
   for (const w of board.wires)
     if (w.kind === 'laid') for (const h of pathHoles(wirePts.get(w.id)!)) addOver(h, w.side, wireNode(w.id))
 
-  const netAtHole = (h: Hole, side: Side): string | null => {
+  /** The groups of the most specific tier with anything in it, in order, without repeats. */
+  const groupsAtHole = (h: Hole, side: Side): number[] => {
     const k = holeKey(h)
     const tiers: string[][] = [
       hasPad(h, side) ? [padNode(h, side)] : [],
       [...(leadsAt.get(k) ?? []).map(leadNode), ...(wireEnds.get(k) ?? []).map(wireNode)],
       overAt.get(`${k}|${side}`) ?? []
     ]
-    const tier = tiers.find(t => t.length)
-    if (!tier) return null
-    const nets = new Set(tier.flatMap(node => groups[groupOfNode(node)]!.nets))
-    for (const node of tier) if (groups[groupOfNode(node)]!.nets.length > 1) return null
+    const tier = tiers.find(t => t.length) ?? []
+    return [...new Set(tier.map(groupOfNode))]
+  }
+
+  const groupAtHole = (h: Hole, side: Side): number | null => groupsAtHole(h, side)[0] ?? null
+
+  const netAtHole = (h: Hole, side: Side): string | null => {
+    const gs = groupsAtHole(h, side).map(gi => groups[gi]!)
+    if (gs.some(g => g.nets.length > 1)) return null
+    const nets = new Set(gs.flatMap(g => g.nets))
     return nets.size === 1 ? [...nets][0]! : null
   }
 
-  return { groups, groupOfLead, contacts, proposedJoints, netAtHole }
+  return { groups, groupOfLead, contacts, proposedJoints, groupAtHole, netAtHole }
 }
