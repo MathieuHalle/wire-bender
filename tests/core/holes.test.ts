@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseHole, holeName, holeMm, straightRun, holeKey } from '~core/holes'
+import { parseHole, holeName, holeMm, straightRun, holeKey, tryParseHole } from '~core/holes'
 
 describe('holes', () => {
   it('parses names', () => {
@@ -30,5 +30,13 @@ describe('holes', () => {
   it('holeMm and holeKey', () => {
     expect(holeMm({ col: 2, row: 1 })).toEqual({ x: 2.54, y: 0 })
     expect(holeKey({ col: 2, row: 3 })).toBe('2,3')
+  })
+})
+
+describe('tryParseHole', () => {
+  it('parses a hole name and returns null for anything else', () => {
+    expect(tryParseHole('G13')).toEqual({ col: 13, row: 7 })
+    expect(tryParseHole('A0')).toBeNull()
+    expect(tryParseHole('13')).toBeNull()
   })
 })

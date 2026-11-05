@@ -51,7 +51,7 @@ export function netRules(ctx: CheckContext): Finding[] {
   for (const [net, ids] of leadsOfNet) {
     if (ids.length === 1) {
       out.push({
-        rule: 'singleLeadNet', severity: 'warning', holes: names([holeOf(ids[0]!)]),
+        rule: 'singleLeadNet', severity: 'warning', holes: names(ctx, [holeOf(ids[0]!)]),
         message: `Single lead: net ${net} has only one lead (${ids[0]} at ${holeName(holeOf(ids[0]!))})`
       })
       continue
@@ -64,7 +64,7 @@ export function netRules(ctx: CheckContext): Finding[] {
     if (pieces.size > 1) {
       const parts = [...pieces.entries()].sort((a, b) => a[0] - b[0]).map(([, p]) => p)
       out.push({
-        rule: 'openNet', severity: 'error', holes: names(parts.flat().map(holeOf)),
+        rule: 'openNet', severity: 'error', holes: names(ctx, parts.flat().map(holeOf)),
         message: `Open net: ${net} is in ${parts.length} separate pieces: ${parts.map(p => p.join(', ')).join(' | ')}`
       })
     }
@@ -84,7 +84,7 @@ export function netRules(ctx: CheckContext): Finding[] {
       const extra = touches.length ? ` Touches: ${touches.map(c => describeContact(ctx, c)).join('; ')}.` : ''
       out.push({
         rule: 'short', severity: 'error',
-        holes: names([...touches.map(c => c.hole), ...netLeads.map(holeOf)]),
+        holes: names(ctx, [...touches.map(c => c.hole), ...netLeads.map(holeOf)]),
         message: `Short: nets ${joinAnd(g.nets)} are joined. ${perNet.join('; ')}.${viaPart}${extra}`
       })
     }
@@ -92,7 +92,7 @@ export function netRules(ctx: CheckContext): Finding[] {
     if (outs.length >= 2) {
       const net = g.nets.length ? ` (net ${joinAnd(g.nets)})` : ''
       out.push({
-        rule: 'contention', severity: 'error', holes: names(outs.map(holeOf)),
+        rule: 'contention', severity: 'error', holes: names(ctx, outs.map(holeOf)),
         message: `Contention: ${joinAnd(outs)} are all outputs on one connection${net}`
       })
     }
@@ -107,7 +107,7 @@ export function netRules(ctx: CheckContext): Finding[] {
     seen.add(k)
     const what = c ? describeContact(ctx, c) : `${runLabel(ctx, pj.trailId)} passes ${holeName(pj.hole)}`
     out.push({
-      rule: 'missingJoint', severity: 'warning', holes: names([pj.hole]),
+      rule: 'missingJoint', severity: 'warning', holes: names(ctx, [pj.hole]),
       message: `Missing joint: ${what} without a solder joint; add ${holeName(pj.hole)} to its joints`
     })
   }

@@ -115,9 +115,11 @@ export function runLabel(ctx: CheckContext, id: string): string {
   return r ? `${r.kind} ${id}` : id
 }
 
-export const names = (hs: Hole[]): HoleName[] => {
+/** Hole names for a finding, without repeats; holes off the board are left out. */
+export const names = (ctx: CheckContext, hs: Hole[]): HoleName[] => {
   const out: HoleName[] = []
   for (const h of hs) {
+    if (!ctx.onBoard(h)) continue
     const n = holeName(h)
     if (!out.includes(n)) out.push(n)
   }

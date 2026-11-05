@@ -57,9 +57,9 @@ export function spacingRules(ctx: CheckContext): Finding[] {
       const hb = sortHoles([...e.hb.values()])
       const unit = rule.holes === 1 ? 'hole' : 'holes'
       out.push({
-        rule: 'keepAway', severity: 'warning', holes: names([...ha, ...hb]),
-        message: `Keep-away: ${rule.a} net ${e.na} (${names(ha).join(', ')}) is within ${rule.holes} ${unit} `
-          + `of ${rule.b} net ${e.nb} (${names(hb).join(', ')})`
+        rule: 'keepAway', severity: 'warning', holes: names(ctx, [...ha, ...hb]),
+        message: `Keep-away: ${rule.a} net ${e.na} (${names(ctx, ha).join(', ')}) is within ${rule.holes} ${unit} `
+          + `of ${rule.b} net ${e.nb} (${names(ctx, hb).join(', ')})`
       })
     }
   })
@@ -89,7 +89,7 @@ export function spacingRules(ctx: CheckContext): Finding[] {
       }
   for (const { a, b, level } of pairs.values())
     out.push({
-      rule: 'adjacent', severity: 'caution', level, holes: names([a.hole, b.hole]),
+      rule: 'adjacent', severity: 'caution', level, holes: names(ctx, [a.hole, b.hole]),
       message: `Adjacent: ${a.net} at ${holeName(a.hole)} next to ${b.net} at ${holeName(b.hole)} (${LEVEL_WORDS[level]})`
     })
   return out

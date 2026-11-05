@@ -86,4 +86,38 @@ describe('parseBoard', () => {
       expect(r.errors.some(e => e.startsWith('bench') && e.includes('spare'))).toBe(true)
     }
   })
+  it('rejects duplicate part refs with a path', () => {
+    const j: any = minimal()
+    const r1 = { ref: 'R1', footprint: 'axial', at: 'A1', to: 'A4', rotation: 0, pins: {} }
+    j.parts = [r1, { ...r1, ref: 'R2', at: 'C1', to: 'C4' }, { ...r1, at: 'E1', to: 'E4' }]
+    const r = parseBoard(j)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors).toEqual(['parts[2].ref: duplicate "R1"'])
+  })
+  it('rejects duplicate trail and wire ids, which share one namespace', () => {
+    const j: any = minimal()
+    const t = (id: string) => ({ id, side: 'bottom', points: ['A1', 'A2'], joints: [] })
+    const w = (id: string) => ({ id, kind: 'flying', side: 'bottom', points: ['C1', 'C5'], bareSegments: [], joints: [] })
+    j.trails = [t('T1'), t('T2'), t('T3'), t('T4'), t('T3')]
+    j.wires = [w('W2'), w('W2'), w('T1')]
+    const r = parseBoard(j)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors).toEqual(['trails[4].id: duplicate "T3"', 'wires[1].id: duplicate "W2"', 'wires[2].id: duplicate "T1"'])
+  })
+  it('rejects top-side trails and top-side wire joints on a one-sided board', () => {
+    const j: any = minimal()
+    j.trails = [{ id: 'T1', side: 'top', points: ['A1', 'A3'], joints: [] }]
+    j.wires = [
+      { id: 'W1', kind: 'laid', side: 'top', points: ['C1', 'C5'], bareSegments: [], joints: ['C3'] },
+      { id: 'W2', kind: 'flying', side: 'top', points: ['E1', 'E5'], bareSegments: [], joints: [] }
+    ]
+    const r = parseBoard(j)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors).toEqual([
+      'trails[0].side: this board has no pads on the top side',
+      'wires[0].joints[0]: this board has no pads on the top side'
+    ])
+    j.board.type = 'two-sided'
+    expect(parseBoard(j).ok).toBe(true)
+  })
 })

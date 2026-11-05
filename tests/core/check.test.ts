@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { runCheck, type Finding, type RuleId } from '~core/check'
+import { parseHole } from '~core/holes'
 import { mk, axial, trail, type BoardOverrides } from './helpers'
 
 const check = (over: BoardOverrides) => runCheck(mk(over))
@@ -203,6 +204,14 @@ describe('runCheck', () => {
     expect(findings).toEqual([])
   })
 
+  it('a trail passing over an NC leg proposes no joint (NC stays silent)', () => {
+    const { findings } = check({
+      parts: [axial('R1', 'B2', 'B5', 'N'), axial('R2', 'F2', 'F5', 'N'), axial('R3', 'D2', 'D7', null)],
+      trails: [trail('T1', ['B2', 'F2'])]
+    })
+    expect(findings).toEqual([])
+  })
+
   it('a net with one lead -> singleLeadNet', () => {
     const { findings } = check({ parts: [axial('R1', 'C2', 'F2', 'N')] })
     const s = only(findings, 'singleLeadNet')
@@ -279,6 +288,17 @@ describe('runCheck', () => {
     expect(b[0]!.message).toContain('J1.4')
     expect(b[0]!.message).toContain('off the board')
     expect(b[1]!.message).toContain('J1.5')
+  })
+
+  it('a part with pins off the board names only holes on the board', () => {
+    const { findings } = check({
+      parts: [{ ref: 'U1', footprint: 'dip8', at: 'A1', rotation: 90, pins: { 1: 'N', 2: 'N', 3: null, 4: null, 5: null, 6: null, 7: null, 8: null } }]
+    })
+    const open = only(findings, 'openNet')
+    expect(open).toHaveLength(1)
+    expect(open[0]!.holes).toEqual(['A1'])
+    for (const f of findings) for (const h of f.holes) expect(() => parseHole(h)).not.toThrow()
+    for (const f of findings) for (const h of f.holes) expect(parseHole(h).col).toBeGreaterThanOrEqual(1)
   })
 
   it('missingJoint for a same-net leg passed over', () => {

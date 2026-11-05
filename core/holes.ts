@@ -26,6 +26,15 @@ export function parseHole(name: string): Hole {
   return { col: Number(m[2]), row: rowFromLetters(m[1]!) }
 }
 
+/** parseHole, or null for a name that is not a hole. */
+export function tryParseHole(name: string): Hole | null {
+  try {
+    return parseHole(name)
+  } catch {
+    return null
+  }
+}
+
 export function holeName(h: Hole): string {
   return `${rowToLetters(h.row)}${h.col}`
 }

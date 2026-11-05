@@ -42,7 +42,7 @@ export function placementRules(ctx: CheckContext): Finding[] {
       const h = ctx.leadById.get(leads[0]!)!.hole
       const what = [...leads, ...wires.map(w => `wire ${w} end`)]
       out.push({
-        rule: 'twoInOneHole', severity: 'error', holes: names([h]),
+        rule: 'twoInOneHole', severity: 'error', holes: names(ctx, [h]),
         message: `Two in one hole: ${joinAnd(what)} share ${holeName(h)}`
       })
     }
@@ -69,7 +69,7 @@ export function placementRules(ctx: CheckContext): Finding[] {
       const rb = ctx.placed[j]!.part.ref
       out.push({
         rule: 'bodyCollision', severity: 'error',
-        holes: names(under.length ? under : [parseHole(ctx.placed[i]!.part.at), parseHole(ctx.placed[j]!.part.at)]),
+        holes: names(ctx, under.length ? under : [parseHole(ctx.placed[i]!.part.at), parseHole(ctx.placed[j]!.part.at)]),
         message: `Body collision: ${ra} and ${rb} overlap by ${(x1 - x0).toFixed(1)} x ${(y1 - y0).toFixed(1)} mm`
       })
     }
@@ -90,7 +90,7 @@ export function placementRules(ctx: CheckContext): Finding[] {
       const what = covered.at(h).filter(x => !own.has(x))
       if (!what.length) continue
       out.push({
-        rule: 'underBody', severity: 'error', holes: names([h]),
+        rule: 'underBody', severity: 'error', holes: names(ctx, [h]),
         message: `Under a body: ${joinAnd(what)} at ${holeName(h)} ${what.length > 1 ? 'are' : 'is'} under the body of ${pp.part.ref}`
       })
     }
@@ -119,7 +119,7 @@ export function placementRules(ctx: CheckContext): Finding[] {
       const why = reason.get(holeKey(hole))
       if (why === undefined) continue
       out.push({
-        rule: 'blockedHole', severity: 'error', holes: names([hole]),
+        rule: 'blockedHole', severity: 'error', holes: names(ctx, [hole]),
         message: `Blocked hole: ${joinAnd(labels)} at ${holeName(hole)}, which is blocked (${why})`
       })
     }

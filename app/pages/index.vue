@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { parseHole, type Hole } from '~core/holes'
+import { parseHole, tryParseHole, type Hole } from '~core/holes'
 import type { Side } from '~core/schema'
 import type { Finding } from '~core/check'
 import { placePart } from '~core/footprints'
@@ -27,12 +27,12 @@ const highlight = computed(() => {
 
 /** The finding picked in the panel; its holes are ringed on both sides. */
 const picked = ref<Finding | null>(null)
-const markHoles = computed(() => picked.value?.holes.map(parseHole) ?? [])
+/** Names that don't parse are skipped: a finding never breaks the drawing. */
+const markHoles = computed(() => picked.value?.holes.flatMap(n => tryParseHole(n) ?? []) ?? [])
 
 function onAddJoint(f: Finding) {
-  const name = f.holes[0]
-  if (!name || !board.value || !conn.value) return
-  const hole = parseHole(name)
+  const hole = f.holes[0] ? tryParseHole(f.holes[0]) : null
+  if (!hole || !board.value || !conn.value) return
   const side = jointSide(board.value, conn.value, hole) ?? 'bottom'
   addJoint(side, hole)
 }

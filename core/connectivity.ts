@@ -29,7 +29,7 @@ export interface Connectivity {
    * group (after every contact) carries at most one net; a shorted group makes every contact in it false.
    */
   contacts: { hole: Hole; side: Side; trailId: string; with: string; sameNet: boolean }[]
-  /** Joints the contact rule needs that the trail doesn't list yet (same-net contacts). */
+  /** Joints the contact rule needs that the trail doesn't list yet (same-net contacts, never on an NC leg). */
   proposedJoints: { trailId: string; hole: Hole }[]
   /** The single net at that hole on that side; null when none or when it is shorted. */
   netAtHole(h: Hole, side: Side): string | null
@@ -251,7 +251,9 @@ export function buildConnectivity(board: BoardFile): Connectivity {
     const sameNet = (netsByRoot.get(uf.find(f.node))?.size ?? 0) <= 1
     contacts.push({ hole: f.hole, side: f.side, trailId: f.trailId, with: f.with, sameNet })
     const pk = `${f.trailId}|${holeKey(f.hole)}`
-    if (sameNet && !proposedKeys.has(pk)) {
+    // NC legs never get a joint proposed: that would solder a net onto them (spec §3).
+    const ncLead = leadNet.has(f.with) && leadNet.get(f.with) === null
+    if (sameNet && !ncLead && !proposedKeys.has(pk)) {
       proposedKeys.add(pk)
       proposedJoints.push({ trailId: f.trailId, hole: f.hole })
     }

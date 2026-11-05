@@ -218,7 +218,18 @@ describe('buildConnectivity', () => {
   })
 
   it('one-sided board has no top pads', () => {
-    const c = buildConnectivity(mk({ trails: [trail('T1', ['B2', 'B6'], 'top', ['B4'])] }))
+    // parseBoard refuses this; connectivity still ignores top solder if handed such a board.
+    const two = mk({ board: { type: 'two-sided' }, trails: [trail('T1', ['B2', 'B6'], 'top', ['B4'])] })
+    const c = buildConnectivity({ ...two, board: { ...two.board, type: 'one-sided' } })
     expect(c.groups.flatMap(g => g.conductors).filter(x => x.kind === 'pad')).toEqual([])
+  })
+
+  it('a trail over an NC leg touches it but proposes no joint there', () => {
+    const c = buildConnectivity(mk({
+      parts: [axial('R1', 'B2', 'B5', 'N'), axial('R2', 'F2', 'F5', 'N'), axial('R3', 'D2', 'D7', null)],
+      trails: [trail('T1', ['B2', 'F2'])]
+    }))
+    expect(c.contacts.map(x => [x.trailId, x.with, holeName(x.hole)])).toEqual([['T1', 'R3.a', 'D2']])
+    expect(c.proposedJoints).toEqual([])
   })
 })

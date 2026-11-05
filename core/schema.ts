@@ -181,7 +181,41 @@ function checkFootprints(b: BoardFile): string[] {
   return errors
 }
 
-const checks: Check[] = [checkHoles, checkStraight, checkFootprints]
+/** Part refs are unique; trail and wire ids are unique together (connectivity joins by id). */
+function checkUnique(b: BoardFile): string[] {
+  const errors: string[] = []
+  const refs = new Set<string>()
+  b.parts.forEach((p, i) => {
+    if (refs.has(p.ref)) errors.push(`parts[${i}].ref: duplicate "${p.ref}"`)
+    refs.add(p.ref)
+  })
+  const ids = new Set<string>()
+  const see = (path: string, id: string) => {
+    if (ids.has(id)) errors.push(`${path}.id: duplicate "${id}"`)
+    ids.add(id)
+  }
+  b.trails.forEach((t, i) => see(`trails[${i}]`, t.id))
+  b.wires.forEach((w, i) => see(`wires[${i}]`, w.id))
+  return errors
+}
+
+/**
+ * A one-sided board has no top pads: a top-side trail (bare, soldered only at joints) or
+ * a top-side wire joint can never be soldered. Top-side wires themselves are fine (their
+ * ends go down through the holes).
+ */
+function checkTopSide(b: BoardFile): string[] {
+  if (b.board.type !== 'one-sided') return []
+  const errors: string[] = []
+  const msg = 'this board has no pads on the top side'
+  b.trails.forEach((t, i) => { if (t.side === 'top') errors.push(`trails[${i}].side: ${msg}`) })
+  b.wires.forEach((w, i) => {
+    if (w.side === 'top') w.joints.forEach((_, j) => errors.push(`wires[${i}].joints[${j}]: ${msg}`))
+  })
+  return errors
+}
+
+const checks: Check[] = [checkHoles, checkStraight, checkFootprints, checkUnique, checkTopSide]
 
 export function parseBoard(json: unknown): ParseResult {
   const res = boardFileSchema.safeParse(json)
