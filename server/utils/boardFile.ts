@@ -32,7 +32,25 @@ export async function readBoard(file: string): Promise<ReadResult> {
   return parseBoard(json)
 }
 
-export async function writeBoard(file: string, board: BoardFile, baseRevision: number): Promise<WriteResult> {
+const queues = new Map<string, Promise<unknown>>()
+
+/**
+ * Serialises the whole read-check-write-rename per file within this process.
+ * Known limit: an external writer (Claude editing on disk) can still slip in
+ * between the check and the rename; closing that needs OS file locking.
+ */
+export function writeBoard(file: string, board: BoardFile, baseRevision: number): Promise<WriteResult> {
+  const prev = queues.get(file) ?? Promise.resolve()
+  const run = prev.then(() => writeBoardUnlocked(file, board, baseRevision))
+  const tail = run.catch(() => {})
+  queues.set(file, tail)
+  void tail.then(() => {
+    if (queues.get(file) === tail) queues.delete(file)
+  })
+  return run
+}
+
+async function writeBoardUnlocked(file: string, board: BoardFile, baseRevision: number): Promise<WriteResult> {
   const disk = await readBoard(file)
   if (!disk.ok) return { ok: false, conflict: true, current: null }
   if (disk.board.revision !== baseRevision) {

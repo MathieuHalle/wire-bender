@@ -62,6 +62,17 @@ describe('boardFile', () => {
     expect(text).toContain('\n  "')
   })
 
+  it('concurrent writes with the same baseRevision: one wins, one conflicts', async () => {
+    await fs.writeFile(file, JSON.stringify(await demo(0)))
+    const [a, b] = await Promise.all([
+      writeBoard(file, await demo(0), 0),
+      writeBoard(file, await demo(0), 0)
+    ])
+    const results = [a, b]
+    expect(results.filter(r => r.ok)).toEqual([{ ok: true, revision: 1 }])
+    expect(results.filter(r => !r.ok)).toEqual([{ ok: false, conflict: true, current: 1 }])
+  })
+
   it('write is atomic', async () => {
     await fs.writeFile(file, JSON.stringify(await demo(0)))
     let stop = false
