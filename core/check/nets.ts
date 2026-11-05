@@ -79,11 +79,13 @@ export function netRules(ctx: CheckContext): Finding[] {
       // information only, never as the cause.
       const touches = contacts.filter(c => !c.sameNet && groupOfRun(ctx, c.trailId) === gi)
       const perNet = g.nets.map(net => `${net}: ${netLeads.filter(id => ctx.leadById.get(id)!.net === net).join(', ')}`)
+      const via = g.conductors.flatMap(x => (x.kind === 'trail' || x.kind === 'wire') ? [x.id] : []).sort()
+      const viaPart = via.length ? ` Via: ${via.join(', ')}.` : ''
       const extra = touches.length ? ` Touches: ${touches.map(c => describeContact(ctx, c)).join('; ')}.` : ''
       out.push({
         rule: 'short', severity: 'error',
         holes: names([...touches.map(c => c.hole), ...netLeads.map(holeOf)]),
-        message: `Short: nets ${joinAnd(g.nets)} are joined. ${perNet.join('; ')}.${extra}`
+        message: `Short: nets ${joinAnd(g.nets)} are joined. ${perNet.join('; ')}.${viaPart}${extra}`
       })
     }
     const outs = g.leads.filter(id => ctx.leadById.get(id)?.role === 'out')
