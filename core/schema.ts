@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { parseHole } from './holes'
+import { FOOTPRINTS } from './footprints'
 
 export type HoleName = string
 export type Side = 'top' | 'bottom'
@@ -172,8 +173,15 @@ function checkStraight(b: BoardFile): string[] {
   return errors
 }
 
-// Task 3 appends a footprint-exists check here.
-const checks: Check[] = [checkHoles, checkStraight]
+function checkFootprints(b: BoardFile): string[] {
+  const errors: string[] = []
+  b.parts.forEach((p, i) => {
+    if (!Object.hasOwn(FOOTPRINTS, p.footprint)) errors.push(`parts[${i}].footprint: unknown "${p.footprint}"`)
+  })
+  return errors
+}
+
+const checks: Check[] = [checkHoles, checkStraight, checkFootprints]
 
 export function parseBoard(json: unknown): ParseResult {
   const res = boardFileSchema.safeParse(json)
