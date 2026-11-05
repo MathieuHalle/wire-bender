@@ -24,7 +24,10 @@ export interface WireCard {
   cutMm: number
   /** Where bare/insulated changes, measured along the cut wire from its start end. */
   strip: { fromStartMm: number, toBare: boolean }[]
-  /** The strip bar in order; sums to `cutMm` (the surplus goes on the last stretch). */
+  /**
+   * The strip bar in order; sums to `cutMm`. Each bend allowance is in the stretch holding the bend
+   * (the one before it on a bare/insulated boundary); spare and rounding go on the last stretch.
+   */
   stretches: { lengthMm: number, bare: boolean }[]
   note?: string
 }
@@ -66,9 +69,13 @@ function distMm(a: Hole, b: Hole, pitch: number): number {
   return Math.hypot(pb.x - pa.x, pb.y - pa.y)
 }
 
-/** Turns between consecutive runs. Board coordinates are x right, y down; the bottom side is seen from below. */
-function bendsOf(rs: Run[], side: Side): Bend[] {
+/**
+ * Turns between consecutive runs. Board coordinates are x right, y down; the bottom side is seen from below.
+ * `afterRun` is the index of the run each bend ends.
+ */
+function bendsOf(rs: Run[], side: Side): { bends: Bend[], afterRun: number[] } {
   const out: Bend[] = []
+  const afterRun: number[] = []
   for (let i = 0; i + 1 < rs.length; i++) {
     const d1 = rs[i]!.dir
     const d2 = rs[i + 1]!.dir
@@ -76,6 +83,7 @@ function bendsOf(rs: Run[], side: Side): Bend[] {
     const at = holeName(rs[i]!.to)
     if (d1.x === -d2.x && d1.y === -d2.y) {
       out.push({ at, index: out.length + 1, angleDeg: 180, dir: 'back' })
+      afterRun.push(i)
       continue
     }
     // With y down, a positive cross product is a clockwise (right) turn seen from the top.
@@ -83,8 +91,9 @@ function bendsOf(rs: Run[], side: Side): Bend[] {
     let dir: 'left' | 'right' = cross > 0 ? 'right' : 'left'
     if (side === 'bottom') dir = dir === 'right' ? 'left' : 'right'
     out.push({ at, index: out.length + 1, angleDeg: 90, dir })
+    afterRun.push(i)
   }
-  return out
+  return { bends: out, afterRun }
 }
 
 function finish(
@@ -146,9 +155,13 @@ export function wireCards(board: BoardFile): WireCard[] {
   ): WireCard => {
     const rs = runs(pts, isBare)
     const segments = rs.map(r => ({ from: holeName(r.from), to: holeName(r.to), lengthMm: distMm(r.from, r.to, pitch), bare: r.bare }))
-    const bends = bendsOf(rs, base.side)
+    const { bends, afterRun } = bendsOf(rs, base.side)
     const pathMm = segments.reduce((a, s) => a + s.lengthMm, 0)
-    const rest = finish(bench, pathMm, bends.length, 0, segments.map(s => ({ lengthMm: s.lengthMm, bare: s.bare })))
+    // Each bend's allowance goes on the run that ends at it: the stretch holding the bend,
+    // or the stretch before it when the bend sits on a bare/insulated boundary.
+    const middle = segments.map(s => ({ lengthMm: s.lengthMm, bare: s.bare }))
+    for (const i of afterRun) middle[i]!.lengthMm += bench.bendAllowanceMm
+    const rest = finish(bench, pathMm, bends.length, 0, middle)
     return { ...base, start: holeName(pts[0]!), end: holeName(pts[pts.length - 1]!), segments, bends, ...rest }
   }
 

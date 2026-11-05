@@ -24,6 +24,13 @@ describe('wireCards', () => {
     expect(c!.bends).toHaveLength(2)
     expect(c!.cutMm).toBe(200)
     expect(sum(c!.stretches.map(s => s.lengthMm))).toBeCloseTo(200, 9)
+    // Both bends sit in the insulated stretch: 182.88 + 2 x 1 mm.
+    expect(c!.stretches.map(s => s.bare)).toEqual([true, false, true])
+    expect(c!.stretches[0]!.lengthMm).toBe(5)
+    expect(c!.stretches[1]!.lengthMm).toBeCloseTo(184.88, 9)
+    expect(c!.stretches[2]!.lengthMm).toBeCloseTo(10.12, 9)
+    expect(c!.strip[0]).toEqual({ fromStartMm: 5, toBare: false })
+    expect(c!.strip[1]!.fromStartMm).toBeCloseTo(189.88, 9)
     expect(c!.start).toBe('A1')
     expect(c!.end).toBe('M1')
   })
@@ -44,11 +51,37 @@ describe('wireCards', () => {
     expect(c!.strip).toHaveLength(2)
     expect(c!.strip[0]).toEqual({ fromStartMm: 5, toBare: false })
     expect(c!.strip[1]!.toBare).toBe(true)
-    expect(c!.strip[1]!.fromStartMm).toBeCloseTo(5 + ins, 9)
+    // The bend at A38 is on the boundary: its allowance goes to the stretch before it.
+    expect(c!.strip[1]!.fromStartMm).toBeCloseTo(5 + ins + 1, 9)
+    expect(c!.strip[1]!.fromStartMm).toBeCloseTo(99.98, 9)
     expect(c!.stretches.map(s => s.bare)).toEqual([true, false, true])
     expect(c!.stretches[0]!.lengthMm).toBe(5)
-    expect(c!.stretches[1]!.lengthMm).toBeCloseTo(ins, 9)
-    expect(c!.stretches[2]!.lengthMm).toBeCloseTo(210 - 5 - ins, 9)
+    expect(c!.stretches[1]!.lengthMm).toBeCloseTo(ins + 1, 9)
+    expect(c!.stretches[2]!.lengthMm).toBeCloseTo(210 - 5 - ins - 1, 9)
+  })
+
+  it('insulated bends before a bare segment move the strip mark by their allowance', () => {
+    // A1 -> A10 (9 holes) -> J10 (9 holes) insulated, J10 -> J20 (10 holes) bare.
+    const ins = 18 * P
+    const b = mk({ board: big, wires: [laid('W1', ['A1', 'A10', 'J10', 'J20'], [2])] })
+    const [c] = wireCards(b)
+    expect(c!.bends.map(x => x.at)).toEqual(['A10', 'J10'])
+    // 28 x 2.54 = 71.12 + 2 + 10 + 5 = 88.12 -> 90
+    expect(c!.cutMm).toBe(90)
+    expect(c!.strip[0]).toEqual({ fromStartMm: 5, toBare: false })
+    expect(c!.strip[1]!.toBare).toBe(true)
+    expect(c!.strip[1]!.fromStartMm).toBeCloseTo(5 + ins + 2, 9)
+    expect(c!.stretches[1]!.lengthMm).toBeCloseTo(ins + 2, 9)
+    expect(c!.stretches[2]!.lengthMm).toBeCloseTo(90 - 5 - ins - 2, 9)
+  })
+
+  it('a bend inside a bare stretch adds to that stretch, not the insulated one', () => {
+    // A1 -> A5 insulated, A5 -> A9 bare, bend at A9, A9 -> E9 bare.
+    const b = mk({ wires: [laid('W1', ['A1', 'A5', 'A9', 'E9'], [1, 2])] })
+    const [c] = wireCards(b)
+    expect(c!.bends.map(x => x.at)).toEqual(['A9'])
+    expect(c!.strip[1]!.fromStartMm).toBeCloseTo(5 + 4 * P, 9)
+    expect(c!.stretches[1]!.lengthMm).toBeCloseTo(4 * P, 9)
   })
 
   it('laid wire with no bare segments still has bare end leads', () => {
