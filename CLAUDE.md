@@ -1,6 +1,6 @@
 # WireBender
 
-- Spec and plan: `docs/` (design spec and the M1 implementation plan). Read them before changing behaviour.
+- Spec: `docs/superpowers/specs/2026-11-05-wirebender-design.md`. Plan: `docs/superpowers/plans/2026-11-05-wirebender-m1-editor.md`. Read them before changing behaviour.
 - Layout: pure TypeScript in `core/` (alias `~core`), CLI in `cli/`, Nitro routes in `server/`, app in `app/`.
 
 ## Global constraints (short form)
