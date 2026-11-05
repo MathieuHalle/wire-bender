@@ -1,15 +1,19 @@
 // The open board, kept in sync with the board file on disk.
 //
-// - Edits (`apply`, `undo`, `redo`) autosave after 400 ms with `baseRevision` = the
-//   revision we last saw on disk. After our PUT returns r, current = r.
-// - Disk changes arrive as SSE `revision` events. Older revisions are ignored. For
-//   anything else we GET the file and compare it with what we hold: identical (our own
-//   echo) does nothing; different with nothing pending reloads; different while an edit
-//   is pending (debounce not flushed, PUT in flight, or unsaved) is a conflict and
-//   nothing is overwritten. Same-revision events are checked too, so a hand edit that
-//   didn't bump `revision` still shows up.
+// - Edits (`apply`, `undo`, `redo`) autosave after 400 ms. A PUT names its base as the
+//   revision and the file hash we last saw on disk; the server refuses (409) when the
+//   file is no longer that one, so a hand edit that keeps `revision` is never overwritten.
+// - We remember the content last confirmed on disk (`diskSnapshot`, set on load and on
+//   every successful PUT to what we sent). Every SSE event (any revision, or
+//   `{errors:true}`) and every (re)connect runs one single-flight GET and compares the
+//   disk with that snapshot:
+//     equal     -> no external change (our own echo, a reformat): record its revision;
+//     different -> external change: a conflict if an edit is pending, else reload.
+//   A check that would overlap a PUT in flight waits for it to settle, so our own write
+//   is already the snapshot by the time its echo is judged.
 // - A board file that doesn't parse: keep the last good board, show the errors.
-// - On SSE connect and every reconnect, refetch.
+// - Closing the tab with an edit pending flushes it with a keepalive PUT and asks the
+//   browser to warn.
 import { computed, ref, shallowRef } from 'vue'
 import type { BoardFile } from '~core/schema'
 
@@ -17,8 +21,9 @@ export type BoardStatus = 'saved' | 'saving' | 'conflict' | 'error'
 
 const DEBOUNCE_MS = 400
 const HISTORY_CAP = 100
+const NO_SERVER = 'cannot reach the WireBender server'
 
-type GetOk = { path: string, board: BoardFile }
+type GetOk = { path: string, board: BoardFile, hash: string }
 type GetBad = { path: string, errors: string[] }
 
 /** Board content without the revision, keys sorted, for "is this the same board?". */
@@ -50,15 +55,23 @@ export function createBoardStore() {
   const undoStack = shallowRef<BoardFile[]>([])
   const redoStack = shallowRef<BoardFile[]>([])
 
+  // What we know is on disk.
+  let diskSnapshot: string | null = null
+  let diskHash = ''
+  /** The board object last written or loaded; another object means unsaved edits. */
+  let savedBoard: BoardFile | null = null
+
   let timer: ReturnType<typeof setTimeout> | null = null
   let inFlight: Promise<void> | null = null
   let saveAgain = false
-  /** The board as last confirmed equal to disk; null when we have unsaved changes. */
-  let savedSnapshot: BoardFile | null = null
-  /** An SSE event that came while a PUT was in flight; handled once it settles. */
-  let deferredEvent = false
 
-  const pending = () => timer !== null || inFlight !== null || savedSnapshot !== board.value
+  let checking: Promise<void> | null = null
+  let checkAgain = false
+  /** A check that came while a PUT was in flight; run once it settles. */
+  let checkAfterPut = false
+
+  /** An edit not yet confirmed on disk: debounce running, PUT in flight, or unsaved. */
+  const pending = () => timer !== null || inFlight !== null || savedBoard !== board.value
 
   async function get(): Promise<{ ok: true, body: GetOk } | { ok: false, body: GetBad | null }> {
     try {
@@ -70,46 +83,46 @@ export function createBoardStore() {
     }
   }
 
-  function take(b: BoardFile, p: string) {
+  function take(r: GetOk) {
     if (timer) clearTimeout(timer)
     timer = null
-    board.value = b
-    savedSnapshot = b
-    current.value = b.revision
-    path.value = p
+    board.value = r.board
+    savedBoard = r.board
+    diskSnapshot = canonical(r.board)
+    diskHash = r.hash
+    current.value = r.board.revision
+    path.value = r.path
     errors.value = []
     undoStack.value = []
     redoStack.value = []
     status.value = 'saved'
   }
 
-  /** Compare disk with what we hold and act (reload, no-op, conflict, errors). */
-  async function checkDisk() {
+  async function checkOnce() {
     if (inFlight) {
-      deferredEvent = true
+      checkAfterPut = true
       return
     }
     const r = await get()
+    if (inFlight) {
+      // A PUT started while we were reading; judge the disk once it has settled.
+      checkAfterPut = true
+      return
+    }
     if (!r.ok) {
-      if (r.body) {
-        path.value = r.body.path
-        errors.value = r.body.errors
-      } else {
-        errors.value = ['cannot reach the WireBender server']
-      }
+      if (r.body) path.value = r.body.path
+      errors.value = r.body?.errors ?? [NO_SERVER]
       if (status.value !== 'conflict') status.value = 'error'
       return
     }
-    const disk = r.body.board
     path.value = r.body.path
-    if (!board.value) return take(disk, r.body.path)
-    if (disk.revision < current.value) return // stale read
-    if (canonical(disk) === canonical(board.value)) {
-      // Same content: our own echo, or the file was only reformatted.
-      current.value = disk.revision
+    if (!board.value || diskSnapshot === null) return take(r.body)
+    if (canonical(r.body.board) === diskSnapshot) {
+      // No external change (our own echo, or only revision/formatting differ).
+      current.value = r.body.board.revision
+      diskHash = r.body.hash
       errors.value = []
-      if (timer === null && inFlight === null) savedSnapshot = board.value
-      if (status.value === 'error' || status.value === 'conflict') status.value = pending() ? 'saving' : 'saved'
+      if (status.value === 'error') status.value = pending() ? 'saving' : 'saved'
       return
     }
     if (pending() || status.value === 'conflict') {
@@ -117,33 +130,60 @@ export function createBoardStore() {
       status.value = 'conflict'
       return
     }
-    take(disk, r.body.path)
+    take(r.body)
   }
 
-  function onRevision(rev: number | null) {
-    if (rev !== null && rev < current.value) return
-    void checkDisk()
+  /** Single-flight: calls during a check coalesce into one re-run after it. */
+  function checkDisk(): Promise<void> {
+    if (checking) {
+      checkAgain = true
+      return checking
+    }
+    checking = (async () => {
+      try {
+        do {
+          checkAgain = false
+          await checkOnce()
+        } while (checkAgain)
+      } finally {
+        checking = null
+      }
+    })()
+    return checking
   }
 
-  async function put(force = false) {
+  /** keepalive uses plain fetch, started synchronously, so it survives the tab closing. */
+  function send(body: Record<string, unknown>, keepalive: boolean): Promise<{ revision: number, hash: string }> {
+    if (!keepalive) return $fetch<{ revision: number, hash: string }>('/api/board', { method: 'PUT', body })
+    return fetch('/api/board', {
+      method: 'PUT',
+      keepalive: true,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(async (r) => {
+      const data = await r.json().catch(() => null)
+      if (!r.ok) throw Object.assign(new Error(`HTTP ${r.status}`), { response: { status: r.status }, data })
+      return data
+    })
+  }
+
+  async function put(force = false, keepalive = false) {
     timer = null
     if (!board.value || (status.value === 'conflict' && !force)) return
     if (inFlight) {
       saveAgain = true
       return
     }
-    const snapshot = board.value
+    const sent = board.value
     status.value = 'saving'
     inFlight = (async () => {
       try {
-        const res = await $fetch<{ revision: number }>('/api/board', {
-          method: 'PUT',
-          body: { baseRevision: current.value, board: snapshot }
-        })
+        const res = await send({ baseRevision: current.value, baseHash: diskHash, board: sent }, keepalive)
         current.value = res.revision
-        if (board.value === snapshot) savedSnapshot = snapshot
+        diskHash = res.hash
+        diskSnapshot = canonical(sent)
+        savedBoard = sent
         errors.value = []
-        status.value = pending() && board.value !== snapshot ? 'saving' : 'saved'
       } catch (e) {
         const { status: s, data } = errorBody(e)
         if (s === 409) {
@@ -156,23 +196,22 @@ export function createBoardStore() {
     })()
     await inFlight
     inFlight = null
-    // Re-read: the request above may have changed it.
-    const after = status.value as BoardStatus
+    const after = status.value as BoardStatus // the request may have changed it
+    if (after === 'saving') status.value = pending() ? 'saving' : 'saved'
     if (saveAgain && after !== 'conflict') {
       saveAgain = false
       await put()
-    } else {
-      saveAgain = false
     }
-    if (status.value === 'saving' && !pending()) status.value = 'saved'
-    if (deferredEvent && !inFlight) {
-      deferredEvent = false
+    saveAgain = false
+    if (checkAfterPut && !inFlight) {
+      checkAfterPut = false
       await checkDisk()
     }
   }
 
   function schedule() {
     if (timer) clearTimeout(timer)
+    timer = null
     if (status.value === 'conflict') return // nothing is written until the owner picks
     status.value = 'saving'
     timer = setTimeout(() => void put(), DEBOUNCE_MS)
@@ -212,8 +251,8 @@ export function createBoardStore() {
     timer = null
     if (inFlight) await inFlight
     const r = await get()
-    if (r.ok) return take(r.body.board, r.body.path)
-    errors.value = r.body?.errors ?? ['cannot reach the WireBender server']
+    if (r.ok) return take(r.body)
+    errors.value = r.body?.errors ?? [NO_SERVER]
     status.value = 'error'
   }
 
@@ -224,13 +263,27 @@ export function createBoardStore() {
     if (inFlight) await inFlight
     const r = await get()
     if (!r.ok) {
-      errors.value = r.body?.errors ?? ['cannot reach the WireBender server']
+      errors.value = r.body?.errors ?? [NO_SERVER]
       status.value = 'error'
       return
     }
     current.value = r.body.board.revision
+    diskHash = r.body.hash
+    diskSnapshot = canonical(r.body.board)
     status.value = 'saving'
     await put(true)
+  }
+
+  /** Tab closing with an edit pending: send it now (keepalive) and ask the browser to warn. */
+  function onBeforeUnload(e: BeforeUnloadEvent) {
+    if (!board.value || !pending()) return
+    if (timer && !inFlight) {
+      // Goes through the normal save path, so if the owner stays, its echo is ours.
+      clearTimeout(timer)
+      void put(false, true)
+    }
+    e.preventDefault()
+    e.returnValue = ''
   }
 
   let source: EventSource | null = null
@@ -240,15 +293,9 @@ export function createBoardStore() {
     source = new EventSource('/api/board/events')
     // Fires on the first connect and on every automatic reconnect.
     source.onopen = () => void checkDisk()
-    source.addEventListener('revision', (ev) => {
-      let data: { revision?: number, errors?: boolean }
-      try {
-        data = JSON.parse((ev as MessageEvent).data)
-      } catch {
-        return
-      }
-      onRevision(data.errors ? null : (data.revision ?? null))
-    })
+    // Every event, whatever its revision: the content comparison decides.
+    source.addEventListener('revision', () => void checkDisk())
+    if (typeof window !== 'undefined') window.addEventListener('beforeunload', onBeforeUnload)
   }
 
   return {

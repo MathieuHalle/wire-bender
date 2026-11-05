@@ -7,5 +7,5 @@ export default defineEventHandler(async (event) => {
     setResponseStatus(event, 422)
     return { path, errors: r.errors }
   }
-  return { path, board: r.board }
+  return { path, board: r.board, hash: r.hash }
 })

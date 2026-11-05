@@ -23,29 +23,60 @@ class FakeES {
 
 interface Disk { board: BoardFile | null, errors: string[] | null }
 let disk: Disk
-let calls: { method: string, body?: { baseRevision: number, board: BoardFile } }[]
+type PutBody = { baseRevision: number, baseHash: string, board: BoardFile }
+let calls: { method: string, body?: PutBody, keepalive?: boolean }[]
 let holdPut: Promise<void> | null
 
 const fail = (status: number, data: unknown) => Object.assign(new Error(`HTTP ${status}`), { response: { status }, data })
+/** Stands in for the sha256 of the file bytes: any change to the file changes it. */
+const hashOf = (b: BoardFile) => JSON.stringify(b)
+
+/** The fake server's PUT, shared by $fetch and the keepalive fetch. */
+async function serverPut(body: PutBody) {
+  if (holdPut) await holdPut
+  const cur = disk.errors ? null : disk.board!.revision
+  const curHash = disk.errors ? null : hashOf(disk.board!)
+  if (cur !== body.baseRevision || curHash !== body.baseHash) throw fail(409, { current: cur, hash: curHash })
+  disk.board = { ...structuredClone(body.board), revision: cur! + 1 }
+  return { revision: cur! + 1, hash: hashOf(disk.board) }
+}
+
+let win: EventTarget
+/** Node's Event has a read-only returnValue; the browser's BeforeUnloadEvent lets you set it. */
+class BeforeUnload extends Event {
+  override returnValue: unknown = true
+  constructor() {
+    super('beforeunload', { cancelable: true })
+  }
+}
 
 beforeEach(() => {
   vi.useFakeTimers()
   disk = { board: mk({ name: 'disk' }), errors: null }
   calls = []
   holdPut = null
+  win = new EventTarget()
+  vi.stubGlobal('window', win)
   vi.stubGlobal('EventSource', FakeES)
-  vi.stubGlobal('$fetch', async (_url: string, opts?: { method?: string, body?: { baseRevision: number, board: BoardFile } }) => {
+  vi.stubGlobal('$fetch', async (_url: string, opts?: { method?: string, body?: PutBody }) => {
     const method = opts?.method ?? 'GET'
     calls.push({ method, body: opts?.body })
     if (method === 'GET') {
       if (disk.errors) throw fail(422, { path: '/x.json', errors: disk.errors })
-      return { path: '/x.json', board: structuredClone(disk.board) }
+      return { path: '/x.json', board: structuredClone(disk.board), hash: hashOf(disk.board!) }
     }
-    if (holdPut) await holdPut
-    const cur = disk.errors ? null : disk.board!.revision
-    if (cur !== opts!.body!.baseRevision) throw fail(409, { current: cur })
-    disk.board = { ...structuredClone(opts!.body!.board), revision: cur! + 1 }
-    return { revision: cur! + 1 }
+    return serverPut(opts!.body!)
+  })
+  vi.stubGlobal('fetch', async (_url: string, opts: { method: string, body: string, keepalive?: boolean }) => {
+    const body = JSON.parse(opts.body) as PutBody
+    calls.push({ method: opts.method, body, keepalive: opts.keepalive })
+    try {
+      const data = await serverPut(body)
+      return { ok: true, status: 200, json: async () => data }
+    } catch (e) {
+      const x = e as { response: { status: number }, data: unknown }
+      return { ok: false, status: x.response.status, json: async () => x.data }
+    }
   })
 })
 afterEach(() => {
@@ -99,14 +130,108 @@ describe('useBoard', () => {
     expect(s.status.value).toBe('saved')
   })
 
-  test('older revisions are ignored without a fetch', async () => {
-    disk.board!.revision = 5
+  test('a lower-revision external revert while idle reloads', async () => {
+    disk.board = { ...disk.board!, revision: 5 }
     const s = await started()
-    const n = calls.length
-    FakeES.last!.emit({ revision: 4 })
+    disk.board = { ...disk.board, name: 'reverted', revision: 2 }
+    FakeES.last!.emit({ revision: 2 })
     await flush()
-    expect(calls.length).toBe(n)
-    expect(s.revision.value).toBe(5)
+    expect(s.board.value?.name).toBe('reverted')
+    expect(s.revision.value).toBe(2)
+    expect(s.status.value).toBe('saved')
+  })
+
+  test('our own echo while a newer edit is pending is not a conflict', async () => {
+    const s = await started()
+    s.apply(edited(s.board.value!, 'one'))
+    await vi.advanceTimersByTimeAsync(400)
+    s.apply(edited(s.board.value!, 'two'))
+    FakeES.last!.emit({ revision: 1 })
+    await flush()
+    expect(s.status.value).not.toBe('conflict')
+    await vi.advanceTimersByTimeAsync(400)
+    expect(s.status.value).toBe('saved')
+    expect(disk.board!.name).toBe('two')
+    expect(s.revision.value).toBe(2)
+  })
+
+  test('an edit during an in-flight PUT, then its echo, is not a conflict', async () => {
+    const s = await started()
+    let release!: () => void
+    holdPut = new Promise(r => (release = r))
+    s.apply(edited(s.board.value!, 'one'))
+    await vi.advanceTimersByTimeAsync(400) // PUT in flight
+    s.apply(edited(s.board.value!, 'two'))
+    FakeES.last!.emit({ revision: 1 })
+    await flush()
+    holdPut = null
+    release()
+    await flush()
+    expect(s.status.value).not.toBe('conflict')
+    await vi.advanceTimersByTimeAsync(400)
+    expect(s.status.value).toBe('saved')
+    expect(disk.board!.name).toBe('two')
+  })
+
+  test('an edit landing while a check GET is in flight, then the echo, is not a conflict', async () => {
+    const s = await started()
+    s.apply(edited(s.board.value!, 'one'))
+    await vi.advanceTimersByTimeAsync(400)
+    FakeES.last!.emit({ revision: 1 }) // GET starts
+    s.apply(edited(s.board.value!, 'two')) // before it returns
+    await flush()
+    expect(s.status.value).not.toBe('conflict')
+  })
+
+  test('a same-revision external edit while an edit is pending is a conflict', async () => {
+    const s = await started()
+    s.apply(edited(s.board.value!, 'mine'))
+    disk.board = { ...disk.board!, name: 'hand edit' } // revision still 0
+    FakeES.last!.emit({ revision: 0 })
+    await flush()
+    expect(s.status.value).toBe('conflict')
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(puts()).toHaveLength(0)
+    expect(disk.board.name).toBe('hand edit')
+  })
+
+  test('a same-revision hand edit before our save lands is refused by hash (409)', async () => {
+    const s = await started()
+    disk.board = { ...disk.board!, name: 'hand edit' } // no event yet
+    s.apply(edited(s.board.value!, 'mine'))
+    await vi.advanceTimersByTimeAsync(400)
+    expect(s.status.value).toBe('conflict')
+    expect(disk.board.name).toBe('hand edit')
+  })
+
+  test('checks are single-flight: a burst of events makes at most two GETs', async () => {
+    const s = await started()
+    const before = calls.filter(c => c.method === 'GET').length
+    for (let i = 0; i < 5; i++) FakeES.last!.emit({ revision: 0 })
+    await flush()
+    expect(calls.filter(c => c.method === 'GET').length - before).toBeLessThanOrEqual(2)
+    expect(s.status.value).toBe('saved')
+  })
+
+  test('closing the tab with an edit pending sends a keepalive PUT and asks to warn', async () => {
+    const s = await started()
+    s.apply(edited(s.board.value!, 'last second'))
+    const ev = new BeforeUnload()
+    win.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(true)
+    await flush()
+    const last = calls.at(-1)!
+    expect(last.method).toBe('PUT')
+    expect(last.keepalive).toBe(true)
+    expect(disk.board!.name).toBe('last second')
+    expect(s.status.value).toBe('saved')
+  })
+
+  test('closing the tab with nothing pending does not warn', async () => {
+    await started()
+    const ev = new BeforeUnload()
+    win.dispatchEvent(ev)
+    expect(ev.defaultPrevented).toBe(false)
   })
 
   test('an external change with nothing pending reloads, even at the same revision', async () => {

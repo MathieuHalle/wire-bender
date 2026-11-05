@@ -1,15 +1,20 @@
 import { promises as fs } from 'node:fs'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import path from 'node:path'
 import chokidar, { type FSWatcher } from 'chokidar'
 import { parseBoard, type BoardFile } from '~core/schema'
 
 export const DEFAULT_BOARD = 'data/channel-board-2.wirebender.json'
 
-export type ReadResult = { ok: true, board: BoardFile } | { ok: false, errors: string[] }
+/** `hash` is the sha256 hex of the file bytes: what a PUT must name as its base. */
+export type ReadResult = { ok: true, board: BoardFile, hash: string } | { ok: false, errors: string[] }
 export type WriteResult =
-  | { ok: true, revision: number }
-  | { ok: false, conflict: true, current: number | null }
+  | { ok: true, revision: number, hash: string }
+  | { ok: false, conflict: true, current: number | null, hash?: string }
+
+export function hashBytes(bytes: Buffer | string): string {
+  return createHash('sha256').update(bytes).digest('hex')
+}
 
 /** Absolute board path from WIREBENDER_BOARD (relative to cwd) or the demo default. */
 export function boardPath(): string {
@@ -17,31 +22,37 @@ export function boardPath(): string {
 }
 
 export async function readBoard(file: string): Promise<ReadResult> {
-  let text: string
+  let bytes: Buffer
   try {
-    text = await fs.readFile(file, 'utf8')
+    bytes = await fs.readFile(file)
   } catch (e) {
     return { ok: false, errors: [`cannot read file: ${(e as Error).message}`] }
   }
+  const text = bytes.toString('utf8')
   let json: unknown
   try {
     json = JSON.parse(text)
   } catch (e) {
     return { ok: false, errors: [`not valid JSON: ${(e as Error).message}`] }
   }
-  return parseBoard(json)
+  const r = parseBoard(json)
+  return r.ok ? { ...r, hash: hashBytes(bytes) } : r
 }
 
 const queues = new Map<string, Promise<unknown>>()
 
 /**
+ * Writes only when the file on disk is still the one the client based its edit on:
+ * same bytes (`baseHash`) and same `baseRevision`. The hash catches hand edits that
+ * keep the revision. The new revision is baseRevision + 1.
+ *
  * Serialises the whole read-check-write-rename per file within this process.
  * Known limit: an external writer (Claude editing on disk) can still slip in
  * between the check and the rename; closing that needs OS file locking.
  */
-export function writeBoard(file: string, board: BoardFile, baseRevision: number): Promise<WriteResult> {
+export function writeBoard(file: string, board: BoardFile, baseRevision: number, baseHash: string): Promise<WriteResult> {
   const prev = queues.get(file) ?? Promise.resolve()
-  const run = prev.then(() => writeBoardUnlocked(file, board, baseRevision))
+  const run = prev.then(() => writeBoardUnlocked(file, board, baseRevision, baseHash))
   const tail = run.catch(() => {})
   queues.set(file, tail)
   void tail.then(() => {
@@ -50,22 +61,23 @@ export function writeBoard(file: string, board: BoardFile, baseRevision: number)
   return run
 }
 
-async function writeBoardUnlocked(file: string, board: BoardFile, baseRevision: number): Promise<WriteResult> {
+async function writeBoardUnlocked(file: string, board: BoardFile, baseRevision: number, baseHash: string): Promise<WriteResult> {
   const disk = await readBoard(file)
   if (!disk.ok) return { ok: false, conflict: true, current: null }
-  if (disk.board.revision !== baseRevision) {
-    return { ok: false, conflict: true, current: disk.board.revision }
+  if (disk.hash !== baseHash || disk.board.revision !== baseRevision) {
+    return { ok: false, conflict: true, current: disk.board.revision, hash: disk.hash }
   }
   const revision = baseRevision + 1
+  const text = JSON.stringify({ ...board, revision }, null, 2) + '\n'
   const tmp = `${file}.${randomBytes(6).toString('hex')}.tmp`
   try {
-    await fs.writeFile(tmp, JSON.stringify({ ...board, revision }, null, 2) + '\n')
+    await fs.writeFile(tmp, text)
     await fs.rename(tmp, file)
   } catch (e) {
     await fs.rm(tmp, { force: true })
     throw e
   }
-  return { ok: true, revision }
+  return { ok: true, revision, hash: hashBytes(text) }
 }
 
 interface Shared { watcher: FSWatcher, listeners: Set<(revision: number | null) => void> }

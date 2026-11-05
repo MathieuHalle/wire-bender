@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { readBoard, watchBoard, writeBoard } from '../../server/utils/boardFile'
+import { hashBytes, readBoard, watchBoard, writeBoard } from '../../server/utils/boardFile'
 
 const DEMO = path.resolve(__dirname, '../../data/channel-board-2.wirebender.json')
 let dir: string
@@ -12,6 +12,13 @@ async function demo(revision: number) {
   const board = JSON.parse(await fs.readFile(DEMO, 'utf8'))
   board.revision = revision
   return board
+}
+
+/** Write `board` as the file and return its hash, as a GET would report it. */
+async function put(board: unknown): Promise<string> {
+  const text = JSON.stringify(board)
+  await fs.writeFile(file, text)
+  return hashBytes(text)
 }
 
 beforeEach(async () => {
@@ -39,42 +46,60 @@ describe('boardFile', () => {
     expect(missing.ok).toBe(false)
   })
 
+  it('readBoard returns the sha256 of the file bytes', async () => {
+    const h = await put(await demo(0))
+    const r = await readBoard(file)
+    expect(r.ok && r.hash).toBe(h)
+    expect(h).toMatch(/^[0-9a-f]{64}$/)
+  })
+
   it('PUT with stale baseRevision returns 409', async () => {
-    await fs.writeFile(file, JSON.stringify(await demo(3)))
-    const r = await writeBoard(file, await demo(2), 2)
-    expect(r).toEqual({ ok: false, conflict: true, current: 3 })
+    const h = await put(await demo(3))
+    const r = await writeBoard(file, await demo(2), 2, h)
+    expect(r).toEqual({ ok: false, conflict: true, current: 3, hash: h })
+  })
+
+  it('hand edit that keeps the revision conflicts', async () => {
+    const old = await put(await demo(4))
+    const edited = await demo(4)
+    edited.name = 'edited by hand'
+    const now = await put(edited)
+    const r = await writeBoard(file, await demo(4), 4, old)
+    expect(r).toEqual({ ok: false, conflict: true, current: 4, hash: now })
+    const back = await readBoard(file)
+    expect(back.ok && back.board.name).toBe('edited by hand')
   })
 
   it('writeBoard on missing or unparsable file conflicts with current null', async () => {
-    expect(await writeBoard(file, await demo(0), 0)).toEqual({ ok: false, conflict: true, current: null })
+    expect(await writeBoard(file, await demo(0), 0, 'x')).toEqual({ ok: false, conflict: true, current: null })
     await fs.writeFile(file, '{ broken')
-    expect(await writeBoard(file, await demo(0), 0)).toEqual({ ok: false, conflict: true, current: null })
+    expect(await writeBoard(file, await demo(0), 0, hashBytes('{ broken'))).toEqual({ ok: false, conflict: true, current: null })
     expect(await fs.readFile(file, 'utf8')).toBe('{ broken')
   })
 
   it('write increments revision', async () => {
-    await fs.writeFile(file, JSON.stringify(await demo(0)))
-    const r = await writeBoard(file, await demo(0), 0)
-    expect(r).toEqual({ ok: true, revision: 1 })
+    const h = await put(await demo(0))
+    const r = await writeBoard(file, await demo(0), 0, h)
     const back = await readBoard(file)
     expect(back.ok && back.board.revision).toBe(1)
+    expect(r).toEqual({ ok: true, revision: 1, hash: back.ok && back.hash })
     const text = await fs.readFile(file, 'utf8')
     expect(text).toContain('\n  "')
   })
 
   it('concurrent writes with the same baseRevision: one wins, one conflicts', async () => {
-    await fs.writeFile(file, JSON.stringify(await demo(0)))
+    const h = await put(await demo(0))
     const [a, b] = await Promise.all([
-      writeBoard(file, await demo(0), 0),
-      writeBoard(file, await demo(0), 0)
+      writeBoard(file, await demo(0), 0, h),
+      writeBoard(file, await demo(0), 0, h)
     ])
     const results = [a, b]
-    expect(results.filter(r => r.ok)).toEqual([{ ok: true, revision: 1 }])
-    expect(results.filter(r => !r.ok)).toEqual([{ ok: false, conflict: true, current: 1 }])
+    expect(results.filter(r => r.ok).map(r => r.ok && r.revision)).toEqual([1])
+    expect(results.filter(r => !r.ok).map(r => !r.ok && r.current)).toEqual([1])
   })
 
   it('write is atomic', async () => {
-    await fs.writeFile(file, JSON.stringify(await demo(0)))
+    let h = await put(await demo(0))
     let stop = false
     let reads = 0
     let bad = 0
@@ -87,8 +112,9 @@ describe('boardFile', () => {
       }
     })()
     for (let i = 0; i < 50; i++) {
-      const r = await writeBoard(file, await demo(i), i)
-      expect(r).toEqual({ ok: true, revision: i + 1 })
+      const r = await writeBoard(file, await demo(i), i, h)
+      expect(r.ok && r.revision).toBe(i + 1)
+      if (r.ok) h = r.hash
     }
     stop = true
     await reader
