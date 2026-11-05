@@ -38,11 +38,11 @@ function hasLead(board: BoardFile, h: Hole): boolean {
   return board.parts.some(p => placePart(p).pins.some(pin => holeKey(pin.hole) === k))
 }
 
-/** Another trail on this side passes the hole, or a wire on this side ends there. */
+/** Another trail on this side passes the hole, or a wire (either side: the end goes through the hole) ends there. */
 function hasOtherTrace(board: BoardFile, side: Side, h: Hole, exceptTrailId: string | null): boolean {
   if (board.trails.some(t => t.side === side && t.id !== exceptTrailId && trailPasses(t, h))) return true
   const name = holeName(h)
-  return board.wires.some(w => w.side === side && (w.points[0] === name || w.points[w.points.length - 1] === name))
+  return board.wires.some(w => (w.points[0] === name || w.points[w.points.length - 1] === name))
 }
 
 function rejection(board: BoardFile, side: Side, h: Hole): string | null {

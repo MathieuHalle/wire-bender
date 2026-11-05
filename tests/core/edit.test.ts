@@ -53,6 +53,19 @@ describe('pencilClick', () => {
     expect(t.joints).toEqual(['C5'])
   })
 
+  it('pencil joins a wire end on the opposite side', () => {
+    const b = mk({
+      board: { type: 'two-sided' },
+      wires: [{ id: 'W1', kind: 'laid', side: 'top', points: ['C5', 'F5'], bareSegments: [], joints: [] }]
+    })
+    const r = clicks(b, 'bottom', ['C2', 'C5'])
+    expect(r.drawing).toBeNull()
+    expect(r.board.trails[0]!.joints).toEqual(['C5'])
+    const s = clicks(b, 'bottom', ['C5'])
+    expect(s.board.trails[0]!.joints).toEqual(['C5'])
+    expect(s.drawing).not.toBeNull()
+  })
+
   it('pencil adds a joint on a lead', () => {
     const b = mk({ parts: [axial('R1', 'C5', 'C8', 'N')] })
     const r = clicks(b, 'bottom', ['C2', 'C5', 'F5'])
