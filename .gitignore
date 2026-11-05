@@ -1,0 +1,8 @@
+node_modules/
+.nuxt/
+.output/
+dist/
+.DS_Store
+reference/
+.superpowers/
+Screenshot*.png
