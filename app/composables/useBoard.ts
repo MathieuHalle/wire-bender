@@ -11,6 +11,9 @@
 //     different -> external change: a conflict if an edit is pending, else reload.
 //   A check that would overlap a PUT in flight waits for it to settle, so our own write
 //   is already the snapshot by the time its echo is judged.
+//   A check whose GET overlapped a whole PUT (started and finished meanwhile) reads again.
+// - A save that failed (network) keeps its error shown until a save succeeds, and is
+//   retried on the next check (an SSE event or reconnect) that finds the disk unchanged.
 // - A board file that doesn't parse: keep the last good board, show the errors.
 // - Closing the tab with an edit pending flushes it with a keepalive PUT and asks the
 //   browser to warn.
@@ -18,6 +21,8 @@ import { computed, ref, shallowRef } from 'vue'
 import type { BoardFile } from '~core/schema'
 
 export type BoardStatus = 'saved' | 'saving' | 'conflict' | 'error'
+/** Where the shown errors come from: the file on disk, a failed save, or a lost server. */
+export type ErrorKind = 'file' | 'save' | 'server'
 
 const DEBOUNCE_MS = 400
 const HISTORY_CAP = 100
@@ -49,6 +54,7 @@ function errorBody(e: unknown): { status?: number, data?: Record<string, unknown
 export function createBoardStore() {
   const board = shallowRef<BoardFile | null>(null)
   const errors = ref<string[]>([])
+  const errorKind = ref<ErrorKind | null>(null)
   const path = ref('')
   const current = ref(0)
   const status = ref<BoardStatus>('saved')
@@ -70,8 +76,26 @@ export function createBoardStore() {
   /** A check that came while a PUT was in flight; run once it settles. */
   let checkAfterPut = false
 
+  /** Bumped when a PUT starts: a check whose GET overlapped one judges a stale read. */
+  let writeGen = 0
+
   /** An edit not yet confirmed on disk: debounce running, PUT in flight, or unsaved. */
   const pending = () => timer !== null || inFlight !== null || savedBoard !== board.value
+
+  function showErrors(kind: ErrorKind, list: string[]) {
+    errors.value = list
+    errorKind.value = kind
+  }
+
+  function clearErrors() {
+    errors.value = []
+    errorKind.value = null
+  }
+
+  /** An edit is waiting with nothing on its way to disk (a save failed): try again. */
+  function retryIfStuck() {
+    if (pending() && !timer && !inFlight && status.value !== 'conflict') schedule()
+  }
 
   async function get(): Promise<{ ok: true, body: GetOk } | { ok: false, body: GetBad | null }> {
     try {
@@ -92,7 +116,7 @@ export function createBoardStore() {
     diskHash = r.hash
     current.value = r.board.revision
     path.value = r.path
-    errors.value = []
+    clearErrors()
     undoStack.value = []
     redoStack.value = []
     status.value = 'saved'
@@ -103,16 +127,24 @@ export function createBoardStore() {
       checkAfterPut = true
       return
     }
+    const gen = writeGen
     const r = await get()
     if (inFlight) {
       // A PUT started while we were reading; judge the disk once it has settled.
       checkAfterPut = true
       return
     }
+    if (gen !== writeGen) {
+      // A PUT started and finished while we were reading: the read is stale, read again.
+      checkAgain = true
+      return
+    }
     if (!r.ok) {
       if (r.body) path.value = r.body.path
-      errors.value = r.body?.errors ?? [NO_SERVER]
+      // A failed save stays the error shown until a save succeeds.
+      if (errorKind.value !== 'save' || r.body) showErrors(r.body ? 'file' : 'server', r.body?.errors ?? [NO_SERVER])
       if (status.value !== 'conflict') status.value = 'error'
+      retryIfStuck()
       return
     }
     path.value = r.body.path
@@ -121,12 +153,13 @@ export function createBoardStore() {
       // No external change (our own echo, or only revision/formatting differ).
       current.value = r.body.board.revision
       diskHash = r.body.hash
-      errors.value = []
+      if (errorKind.value !== 'save' || !pending()) clearErrors()
       if (status.value === 'error') status.value = pending() ? 'saving' : 'saved'
+      retryIfStuck()
       return
     }
     if (pending() || status.value === 'conflict') {
-      errors.value = []
+      clearErrors()
       status.value = 'conflict'
       return
     }
@@ -176,6 +209,7 @@ export function createBoardStore() {
     }
     const sent = board.value
     status.value = 'saving'
+    writeGen++
     inFlight = (async () => {
       try {
         const res = await send({ baseRevision: current.value, baseHash: diskHash, board: sent }, keepalive)
@@ -183,14 +217,14 @@ export function createBoardStore() {
         diskHash = res.hash
         diskSnapshot = canonical(sent)
         savedBoard = sent
-        errors.value = []
+        clearErrors()
       } catch (e) {
         const { status: s, data } = errorBody(e)
         if (s === 409) {
           status.value = 'conflict'
         } else {
           status.value = 'error'
-          errors.value = (data?.errors as string[] | undefined) ?? [`save failed: ${(e as Error).message}`]
+          showErrors('save', (data?.errors as string[] | undefined) ?? [`save failed: ${(e as Error).message}`])
         }
       }
     })()
@@ -252,7 +286,7 @@ export function createBoardStore() {
     if (inFlight) await inFlight
     const r = await get()
     if (r.ok) return take(r.body)
-    errors.value = r.body?.errors ?? [NO_SERVER]
+    showErrors(r.body ? 'file' : 'server', r.body?.errors ?? [NO_SERVER])
     status.value = 'error'
   }
 
@@ -263,7 +297,7 @@ export function createBoardStore() {
     if (inFlight) await inFlight
     const r = await get()
     if (!r.ok) {
-      errors.value = r.body?.errors ?? [NO_SERVER]
+      showErrors(r.body ? 'file' : 'server', r.body?.errors ?? [NO_SERVER])
       status.value = 'error'
       return
     }
@@ -301,6 +335,7 @@ export function createBoardStore() {
   return {
     board,
     errors,
+    errorKind,
     path,
     revision: computed(() => current.value),
     status,

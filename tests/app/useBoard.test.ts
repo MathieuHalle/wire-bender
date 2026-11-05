@@ -332,6 +332,98 @@ describe('useBoard', () => {
     expect(s.board.value?.name).toBe('while away')
   })
 
+  test('a save that failed on the network is retried after reconnect; its error stays until then', async () => {
+    const s = await started()
+    const real = (globalThis as unknown as { $fetch: (u: string, o?: { method?: string }) => Promise<unknown> }).$fetch
+    vi.stubGlobal('$fetch', async (u: string, o?: { method?: string, body?: PutBody }) => {
+      if (o?.method === 'PUT') {
+        calls.push({ method: 'PUT', body: o.body })
+        throw new Error('fetch failed')
+      }
+      return real(u, o)
+    })
+    s.apply(edited(s.board.value!, 'mine'))
+    await vi.advanceTimersByTimeAsync(400)
+    expect(s.status.value).toBe('error')
+    expect(s.errorKind.value).toBe('save')
+    expect(s.errors.value).toEqual(['save failed: fetch failed'])
+    vi.stubGlobal('$fetch', real)
+    FakeES.last!.onopen!()
+    await flush()
+    // The disk still matches what we last saw, so the retry is scheduled, error still shown.
+    expect(s.errors.value).toEqual(['save failed: fetch failed'])
+    await vi.advanceTimersByTimeAsync(400)
+    expect(puts()).toHaveLength(2)
+    expect(disk.board!.name).toBe('mine')
+    expect(s.status.value).toBe('saved')
+    expect(s.errors.value).toEqual([])
+    expect(s.errorKind.value).toBeNull()
+  })
+
+  test('a new edit after a failed save keeps the error banner until a save succeeds', async () => {
+    const s = await started()
+    const real = (globalThis as unknown as { $fetch: (u: string, o?: { method?: string }) => Promise<unknown> }).$fetch
+    vi.stubGlobal('$fetch', async (u: string, o?: { method?: string, body?: PutBody }) => {
+      if (o?.method === 'PUT') throw new Error('fetch failed')
+      return real(u, o)
+    })
+    s.apply(edited(s.board.value!, 'one'))
+    await vi.advanceTimersByTimeAsync(400)
+    s.apply(edited(s.board.value!, 'two'))
+    expect(s.status.value).toBe('saving')
+    expect(s.errors.value).toEqual(['save failed: fetch failed'])
+    vi.stubGlobal('$fetch', real)
+    await vi.advanceTimersByTimeAsync(400)
+    expect(disk.board!.name).toBe('two')
+    expect(s.errors.value).toEqual([])
+  })
+
+  test('a PUT that starts and finishes inside a check GET does not revert the edit', async () => {
+    const s = await started()
+    const real = (globalThis as unknown as { $fetch: (u: string, o?: { method?: string }) => Promise<unknown> }).$fetch
+    let releaseGet: (() => void) | null = null
+    let holdOne = true
+    vi.stubGlobal('$fetch', async (u: string, o?: { method?: string, body?: PutBody }) => {
+      if ((o?.method ?? 'GET') === 'GET' && holdOne) {
+        holdOne = false
+        const stale = await real(u, o) // read the disk now, answer later
+        await new Promise<void>((r) => { releaseGet = r })
+        return stale
+      }
+      return real(u, o)
+    })
+    s.apply(edited(s.board.value!, 'mine'))
+    FakeES.last!.emit({ revision: 0 }) // check starts; its GET reads the old disk
+    await flush()
+    await vi.advanceTimersByTimeAsync(400) // our PUT runs and lands meanwhile
+    expect(disk.board!.name).toBe('mine')
+    releaseGet!()
+    await flush()
+    expect(s.board.value!.name).toBe('mine')
+    expect(s.status.value).toBe('saved')
+    expect(s.canUndo.value).toBe(true)
+  })
+
+  test('errorKind tells a broken file from a lost server', async () => {
+    const s = await started()
+    disk.errors = ['not valid JSON: x']
+    FakeES.last!.emit({ errors: true })
+    await flush()
+    expect(s.errorKind.value).toBe('file')
+    const real = (globalThis as unknown as { $fetch: (u: string, o?: { method?: string }) => Promise<unknown> }).$fetch
+    vi.stubGlobal('$fetch', async () => {
+      throw new Error('fetch failed')
+    })
+    FakeES.last!.onopen!()
+    await flush()
+    expect(s.errorKind.value).toBe('server')
+    vi.stubGlobal('$fetch', real)
+    disk.errors = null
+    FakeES.last!.onopen!()
+    await flush()
+    expect(s.errorKind.value).toBeNull()
+  })
+
   test('undo and redo; apply clears redo; history is capped at 100', async () => {
     const s = await started()
     const b0 = s.board.value!

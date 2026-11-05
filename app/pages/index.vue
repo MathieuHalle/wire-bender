@@ -6,7 +6,7 @@ import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
 import { holeGroups, jointSide } from '~/utils/boardView'
 
-const { board, errors, path, revision, status, canUndo, canRedo, undo, redo, reloadFromDisk, keepMine } = useBoard()
+const { board, errors, errorKind, path, revision, status, canUndo, canRedo, undo, redo, reloadFromDisk, keepMine } = useBoard()
 const { tool, drawing, onHoleClick, onSegmentClick, addJoint } = useTools()
 
 const mirrorBottom = ref(true)
@@ -61,8 +61,12 @@ const STATUS = {
 } as const
 
 /** The errors come from parsing the file (not from a lost server or a failed save). */
-const fileBroken = computed(() => errors.value.length > 0
-  && !errors.value.some(e => e.startsWith('cannot reach') || e.startsWith('save failed')))
+const fileBroken = computed(() => errors.value.length > 0 && errorKind.value === 'file')
+const errorTitle = computed(() => {
+  if (errorKind.value === 'save') return 'Saving failed. Your edits are kept here and saved again once the server answers.'
+  if (errorKind.value === 'server') return 'Cannot reach the WireBender server.'
+  return board.value ? 'The board file has errors. Showing the last good version.' : 'The board file has errors.'
+})
 
 /** "Load the file" asks again inside the banner before discarding local edits. */
 const confirmLoad = ref(false)
@@ -173,7 +177,7 @@ const sideTitle = (s: Side) => (s === 'top'
       color="error"
       variant="subtle"
       icon="i-lucide-triangle-alert"
-      :title="board ? 'The board file has errors. Showing the last good version.' : 'The board file has errors.'"
+      :title="errorTitle"
     >
       <template #description>
         <ul class="font-mono text-xs">
