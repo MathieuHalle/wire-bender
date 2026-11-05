@@ -19,7 +19,11 @@ const props = withDefaults(defineProps<{
   /** Pass these from the page to compute them once for both sides. */
   conn?: Connectivity
   placed?: PlacedPart[]
-}>(), { mirrored: false, highlightNet: null, hoverHole: null, tool: 'select', conn: undefined, placed: undefined })
+  /** While drawing on this side: the trail's last point; a rubber band follows the pointer from it. */
+  drawFrom?: Hole | null
+  /** Holes of the finding picked in the findings panel (a second highlight, separate from the net). */
+  markHoles?: Hole[]
+}>(), { mirrored: false, highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
 
 const emit = defineEmits<{
   'hole-click': [hole: Hole]
@@ -69,6 +73,8 @@ const rowLabels = computed(() =>
 const svgEl = ref<SVGSVGElement | null>(null)
 const hovered = ref<Hole | null>(null)
 const tipAt = ref<{ x: number, y: number, flip: boolean } | null>(null)
+/** Pointer in fractional hole coordinates (col, row), while over the board. */
+const pointer = ref<{ fc: number, fr: number } | null>(null)
 
 function boardPoint(ev: PointerEvent | MouseEvent) {
   const svg = svgEl.value
@@ -91,6 +97,7 @@ function holeAt(fc: number, fr: number): Hole | null {
 
 function onMove(ev: PointerEvent) {
   const p = boardPoint(ev)
+  pointer.value = p
   const h = p ? holeAt(p.fc, p.fr) : null
   const wrap = svgEl.value?.parentElement?.getBoundingClientRect()
   tipAt.value = h && wrap
@@ -103,6 +110,7 @@ function onMove(ev: PointerEvent) {
 
 function onLeave() {
   tipAt.value = null
+  pointer.value = null
   if (hovered.value) emit('hover', null)
   hovered.value = null
 }
@@ -152,6 +160,22 @@ const tip = computed(() => {
   return { name: holeName(h), pins, net: netText }
 })
 
+// ---- Rubber band and finding marks -------------------------------------------------
+/** From the last drawn point to the pointer, snapped to that point's row or column. */
+const band = computed(() => {
+  const from = props.drawFrom
+  const p = pointer.value
+  if (!from || !p) return null
+  const g = geo.value
+  const clamp = (v: number, max: number) => Math.min(max, Math.max(1, Math.round(v)))
+  const to = Math.abs(p.fc - from.col) >= Math.abs(p.fr - from.row)
+    ? { col: clamp(p.fc, g.cols), row: from.row }
+    : { col: from.col, row: clamp(p.fr, g.rows) }
+  return { a: g.pt(from), b: g.pt(to) }
+})
+
+const marks = computed(() => props.markHoles.map(h => ({ k: holeKey(h), ...geo.value.pt(h) })))
+
 const ringed = computed(() => {
   const h = hovered.value ?? props.hoverHole
   return h ? geo.value.pt(h) : null
@@ -164,7 +188,7 @@ const ringed = computed(() => {
       ref="svgEl"
       :viewBox="viewBox"
       class="block h-auto w-full select-none"
-      :class="tool === 'select' ? 'cursor-default' : 'cursor-crosshair'"
+      :class="tool === 'inspect' ? 'cursor-default' : 'cursor-crosshair'"
       font-family="'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace"
       role="img"
       :aria-label="`Board ${side} side${mirrored ? ', mirrored (seen from below)' : ''}`"
@@ -236,6 +260,46 @@ const ringed = computed(() => {
         </template>
       </g>
 
+      <g
+        v-if="marks.length"
+        pointer-events="none"
+      >
+        <circle
+          v-for="m in marks"
+          :key="m.k"
+          :cx="m.x"
+          :cy="m.y"
+          r="1.5"
+          fill="none"
+          stroke="#e11d48"
+          stroke-width="0.4"
+          stroke-dasharray="0.8 0.4"
+        />
+      </g>
+
+      <g
+        v-if="band"
+        pointer-events="none"
+      >
+        <line
+          :x1="band.a.x"
+          :y1="band.a.y"
+          :x2="band.b.x"
+          :y2="band.b.y"
+          stroke="#f5b400"
+          stroke-width="0.6"
+          stroke-linecap="round"
+          stroke-dasharray="1 0.6"
+          opacity="0.9"
+        />
+        <circle
+          :cx="band.b.x"
+          :cy="band.b.y"
+          r="0.5"
+          fill="#f5b400"
+        />
+      </g>
+
       <circle
         v-if="ringed"
         :cx="ringed.x"
@@ -250,7 +314,7 @@ const ringed = computed(() => {
 
     <div
       v-if="tip && tipAt"
-      class="pointer-events-none absolute z-10 rounded-md border border-default bg-default px-2 py-1 font-mono text-xs whitespace-nowrap shadow-md"
+      class="pointer-events-none absolute z-10 w-max rounded-md border border-default bg-default px-2 py-1 font-mono text-xs whitespace-nowrap shadow-md"
       :style="tipAt.flip
         ? { right: `calc(100% - ${tipAt.x - 14}px)`, top: `${tipAt.y + 14}px` }
         : { left: `${tipAt.x + 14}px`, top: `${tipAt.y + 14}px` }"

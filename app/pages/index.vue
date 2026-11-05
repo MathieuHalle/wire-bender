@@ -1,27 +1,21 @@
 <script setup lang="ts">
-import type { Hole } from '~core/holes'
+import { parseHole, type Hole } from '~core/holes'
 import type { Side } from '~core/schema'
+import type { Finding } from '~core/check'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
-import { runCheck } from '~core/check'
-import { ADVISORY, groupFindings, type FindingGroup } from '~~/cli/format'
-import { holeGroups, type Tool } from '~/utils/boardView'
+import { holeGroups, jointSide } from '~/utils/boardView'
 
-const { board, errors, path, revision, status, canUndo, canRedo, undo, redo } = useBoard()
+const { board, errors, path, revision, status, canUndo, canRedo, undo, redo, reloadFromDisk, keepMine } = useBoard()
+const { tool, drawing, onHoleClick, onSegmentClick, addJoint } = useTools()
 
 const mirrorBottom = ref(true)
 /** 'both' side by side, or one large side (key F flips). */
 const view = ref<'both' | Side>('both')
-const tool = ref<Tool>('select')
 
 const placed = computed(() => board.value?.parts.map(placePart) ?? [])
 const conn = computed(() => (board.value ? buildConnectivity(board.value) : null))
 const groupsAt = computed(() => (board.value && conn.value ? holeGroups(board.value, conn.value, placed.value) : null))
-const check = computed(() => (board.value ? runCheck(board.value) : null))
-const showAll = ref(false)
-/** Harmless cautions are collapsed, as in the CLI, until asked for. */
-const shown = (g: FindingGroup) => (g.tag === 'CAUTION [harmless]' && !showAll.value ? g.findings.slice(0, 3) : g.findings)
-const findingGroups = computed(() => (check.value ? groupFindings(check.value.findings) : []))
 
 const hover = ref<{ side: Side, hole: Hole } | null>(null)
 const highlight = computed(() => {
@@ -30,6 +24,28 @@ const highlight = computed(() => {
   const gi = groupsAt.value.get(`${h.hole.col},${h.hole.row}|${h.side}`)
   return gi === undefined ? null : conn.value.groups[gi]!
 })
+
+/** The finding picked in the panel; its holes are ringed on both sides. */
+const picked = ref<Finding | null>(null)
+const markHoles = computed(() => picked.value?.holes.map(parseHole) ?? [])
+
+function onAddJoint(f: Finding) {
+  const name = f.holes[0]
+  if (!name || !board.value || !conn.value) return
+  const hole = parseHole(name)
+  const side = jointSide(board.value, conn.value, hole) ?? 'bottom'
+  addJoint(side, hole)
+}
+
+/** The last point of the trail being drawn, on the side it is drawn on. */
+const drawFrom = computed(() => {
+  const d = drawing.value
+  const t = d && board.value?.trails.find(x => x.id === d.trailId)
+  return t && t.points.length ? { side: d!.side, hole: parseHole(t.points[t.points.length - 1]!) } : null
+})
+const hint = computed(() => (drawing.value
+  ? `Drawing ${drawing.value.trailId} on ${drawing.value.side}: click the last hole again or press Esc to end`
+  : null))
 
 const sides = computed<Side[]>(() => (view.value === 'both' ? ['top', 'bottom'] : [view.value]))
 
@@ -44,15 +60,19 @@ const STATUS = {
   error: { label: 'error', color: 'error' }
 } as const
 
+/** The errors come from parsing the file (not from a lost server or a failed save). */
+const fileBroken = computed(() => errors.value.length > 0
+  && !errors.value.some(e => e.startsWith('cannot reach') || e.startsWith('save failed')))
+
+/** "Load the file" asks again inside the banner before discarding local edits. */
+const confirmLoad = ref(false)
+watch(status, (s) => {
+  if (s !== 'conflict') confirmLoad.value = false
+})
+
 function onKey(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null
   if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') {
-    e.preventDefault()
-    if (e.shiftKey) redo()
-    else undo()
-    return
-  }
   if (e.metaKey || e.ctrlKey || e.altKey) return
   if (e.key === 'f' || e.key === 'F') {
     view.value = view.value === 'top' ? 'bottom' : 'top'
@@ -92,51 +112,60 @@ const sideTitle = (s: Side) => (s === 'top'
       />
     </header>
 
-    <div class="flex flex-wrap items-center gap-4 border-b border-default px-4 py-2 text-sm">
-      <div class="flex gap-1">
-        <UButton
-          size="xs"
-          :variant="view === 'both' ? 'solid' : 'outline'"
-          label="Both sides"
-          @click="view = 'both'"
-        />
-        <UButton
-          size="xs"
-          :variant="view === 'top' ? 'solid' : 'outline'"
-          label="Top"
-          @click="view = 'top'"
-        />
-        <UButton
-          size="xs"
-          :variant="view === 'bottom' ? 'solid' : 'outline'"
-          label="Bottom"
-          @click="view = 'bottom'"
-        />
-      </div>
-      <USwitch
-        v-model="mirrorBottom"
-        label="Mirror bottom"
-      />
-      <div class="flex gap-1">
-        <UButton
-          size="xs"
-          variant="ghost"
-          icon="i-lucide-undo-2"
-          aria-label="Undo"
-          :disabled="!canUndo"
-          @click="undo"
-        />
-        <UButton
-          size="xs"
-          variant="ghost"
-          icon="i-lucide-redo-2"
-          aria-label="Redo"
-          :disabled="!canRedo"
-          @click="redo"
-        />
-      </div>
-      <span class="text-xs text-muted">F: one large side, flip</span>
-    </div>
+    <Toolbar
+      v-model:tool="tool"
+      v-model:view="view"
+      v-model:mirror-bottom="mirrorBottom"
+      :can-undo="canUndo"
+      :can-redo="canRedo"
+      :hint="hint"
+      @undo="undo"
+      @redo="redo"
+    />
+
+    <UAlert
+      v-if="status === 'conflict'"
+      class="mx-4 mt-3"
+      color="warning"
+      variant="subtle"
+      icon="i-lucide-file-warning"
+      title="The board file changed on disk while you were editing."
+      :description="confirmLoad
+        ? 'Loading the file discards the edits you made here since the last save.'
+        : 'Load the file to take the version on disk, or keep your version to save it over the file.'"
+    >
+      <template #actions>
+        <template v-if="!confirmLoad">
+          <UButton
+            size="xs"
+            color="warning"
+            variant="outline"
+            label="Load the file"
+            @click="confirmLoad = true"
+          />
+          <UButton
+            size="xs"
+            color="warning"
+            label="Keep my version"
+            @click="keepMine"
+          />
+        </template>
+        <template v-else>
+          <UButton
+            size="xs"
+            color="error"
+            label="Discard my edits and load"
+            @click="confirmLoad = false; reloadFromDisk()"
+          />
+          <UButton
+            size="xs"
+            variant="ghost"
+            label="Cancel"
+            @click="confirmLoad = false"
+          />
+        </template>
+      </template>
+    </UAlert>
 
     <UAlert
       v-if="errors.length"
@@ -155,6 +184,12 @@ const sideTitle = (s: Side) => (s === 'top'
             {{ e }}
           </li>
         </ul>
+        <p
+          v-if="fileBroken"
+          class="mt-2 text-xs"
+        >
+          Fix the file (or ask Claude to); it reloads here on its own once it parses.
+        </p>
       </template>
     </UAlert>
 
@@ -188,53 +223,23 @@ const sideTitle = (s: Side) => (s === 'top'
               :tool="tool"
               :conn="conn ?? undefined"
               :placed="placed"
+              :draw-from="drawFrom?.side === s ? drawFrom.hole : null"
+              :mark-holes="markHoles"
               @hover="(h: Hole | null) => onHover(s, h)"
+              @hole-click="(h: Hole) => onHoleClick(s, h)"
+              @segment-click="(a: Hole, b: Hole) => onSegmentClick(s, a, b)"
             />
           </section>
         </div>
       </main>
 
-      <aside class="w-full shrink-0 text-sm lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:w-80 lg:self-start lg:overflow-y-auto">
-        <h2 class="mb-2 font-medium">
-          Findings
-        </h2>
-        <template v-if="check">
-          <div
-            v-for="g in findingGroups"
-            :key="g.tag"
-            class="mb-3"
-          >
-            <div class="font-mono text-xs font-semibold">
-              {{ g.tag }} ({{ g.findings.length }})
-            </div>
-            <ul class="mt-1 space-y-1">
-              <li
-                v-for="(f, i) in shown(g)"
-                :key="i"
-                class="text-xs"
-              >
-                <span class="font-mono text-muted">{{ f.holes.slice(0, 3).join(' ') }}</span>
-                {{ f.message }}
-              </li>
-            </ul>
-            <UButton
-              v-if="shown(g).length < g.findings.length"
-              size="xs"
-              variant="link"
-              :label="`${g.findings.length - shown(g).length} more`"
-              @click="showAll = true"
-            />
-          </div>
-          <p
-            v-if="!findingGroups.length"
-            class="text-xs text-muted"
-          >
-            No findings.
-          </p>
-        </template>
-        <p class="mt-3 text-xs font-medium">
-          {{ ADVISORY }}
-        </p>
+      <aside class="w-full shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:w-80 lg:self-start lg:overflow-y-auto">
+        <FindingsPanel
+          v-if="board"
+          v-model:selected="picked"
+          :board="board"
+          @add-joint="onAddJoint"
+        />
       </aside>
     </div>
   </div>

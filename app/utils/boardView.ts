@@ -5,7 +5,7 @@ import type { BoardFile, Side } from '~core/schema'
 import type { PlacedPart } from '~core/footprints'
 import type { Conductor, Connectivity } from '~core/connectivity'
 
-export type Tool = 'select' | 'pencil' | 'erase' | 'joint'
+export type Tool = 'inspect' | 'pencil' | 'erase' | 'joint'
 export type Group = Connectivity['groups'][number]
 
 /** Board mm -> drawing mm. Mirrored flips x so the bottom reads as seen from below. */
@@ -113,4 +113,15 @@ export function litOf(group: Group | null): Lit | null {
     else ids.add(`${c.kind}:${c.id}`)
   }
   return { ids, pads }
+}
+
+/** The side to add a proposed joint on: the side of the trail the contact rule names at that hole. */
+export function jointSide(board: BoardFile, conn: Connectivity, hole: Hole): Side | null {
+  const k = holeKey(hole)
+  for (const pj of conn.proposedJoints) {
+    if (holeKey(pj.hole) !== k) continue
+    const t = board.trails.find(x => x.id === pj.trailId)
+    if (t) return t.side
+  }
+  return null
 }
