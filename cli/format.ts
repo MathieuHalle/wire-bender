@@ -1,8 +1,9 @@
 // Text rendering of a check result, shared by the CLI (and usable by the UI).
 // Pure: no Node or DOM.
 import type { AdjacencyLevel, CheckResult, Finding } from '~core/check'
+import { ADVISORY } from '~core/advisory'
 
-export const ADVISORY = 'Advisory only. Check the board with a meter before powering it.'
+export { ADVISORY }
 
 const CAUTION_LEVELS: AdjacencyLevel[] = ['supply', 'mcu', 'harmless']
 

@@ -51,7 +51,15 @@ export interface BoardFile {
   wires: Wire[]
   legFolds: { lead: string, to: HoleName }[]
   solderBridges: { side: Side, a: HoleName, b: HoleName }[]
-  bench: { endLeadMm: number, bendAllowanceMm: number, spareMm: number, flyingSlackMm: number, roundToMm: number }
+  bench: {
+    endLeadMm: number
+    bendAllowanceMm: number
+    spareMm: number
+    flyingSlackMm: number
+    roundToMm: number
+    /** Print paper for the bench export. */
+    paper: 'letter' | 'a4'
+  }
 }
 
 const hole = z.string()
@@ -72,7 +80,7 @@ const partSchema = z.strictObject({
   roles: z.record(z.string(), role).optional()
 })
 
-const benchDefaults = { endLeadMm: 5, bendAllowanceMm: 1, spareMm: 5, flyingSlackMm: 10, roundToMm: 5 }
+const benchDefaults = { endLeadMm: 5, bendAllowanceMm: 1, spareMm: 5, flyingSlackMm: 10, roundToMm: 5, paper: 'letter' as const }
 
 const boardFileSchema = z.strictObject({
   format: z.literal('wirebender/1'),
@@ -109,7 +117,8 @@ const boardFileSchema = z.strictObject({
     bendAllowanceMm: z.number().default(benchDefaults.bendAllowanceMm),
     spareMm: z.number().default(benchDefaults.spareMm),
     flyingSlackMm: z.number().default(benchDefaults.flyingSlackMm),
-    roundToMm: z.number().default(benchDefaults.roundToMm)
+    roundToMm: z.number().default(benchDefaults.roundToMm),
+    paper: z.enum(['letter', 'a4']).default(benchDefaults.paper)
   }).default(benchDefaults)
 })
 

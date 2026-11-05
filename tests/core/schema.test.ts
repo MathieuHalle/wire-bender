@@ -70,7 +70,22 @@ describe('parseBoard', () => {
     const j = minimal()
     delete j.bench
     const r = parseBoard(j)
-    expect(r.ok && r.board.bench).toEqual({ endLeadMm: 5, bendAllowanceMm: 1, spareMm: 5, flyingSlackMm: 10, roundToMm: 5 })
+    expect(r.ok && r.board.bench).toEqual({ endLeadMm: 5, bendAllowanceMm: 1, spareMm: 5, flyingSlackMm: 10, roundToMm: 5, paper: 'letter' })
+  })
+  it('defaults bench.paper to letter and accepts a4', () => {
+    const j = minimal()
+    const r = parseBoard(j)
+    expect(r.ok && r.board.bench.paper).toBe('letter')
+    j.bench!.paper = 'a4'
+    const r2 = parseBoard(j)
+    expect(r2.ok && r2.board.bench.paper).toBe('a4')
+  })
+  it('rejects an unknown bench.paper', () => {
+    const j = minimal()
+    j.bench!.paper = 'legal'
+    const r = parseBoard(j)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.errors.some(e => e.startsWith('bench.paper'))).toBe(true)
   })
   it('creates nets referenced by pins implicitly', () => {
     const j = minimal()
