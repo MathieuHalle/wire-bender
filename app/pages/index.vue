@@ -65,7 +65,9 @@ const panel = ref<PanelState>(defaultPanel())
 const loaded = ref(false)
 const storage = () => window.localStorage
 onMounted(() => {
-  panel.value = loadPanel(storage)
+  // Nothing stored: open from lg up, collapsed below (on a phone it would take the canvas's room).
+  const wide = window.matchMedia?.('(min-width: 1024px)').matches ?? true
+  panel.value = loadPanel(storage, { ...defaultPanel(), open: wide })
   loaded.value = true
   watch(panel, p => savePanel(p, storage), { deep: true })
 })
@@ -245,7 +247,7 @@ const sideTitle = (s: Side) => (s === 'top'
 
     <UAlert
       v-if="status === 'conflict'"
-      class="mx-4 mt-3 shrink-0"
+      class="mx-4 mt-3 max-h-[30dvh] shrink-0 overflow-y-auto"
       color="warning"
       variant="subtle"
       icon="i-lucide-file-warning"

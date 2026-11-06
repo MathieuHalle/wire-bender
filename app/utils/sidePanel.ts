@@ -28,17 +28,19 @@ export function defaultPanel(): PanelState {
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 const isTab = (v: unknown): v is PanelTab => PANEL_TABS.some(t => t.id === v)
 
-/** The stored text as a state: each field that is missing or of the wrong type takes its default. */
-export function parsePanel(raw: string | null): PanelState {
-  const d = defaultPanel()
-  if (!raw) return d
+/**
+ * The stored text as a state: each field that is missing or of the wrong type takes its
+ * default from `d` (the page passes a collapsed default on narrow screens).
+ */
+export function parsePanel(raw: string | null, d: PanelState = defaultPanel()): PanelState {
+  if (!raw) return { ...d, layers: { ...d.layers } }
   let v: unknown
   try {
     v = JSON.parse(raw)
   } catch {
-    return d
+    return { ...d, layers: { ...d.layers } }
   }
-  if (!isRecord(v)) return d
+  if (!isRecord(v)) return { ...d, layers: { ...d.layers } }
   const l = isRecord(v.layers) ? v.layers : {}
   const flag = (x: unknown, fallback: boolean) => (typeof x === 'boolean' ? x : fallback)
   return {
@@ -60,13 +62,16 @@ export function nextPanel<S extends Pick<PanelState, 'open' | 'tab'>>(state: S, 
   return state.open && state.tab === id ? { ...state, open: false } : { ...state, open: true, tab: id }
 }
 
-/** Reads the state; `storage` is a getter because reading `window.localStorage` itself can throw. */
-export function loadPanel(storage: () => PanelStorage | null | undefined): PanelState {
+/**
+ * Reads the state, else `d`; `storage` is a getter because reading `window.localStorage`
+ * itself can throw.
+ */
+export function loadPanel(storage: () => PanelStorage | null | undefined, d: PanelState = defaultPanel()): PanelState {
   try {
     const s = storage()
-    return s ? parsePanel(s.getItem(PANEL_KEY)) : defaultPanel()
+    return s ? parsePanel(s.getItem(PANEL_KEY), d) : d
   } catch {
-    return defaultPanel()
+    return d
   }
 }
 

@@ -39,6 +39,15 @@ describe('side panel state', () => {
     expect(loadPanel(() => memStorage())).toEqual(defaultPanel())
   })
 
+  it('takes the given defaults when nothing is stored (a phone: collapsed); a stored choice wins', () => {
+    const closed = { ...defaultPanel(), open: false }
+    expect(loadPanel(() => memStorage(), closed)).toEqual(closed)
+    expect(loadPanel(() => throwing, closed)).toEqual(closed)
+    expect(parsePanel('{"tab":"edit"}', closed)).toEqual({ ...closed, tab: 'edit' })
+    const s = memStorage({ [PANEL_KEY]: JSON.stringify({ ...defaultPanel(), open: true }) })
+    expect(loadPanel(() => s, closed).open).toBe(true)
+  })
+
   it('falls back when the stored value is malformed', () => {
     for (const raw of ['not json', '"str"', '42', 'null', '[]', '{"open":"yes","tab":7,"layers":"x"}'])
       expect(parsePanel(raw), raw).toEqual(defaultPanel())

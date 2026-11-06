@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  DRAG_PX, easeView, fitRect, isDrag, loadView, panBy, parseView, saveView, unionRect, viewKey, zoomAt, zoomLimits,
-  type Camera
+  clampPan, DRAG_PX, easeView, fitRect, fromStored, gestureStep, IDLE, isDrag, keepCentre, loadView, panBy, parseView,
+  saveView, toStored, unionRect, viewKey, zoomAt, zoomLimits, type Camera, type GestureEvent, type GestureState
 } from '../../app/utils/camera2d'
 
 const limits = { min: 0.5, max: 8 }
@@ -133,6 +133,160 @@ describe('easeView', () => {
   })
 })
 
+describe('stored view (board point at the centre, zoom relative to fit)', () => {
+  it('round-trips camera -> stored -> camera at the same size', () => {
+    const c: Camera = { x: -120, y: 40, scale: 6 }
+    const size = { w: 1000, h: 600 }
+    const v = toStored(c, size, 3)
+    expect(v.zoom).toBeCloseTo(2)
+    expect(v.cx).toBeCloseTo((500 + 120) / 6)
+    expect(v.cy).toBeCloseTo((300 - 40) / 6)
+    const back = fromStored(v, size, 3)
+    expect(back.x).toBeCloseTo(c.x)
+    expect(back.y).toBeCloseTo(c.y)
+    expect(back.scale).toBeCloseTo(c.scale)
+  })
+
+  it('keeps the centre point and the relative zoom in a different canvas size', () => {
+    const v = { cx: 30, cy: 40, zoom: 2 }
+    const c = fromStored(v, { w: 356, h: 206 }, 1.5)
+    expect(c.scale).toBeCloseTo(3)
+    expect(toWorld(c, { x: 178, y: 103 }).x).toBeCloseTo(30)
+    expect(toWorld(c, { x: 178, y: 103 }).y).toBeCloseTo(40)
+  })
+
+  it('clamps the zoom to 25%..800% of fit', () => {
+    expect(fromStored({ cx: 0, cy: 0, zoom: 100 }, { w: 100, h: 100 }, 2).scale).toBeCloseTo(16)
+    expect(fromStored({ cx: 0, cy: 0, zoom: 0.01 }, { w: 100, h: 100 }, 2).scale).toBeCloseTo(0.5)
+  })
+})
+
+describe('keepCentre', () => {
+  it('keeps the board point at the canvas centre when the canvas resizes', () => {
+    const c: Camera = { x: 10, y: 20, scale: 4 }
+    const before = toWorld(c, { x: 500, y: 300 })
+    const k = keepCentre(c, { w: 1000, h: 600 }, { w: 700, h: 500 })
+    const after = toWorld(k, { x: 350, y: 250 })
+    expect(after.x).toBeCloseTo(before.x)
+    expect(after.y).toBeCloseTo(before.y)
+    expect(k.scale).toBe(4)
+  })
+  it('a resize from nothing changes nothing', () => {
+    const c: Camera = { x: 10, y: 20, scale: 4 }
+    expect(keepCentre(c, { w: 0, h: 0 }, { w: 700, h: 500 })).toEqual(c)
+  })
+})
+
+describe('clampPan', () => {
+  const content = { x: 0, y: 0, w: 100, h: 50 } // 400 x 200 px at scale 4
+  const vp = { w: 800, h: 600 }
+  it('leaves a camera with the content in view alone', () => {
+    const c: Camera = { x: 100, y: 100, scale: 4 }
+    expect(clampPan(c, content, vp)).toEqual(c)
+  })
+  it('keeps at least 15% of the content in view on every side', () => {
+    expect(clampPan({ x: -1000, y: 0, scale: 4 }, content, vp).x).toBeCloseTo(60 - 400) // right edge at 60 px
+    expect(clampPan({ x: 5000, y: 0, scale: 4 }, content, vp).x).toBeCloseTo(800 - 60)
+    expect(clampPan({ x: 0, y: -900, scale: 4 }, content, vp).y).toBeCloseTo(30 - 200)
+    expect(clampPan({ x: 0, y: 900, scale: 4 }, content, vp).y).toBeCloseTo(600 - 30)
+  })
+  it('content larger than the canvas: 15% of the canvas is enough', () => {
+    const c = clampPan({ x: -100000, y: 0, scale: 100 }, content, vp) // 10000 px wide
+    expect(c.x + 100 * 100).toBeCloseTo(800 * 0.15)
+  })
+})
+
+describe('gestureStep', () => {
+  const down = (id: number, x: number, y: number, extra: Partial<Extract<GestureEvent, { type: 'down' }>> = {}): GestureEvent =>
+    ({ type: 'down', id, p: { x, y }, button: 0, pointerType: 'mouse', panNow: false, threshold: DRAG_PX, ...extra })
+  const move = (id: number, x: number, y: number, buttons = 1, pointerType = 'mouse'): GestureEvent =>
+    ({ type: 'move', id, p: { x, y }, buttons, pointerType })
+  const up = (id: number): GestureEvent => ({ type: 'up', id })
+  const run = (events: GestureEvent[], from: GestureState = IDLE) => {
+    let s = from
+    const out: ReturnType<typeof gestureStep>[] = []
+    for (const e of events) {
+      const r = gestureStep(s, e)
+      out.push(r)
+      s = r.state
+    }
+    return { s, out }
+  }
+
+  it('a press that moves under 4 px is a click: no pan, the click is kept', () => {
+    const { s, out } = run([down(1, 10, 10), move(1, 12, 11), up(1)])
+    expect(out.every(o => !o.pan && !o.zoom)).toBe(true)
+    expect(s.swallowClick).toBe(false)
+    expect(s.mode).toBe('idle')
+  })
+
+  it('4 px or more pans from the press point and swallows the click', () => {
+    const { s, out } = run([down(1, 10, 10), move(1, 12, 10), move(1, 15, 10), move(1, 20, 14), up(1)])
+    expect(out[1]!.pan).toBeUndefined()
+    expect(out[2]!.pan).toEqual({ dx: 5, dy: 0 })
+    expect(out[3]!.pan).toEqual({ dx: 5, dy: 4 })
+    expect(s.swallowClick).toBe(true)
+    expect(out[2]!.state.mode).toBe('pan')
+  })
+
+  it('threshold 0 (Navigate) pans on any move; panNow (right, middle, Space) pans at once', () => {
+    expect(run([down(1, 0, 0, { threshold: 0 }), move(1, 1, 0)]).out[1]!.pan).toEqual({ dx: 1, dy: 0 })
+    const r = run([down(1, 0, 0, { button: 2, panNow: true })])
+    expect(r.s.mode).toBe('pan')
+    expect(r.s.swallowClick).toBe(true)
+  })
+
+  it('a new press clears a swallow left over from a release that went elsewhere', () => {
+    const { s } = run([down(1, 0, 0), move(1, 10, 0)])
+    expect(s.swallowClick).toBe(true)
+    expect(gestureStep({ ...IDLE, swallowClick: true }, down(2, 0, 0)).state.swallowClick).toBe(false)
+  })
+
+  it('a mouse move with no button down cancels a stuck pan', () => {
+    const { s, out } = run([down(1, 0, 0), move(1, 10, 0), move(1, 30, 0, 0)])
+    expect(out[2]!.pan).toBeUndefined()
+    expect(out[2]!.cancelled).toBe(true)
+    expect(s).toEqual(IDLE)
+  })
+
+  it('cancel resets everything', () => {
+    const { s } = run([down(1, 0, 0), move(1, 10, 0), { type: 'cancel' }])
+    expect(s).toEqual(IDLE)
+  })
+
+  it('two touches pinch: zoom about the midpoint by the distance ratio, pan by its move', () => {
+    const t = { pointerType: 'touch' as const }
+    const { out } = run([down(1, 0, 0, t), down(2, 100, 0, t), move(2, 200, 0, 1, 'touch')])
+    expect(out[1]!.state.mode).toBe('pinch')
+    expect(out[1]!.state.swallowClick).toBe(true)
+    expect(out[2]!.pan).toEqual({ dx: 50, dy: 0 })
+    expect(out[2]!.zoom).toEqual({ at: { x: 100, y: 0 }, factor: 2 })
+  })
+
+  it('lifting one finger of a pinch hands over to a pan with the other, without a jump', () => {
+    const t = { pointerType: 'touch' as const }
+    const { s, out } = run([down(1, 0, 0, t), down(2, 100, 0, t), up(2), move(1, 10, 5, 1, 'touch')])
+    expect(out[2]!.state.mode).toBe('pan')
+    expect(out[3]!.pan).toEqual({ dx: 10, dy: 5 })
+    expect(s.swallowClick).toBe(true)
+  })
+
+  it('a third pointer is ignored: no jump, no zoom from it', () => {
+    const t = { pointerType: 'touch' as const }
+    const base = run([down(1, 0, 0, t), down(2, 100, 0, t)]).s
+    const third = gestureStep(base, down(3, 500, 500, t))
+    expect(third.state).toEqual(base)
+    const moved = gestureStep(third.state, move(3, 900, 900, 1, 'touch'))
+    expect(moved.pan).toBeUndefined()
+    expect(moved.zoom).toBeUndefined()
+    expect(gestureStep(moved.state, up(3)).state).toEqual(base)
+  })
+
+  it('other mouse buttons (back, forward) start nothing', () => {
+    expect(gestureStep(IDLE, down(1, 0, 0, { button: 3 })).state).toEqual(IDLE)
+  })
+})
+
 describe('view storage', () => {
   it('keys the view by board name', () => {
     expect(viewKey('channel board')).toBe('wirebender:view:channel board')
@@ -140,29 +294,30 @@ describe('view storage', () => {
 
   it('round-trips through storage', () => {
     const s = memStorage()
-    const v: Camera = { x: -12.5, y: 30, scale: 7.25 }
+    const v = { cx: -12.5, cy: 30, zoom: 7.25 }
     expect(saveView('B', v, () => s)).toBe(true)
     expect(JSON.parse(s.map.get('wirebender:view:B')!)).toEqual(v)
     expect(loadView('B', () => s)).toEqual(v)
     expect(loadView('other', () => s)).toBeNull()
   })
 
-  it('rejects malformed values', () => {
-    for (const raw of [null, '', '{', 'null', '[]', '42', '{"x":1,"y":2}', '{"x":1,"y":2,"scale":0}',
-      '{"x":1,"y":2,"scale":-3}', '{"x":"1","y":2,"scale":3}', '{"x":1,"y":null,"scale":3}', '{"x":1e999,"y":2,"scale":3}'])
+  it('rejects malformed values and the old window-dependent {x, y, scale} format', () => {
+    for (const raw of [null, '', '{', 'null', '[]', '42', '{"cx":1,"cy":2}', '{"cx":1,"cy":2,"zoom":0}',
+      '{"cx":1,"cy":2,"zoom":-3}', '{"cx":"1","cy":2,"zoom":3}', '{"cx":1,"cy":null,"zoom":3}', '{"cx":1e999,"cy":2,"zoom":3}',
+      '{"x":1,"y":2,"scale":3}'])
       expect(parseView(raw), String(raw)).toBeNull()
-    expect(parseView('{"x":1,"y":2,"scale":3,"extra":true}')).toEqual({ x: 1, y: 2, scale: 3 })
+    expect(parseView('{"cx":1,"cy":2,"zoom":3,"extra":true}')).toEqual({ cx: 1, cy: 2, zoom: 3 })
   })
 
   it('survives storage that throws or is missing', () => {
     expect(loadView('B', () => throwing)).toBeNull()
-    expect(saveView('B', { x: 0, y: 0, scale: 1 }, () => throwing)).toBe(false)
+    expect(saveView('B', { cx: 0, cy: 0, zoom: 1 }, () => throwing)).toBe(false)
     const getterThrows = () => {
       throw new Error('SecurityError')
     }
     expect(loadView('B', getterThrows)).toBeNull()
-    expect(saveView('B', { x: 0, y: 0, scale: 1 }, getterThrows)).toBe(false)
+    expect(saveView('B', { cx: 0, cy: 0, zoom: 1 }, getterThrows)).toBe(false)
     expect(loadView('B', () => null)).toBeNull()
-    expect(saveView('B', { x: 0, y: 0, scale: 1 }, () => undefined)).toBe(false)
+    expect(saveView('B', { cx: 0, cy: 0, zoom: 1 }, () => undefined)).toBe(false)
   })
 })

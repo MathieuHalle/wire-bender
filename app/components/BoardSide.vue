@@ -65,7 +65,11 @@ const rowLabels = computed(() =>
 const rootEl = ref<HTMLDivElement | null>(null)
 const svgEl = ref<SVGSVGElement | null>(null)
 const hovered = ref<Hole | null>(null)
-const tipAt = ref<{ x: number, y: number, flip: boolean, up: boolean } | null>(null)
+/** The pointer in the tooltip's box (px), and that box's size. */
+const tipAt = ref<{ x: number, y: number, w: number, h: number } | null>(null)
+const tipEl = ref<HTMLDivElement | null>(null)
+/** The tooltip's own size, measured once drawn (it changes with its text). */
+const tipSize = shallowRef({ w: 0, h: 0 })
 /** Pointer in fractional hole coordinates (col, row), while over the board. */
 const pointer = ref<{ fc: number, fr: number } | null>(null)
 /** The canvas this side is drawn in (absent when drawn on its own). */
@@ -93,6 +97,8 @@ function holeAt(fc: number, fr: number): Hole | null {
 }
 
 function onMove(ev: PointerEvent) {
+  // While the canvas pans, the board moves with the pointer: nothing to update.
+  if (canvas?.panning.value) return
   track(ev.clientX, ev.clientY)
 }
 
@@ -102,25 +108,25 @@ function track(cx: number, cy: number) {
   const p = boardPoint({ clientX: cx, clientY: cy })
   pointer.value = p
   const h = p ? holeAt(p.fc, p.fr) : null
-  // The tooltip sits in the canvas when there is one, flipped so it stays inside it.
+  // The tooltip sits in the canvas when there is one, kept inside it.
   const box = (canvas?.overlay.value ?? rootEl.value)?.getBoundingClientRect()
-  tipAt.value = h && box
-    ? { x: cx - box.left, y: cy - box.top, flip: cx - box.left > box.width * 0.6, up: cy - box.top > box.height * 0.6 }
-    : null
+  tipAt.value = h && box ? { x: cx - box.left, y: cy - box.top, w: box.width, h: box.height } : null
   if (h?.col === hovered.value?.col && h?.row === hovered.value?.row) return
   hovered.value = h
   emit('hover', h)
 }
 
-// A zoom or pan moves the board under a resting pointer: hit-test again once it is drawn.
+// A zoom or pan moves the board under a resting pointer: once it is drawn (and the pan
+// is over), hit-test the canvas's pointer again.
 if (canvas) {
-  watch(canvas.camera, () => {
-    const c = lastClient
+  watch([canvas.camera, canvas.panning], () => {
+    if (canvas.panning.value) return
+    const c = canvas.pointer.value ?? lastClient
     const svg = svgEl.value
     if (!c || !svg) return
     const under = document.elementFromPoint(c.x, c.y)
     if (under && svg.contains(under)) track(c.x, c.y)
-    else onLeave()
+    else if (lastClient || hovered.value) onLeave()
   }, { flush: 'post' })
 }
 
@@ -193,15 +199,24 @@ const band = computed(() => {
 
 const marks = computed(() => props.markHoles.map(h => ({ k: holeKey(h), ...geo.value.pt(h) })))
 
-/** The tooltip's place: next to the cursor, on the side that keeps it inside the box. */
+const TIP_GAP = 14
+const TIP_PAD = 4
+/** The tooltip's place: below right of the cursor, clamped inside the box (above the cursor when there is no room below). */
 const tipStyle = computed(() => {
   const t = tipAt.value
   if (!t) return {}
-  return {
-    ...(t.flip ? { right: `calc(100% - ${t.x - 14}px)` } : { left: `${t.x + 14}px` }),
-    ...(t.up ? { bottom: `calc(100% - ${t.y - 14}px)` } : { top: `${t.y + 14}px` })
-  }
+  const { w, h } = tipSize.value
+  const clamp = (v: number, max: number) => Math.max(TIP_PAD, Math.min(max, v))
+  const left = clamp(t.x + TIP_GAP, t.w - w - TIP_PAD)
+  const below = t.y + TIP_GAP
+  const top = clamp(below + h + TIP_PAD <= t.h ? below : t.y - TIP_GAP - h, t.h - h - TIP_PAD)
+  return { left: `${left}px`, top: `${top}px` }
 })
+watch([tip, tipAt], () => {
+  const el = tipEl.value
+  if (el && (el.offsetWidth !== tipSize.value.w || el.offsetHeight !== tipSize.value.h))
+    tipSize.value = { w: el.offsetWidth, h: el.offsetHeight }
+}, { flush: 'post' })
 
 /** Navigate shows the canvas's grab cursor; inspect an arrow; the edit tools a crosshair. */
 const cursorClass = computed(() => {
@@ -359,6 +374,7 @@ const ringed = computed(() => {
     >
       <div
         v-if="tip && tipAt"
+        ref="tipEl"
         class="pointer-events-none absolute z-10 w-max rounded-md border border-default bg-default px-2 py-1 font-mono text-xs whitespace-nowrap shadow-md"
         :style="tipStyle"
       >

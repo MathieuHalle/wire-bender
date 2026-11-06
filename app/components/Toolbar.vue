@@ -94,14 +94,16 @@ const locked = computed(() => view.value === '3d')
       label="Mirror bottom"
       v-bind="lockedAttrs(locked)"
     />
-    <!-- While drawing, the hint takes the keys' place, so the row (and the canvas under it) does not jump. -->
+    <!-- While drawing, the hint takes the keys' place: both get a line of their own, one
+         line tall, so the row (and the canvas under it) does not jump. -->
     <span
       v-if="!hint"
-      class="text-xs text-muted max-md:hidden"
+      class="basis-full truncate text-xs text-muted max-md:hidden"
     >H: navigate (drag pans) · I P E J: tools · Ctrl/Cmd+Z: undo · Esc: end trail · scroll: zoom · drag, right-drag or Space+drag: pan · F: frame top/bottom · 3: 3D view on/off · Esc: leave 3D · + − 0: zoom (0 fits) · [: side panel</span>
     <span
       v-if="hint"
-      class="font-mono text-xs"
+      class="basis-full truncate font-mono text-xs"
+      :title="hint"
     >{{ hint }}</span>
   </div>
 </template>
