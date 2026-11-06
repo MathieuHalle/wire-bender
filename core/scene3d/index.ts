@@ -1,7 +1,7 @@
 import { FOOTPRINTS, placePart } from '../footprints'
 import type { BoardFile } from '../schema'
 import { boardGeometry } from './board'
-import { conductorPrims } from './conductors'
+import { conductorPrims, leadNets, sceneConnectivity } from './conductors'
 import { partPrims } from './parts'
 import type { Prim, Scene3D, V3 } from './types'
 
@@ -62,6 +62,7 @@ export function buildScene(board: BoardFile): Scene3D {
   const geo = boardGeometry(board)
   const skipped: string[] = []
   let prims: Prim[] = []
+  const conn = sceneConnectivity(board)
   for (const part of board.parts) {
     let placed
     try {
@@ -72,10 +73,10 @@ export function buildScene(board: BoardFile): Scene3D {
         : `part ${part.ref}: unknown footprint ${part.footprint}`)
       continue
     }
-    prims.push(...partPrims(placed))
+    prims.push(...partPrims(placed, lead => leadNets(conn, lead)))
   }
   // After the parts, so a leg's own joint keeps its cone.
-  prims.push(...conductorPrims(board, skipped))
+  prims.push(...conductorPrims(board, skipped, conn))
   prims = dedupCones(prims)
   return { ...geo, prims, bounds: sceneBounds(geo.board, prims), skipped }
 }

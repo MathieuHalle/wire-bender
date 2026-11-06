@@ -31,9 +31,16 @@ const highlight = computed(() => {
   return gi === null ? null : conn.value.groups[gi]!
 })
 
-/** The mesh hovered in 3D: a conductor or leg lights its net; a part body only shows its tooltip. */
+/**
+ * The mesh hovered in 3D: a conductor or leg lights its group's nets (all of a short, as
+ * in 2D), else its own net; a part body only shows its tooltip. Same rule as `tagNets` in
+ * scene3dThree.ts, written out here so the 2D page doesn't import three.js.
+ */
 const hoverTag = ref<Tag | null>(null)
-const highlightNets = computed(() => (hoverTag.value?.net ? [hoverTag.value.net] : []))
+const highlightNets = computed(() => {
+  const t = hoverTag.value
+  return t?.nets ?? (t?.net ? [t.net] : [])
+})
 
 /** The finding picked in the panel; its holes are ringed on both sides. */
 const picked = ref<Finding | null>(null)

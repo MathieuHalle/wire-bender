@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import { parseBoard, type BoardFile } from '~core/schema'
+import { axial, mk, trail } from '../core/helpers'
 import { BOARD_THICKNESS_MM, buildScene, type Tag } from '~core/scene3d'
-import { buildMeshes, dispose, markRings, MARK_COLOR, primMeshes, setHighlight, tagTip, webglAvailable } from '../../app/utils/scene3dThree'
+import { buildMeshes, dispose, markRings, markVisibility, MARK_COLOR, primMeshes, setHighlight, tagTip, webglAvailable } from '../../app/utils/scene3dThree'
 
 function board2(): BoardFile {
   const res = parseBoard(JSON.parse(readFileSync(new URL('../fixtures/channel-board-2.json', import.meta.url), 'utf8')))
@@ -139,19 +140,24 @@ describe('highlight and marks', () => {
   it('finding marks make rings at the holes on both sides', () => {
     const at = [{ x: 0, z: 0 }, { x: 2.54 * 6, z: 2.54 * 12 }]
     const marks = markRings(scene, at)
-    const rings = marks.children[0] as THREE.InstancedMesh
-    expect(rings.isInstancedMesh).toBe(true)
-    expect(rings.count).toBe(at.length * 2)
-    expect((rings.material as THREE.MeshBasicMaterial).color.getHexString()).toBe(MARK_COLOR.slice(1))
+    const all = marks.children as THREE.InstancedMesh[]
+    expect(all).toHaveLength(2)
+    const rings = all[0]!
     expect(MARK_COLOR).toBe('#e11d48')
     const m = new THREE.Matrix4()
     const p = new THREE.Vector3()
     const seen: string[] = []
-    for (let i = 0; i < rings.count; i++) {
-      rings.getMatrixAt(i, m)
-      p.setFromMatrixPosition(m)
-      const side = p.y > 0 ? 'top' : p.y < -BOARD_THICKNESS_MM ? 'bottom' : 'inside'
-      seen.push(`${p.x.toFixed(2)},${p.z.toFixed(2)},${side}`)
+    for (const r of all) {
+      expect(r.isInstancedMesh).toBe(true)
+      expect(r.count).toBe(at.length)
+      expect((r.material as THREE.MeshBasicMaterial).color.getHexString()).toBe(MARK_COLOR.slice(1))
+      for (let i = 0; i < r.count; i++) {
+        r.getMatrixAt(i, m)
+        p.setFromMatrixPosition(m)
+        const side = p.y > 0 ? 'top' : p.y < -BOARD_THICKNESS_MM ? 'bottom' : 'inside'
+        expect(r.name).toBe(`marks-${side}`)
+        seen.push(`${p.x.toFixed(2)},${p.z.toFixed(2)},${side}`)
+      }
     }
     expect(seen.sort()).toEqual(['0.00,0.00,bottom', '0.00,0.00,top', '15.24,30.48,bottom', '15.24,30.48,top'])
     // Dashed: the ring geometry is several separate arcs, not one closed ring.
@@ -164,11 +170,9 @@ describe('highlight and marks', () => {
 
     const geo = vi.spyOn(THREE.BufferGeometry.prototype, 'dispose')
     const mat = vi.spyOn(THREE.Material.prototype, 'dispose')
-    const g = rings.geometry
-    const mm = rings.material
+    const owned = all.flatMap(r => [r.geometry, r.material as THREE.Material])
     dispose(marks)
-    expect(geo.mock.contexts).toContain(g)
-    expect(mat.mock.contexts).toContain(mm)
+    for (const o of owned) expect([...geo.mock.contexts, ...mat.mock.contexts]).toContain(o)
     expect(markRings(scene, []).children).toHaveLength(0)
   })
 
@@ -178,6 +182,47 @@ describe('highlight and marks', () => {
     expect(tagTip({ kind: 'leg', id: 'QA.1', net: 'GATE_A', label: 'QA pin 1' }, board)).toEqual({ name: 'QA pin 1', lines: [], net: 'GATE_A' })
     expect(tagTip({ kind: 'trail', id: 'T1', net: null, label: 'trail T1' }, board)).toEqual({ name: 'trail T1', lines: [], net: 'no net' })
     expect(tagTip({ kind: 'board', id: 'board' }, board)).toBeNull()
+    expect(tagTip({ kind: 'trail', id: 'T1', net: null, nets: ['GND', 'V12'], label: 'trail T1' }, board))
+      .toEqual({ name: 'trail T1', lines: [], net: 'short: GND + V12' })
+    expect(tagTip({ kind: 'leg', id: 'QA.1', net: 'GATE_A', nets: ['GATE_A'], label: 'QA pin 1' }, board)?.net).toBe('GATE_A')
+    expect(tagTip({ kind: 'trail', id: 'T1', net: null, nets: [], label: 'trail T1' }, board)?.net).toBe('no net')
+  })
+
+  it('setHighlight lights a shorted group as one', () => {
+    const shorted = buildScene(mk({
+      nets: { GND: {}, V12: {}, SIG: {} },
+      parts: [axial('R1', 'B2', 'E2', 'GND'), axial('R2', 'B6', 'E6', 'V12'), axial('R3', 'H2', 'H6', 'SIG')],
+      trails: [trail('T1', ['B2', 'B4'], 'bottom'), trail('T2', ['B4', 'B6'], 'bottom')]
+    }))
+    const meshes = primMeshes(buildMeshes(shorted).group)
+    const tag = (m: THREE.Mesh) => m.userData.tag as Tag
+    const t1 = meshes.find(m => tag(m).kind === 'trail' && tag(m).id === 'T1')!
+    // What hovering T1 asks for (index.vue): its group's nets.
+    setHighlight(meshes, tag(t1).nets!)
+    const lit = (m: THREE.Mesh) => !(m.material as THREE.Material).transparent
+    expect(lit(meshes.find(m => tag(m).kind === 'trail' && tag(m).id === 'T2')!)).toBe(true)
+    expect(lit(meshes.find(m => tag(m).kind === 'leg' && tag(m).id === 'R1.a')!)).toBe(true)
+    expect(lit(meshes.find(m => tag(m).kind === 'leg' && tag(m).id === 'R2.a')!)).toBe(true)
+    expect(lit(meshes.find(m => tag(m).kind === 'leg' && tag(m).id === 'R3.a')!)).toBe(false)
+  })
+
+  it('marks show on the side the camera is on', () => {
+    const marks = markRings(scene, [{ x: 0, z: 0 }])
+    const top = marks.getObjectByName('marks-top') as THREE.Mesh
+    const bottom = marks.getObjectByName('marks-bottom') as THREE.Mesh
+    expect((top.material as THREE.Material).depthTest).toBe(false)
+    expect(top.renderOrder).toBeGreaterThan(0)
+    const cam = new THREE.PerspectiveCamera()
+    cam.position.set(20, 80, 30)
+    markVisibility(marks, scene, cam)
+    expect([top.visible, bottom.visible]).toEqual([true, false])
+    cam.position.set(20, -80, 30)
+    markVisibility(marks, scene, cam)
+    expect([top.visible, bottom.visible]).toEqual([false, true])
+    // Edge-on, inside the slab's thickness: neither, so nothing shows through the board.
+    cam.position.set(200, -0.8, 30)
+    markVisibility(marks, scene, cam)
+    expect([top.visible, bottom.visible]).toEqual([false, false])
   })
 })
 

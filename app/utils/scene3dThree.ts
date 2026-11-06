@@ -185,9 +185,15 @@ export function primMeshes(group: THREE.Object3D): THREE.Mesh[] {
     (o as THREE.Mesh).isMesh && !!o.userData.tag && (o.userData.tag as Tag).kind !== 'board')
 }
 
+/** The nets a tag stands for: its group's nets, or else its own net. */
+export function tagNets(tag: Tag | null | undefined): string[] {
+  if (!tag) return []
+  return tag.nets ?? (tag.net != null ? [tag.net] : [])
+}
+
 /**
- * Lights the meshes whose tag net is in `nets` and dims the rest (transparent, opacity
- * 0.25). Materials are shared between meshes, so a dimmed mesh is given a dim variant of
+ * Lights the meshes whose tag nets (`tagNets`) meet `nets` and dims the rest (transparent,
+ * opacity 0.25). A shorted group's meshes carry all its nets, so they light up as one. Materials are shared between meshes, so a dimmed mesh is given a dim variant of
  * its material instead of changing the shared one. An empty `nets` puts every mesh's own
  * material back.
  */
@@ -195,8 +201,7 @@ export function setHighlight(meshes: THREE.Mesh[], nets: string[]): void {
   const lit = new Set(nets)
   for (const m of meshes) {
     const base = baseOf.get(m) ?? (m.material as THREE.Material)
-    const net = (m.userData.tag as Tag | undefined)?.net
-    if (!lit.size || (net != null && lit.has(net))) {
+    if (!lit.size || tagNets(m.userData.tag as Tag | undefined).some(n => lit.has(n))) {
       m.material = base
       baseOf.delete(m)
       continue
@@ -219,12 +224,17 @@ export const MARK_COLOR = '#e11d48'
 const MARK_R = 1.5
 const MARK_W = 0.4
 const MARK_DASHES = 8
-/** Above the 0.05 mm copper, so the rings don't z-fight with the pads. */
+/** Above the 0.05 mm copper. */
 const MARK_LIFT = 0.06
+/** Drawn after everything else: the rings are not depth-tested, so they show over the parts. */
+const MARK_RENDER_ORDER = 10
 
 /**
- * Red dashed rings at `at` (hole centres in scene x/z) on the top and the bottom surface,
- * as one instanced mesh in a group. Empty `at` gives an empty group. Free with `dispose`.
+ * Red dashed rings at `at` (hole centres in scene x/z): one instanced mesh on the top
+ * surface (`marks-top`) and one on the bottom (`marks-bottom`), in a group. They are drawn
+ * over everything, like the 2D marks; `markVisibility` shows only the side the camera is
+ * on, so they never show through the board. Empty `at` gives an empty group. Free with
+ * `dispose`.
  */
 export function markRings(scene: Scene3D, at: XZ[]): THREE.Group {
   const group = new THREE.Group()
@@ -235,11 +245,23 @@ export function markRings(scene: Scene3D, at: XZ[]): THREE.Group {
     new THREE.RingGeometry(MARK_R - MARK_W / 2, MARK_R + MARK_W / 2, 6, 1, i * step, step * (2 / 3)))
   const geometry = (mergeGeometries(arcs) ?? new THREE.BufferGeometry()).rotateX(-Math.PI / 2)
   for (const g of arcs) g.dispose()
-  const material = new THREE.MeshBasicMaterial({ color: MARK_COLOR, side: THREE.DoubleSide })
+  const material = new THREE.MeshBasicMaterial({ color: MARK_COLOR, side: THREE.DoubleSide, depthTest: false, depthWrite: false })
   const { center, thicknessMm } = scene.board
-  group.add(instanced('marks', geometry, material,
-    surfaceMatrices(at, at, center[1] + thicknessMm / 2 + MARK_LIFT, center[1] - thicknessMm / 2 - MARK_LIFT)))
+  const top = instanced('marks-top', geometry, material, surfaceMatrices(at, [], center[1] + thicknessMm / 2 + MARK_LIFT, 0))
+  const bottom = instanced('marks-bottom', geometry, material, surfaceMatrices([], at, 0, center[1] - thicknessMm / 2 - MARK_LIFT))
+  top.renderOrder = bottom.renderOrder = MARK_RENDER_ORDER
+  group.add(top, bottom)
   return group
+}
+
+/** Shows the top rings while the camera is above the board and the bottom ones while it is below. */
+export function markVisibility(marks: THREE.Object3D, scene: Scene3D, camera: THREE.Camera): void {
+  const { center, thicknessMm } = scene.board
+  const y = camera.getWorldPosition(new THREE.Vector3()).y
+  const top = marks.getObjectByName('marks-top')
+  const bottom = marks.getObjectByName('marks-bottom')
+  if (top) top.visible = y > center[1] + thicknessMm / 2
+  if (bottom) bottom.visible = y < center[1] - thicknessMm / 2
 }
 
 export interface TagTip {
@@ -259,7 +281,9 @@ export function tagTip(tag: Tag, board: BoardFile): TagTip | null {
     const extra = part?.value ?? label
     return { name: tag.id, lines: extra ? [extra] : [], net: null }
   }
-  return { name: tag.label ?? tag.id, lines: [], net: tag.net ?? 'no net' }
+  const nets = tagNets(tag)
+  const net = nets.length > 1 ? `short: ${nets.join(' + ')}` : nets[0] ?? 'no net'
+  return { name: tag.label ?? tag.id, lines: [], net }
 }
 
 /** True when this browser hands out a WebGL context. */

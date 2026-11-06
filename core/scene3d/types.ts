@@ -6,6 +6,11 @@ export interface Tag {
   id: string
   /** The net of this conductor or leg; null for NC. Omitted for part bodies. */
   net?: string | null
+  /**
+   * The sorted nets of the connectivity group this conductor or leg is in. More than one
+   * is a short; empty is no net. Omitted for part bodies, and where the group is unknown.
+   */
+  nets?: string[]
   label?: string
 }
 

@@ -4,7 +4,7 @@ import { parseBoard, type BoardFile, type Wire } from '~core/schema'
 import { holeMm, parseHole } from '~core/holes'
 import { buildConnectivity } from '~core/connectivity'
 import { buildScene, type Prim, type V3 } from '~core/scene3d'
-import { mk, trail } from './helpers'
+import { axial, mk, trail } from './helpers'
 
 function board2(): BoardFile {
   const res = parseBoard(JSON.parse(readFileSync(new URL('../fixtures/channel-board-2.json', import.meta.url), 'utf8')))
@@ -216,5 +216,25 @@ describe('scene3d conductors', () => {
     const s = buildScene(board2())
     const keys = cones(s.prims).map(c => `${c.base[0].toFixed(3)},${c.base[2].toFixed(3)},${c.up}`)
     expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it('tags of a shorted group carry all its nets', () => {
+    // T1 joins R1.a (GND) and R2.a (V12): one group, shorted.
+    const s = buildScene(mk({
+      nets: { GND: {}, V12: {} },
+      parts: [axial('R1', 'B2', 'E2', 'GND'), axial('R2', 'B6', 'E6', 'V12')],
+      trails: [trail('T1', ['B2', 'B6'], 'bottom')]
+    }))
+    const t = s.prims.find(p => p.tag.kind === 'trail' && p.tag.id === 'T1')!
+    expect(t.tag.net).toBeNull()
+    expect(t.tag.nets).toEqual(['GND', 'V12'])
+    const leg = s.prims.find(p => p.tag.kind === 'leg' && p.tag.id === 'R1.a')!
+    expect(leg.tag.net).toBe('GND')
+    expect(leg.tag.nets).toEqual(['GND', 'V12'])
+    const joint = s.prims.find(p => p.kind === 'cone' && p.tag.id === 'R2.a')!
+    expect(joint.tag.nets).toEqual(['GND', 'V12'])
+    // A lone leg keeps a one-net group; part bodies carry no nets.
+    expect(s.prims.find(p => p.tag.kind === 'leg' && p.tag.id === 'R1.b')!.tag.nets).toEqual([])
+    expect(s.prims.find(p => p.tag.kind === 'part')!.tag.nets).toBeUndefined()
   })
 })

@@ -14,7 +14,7 @@ import { holeMm, type Hole } from '~core/holes'
 import { buildScene, type Tag } from '~core/scene3d'
 import { CAMERA_FOV, cameraPreset, type CameraPresetName } from '~/utils/cameraPresets'
 import {
-  buildMeshes, dispose, markRings, primMeshes, setHighlight, tagTip, webglAvailable, type BuiltMeshes
+  buildMeshes, dispose, markRings, markVisibility, primMeshes, setHighlight, tagTip, webglAvailable, type BuiltMeshes
 } from '~/utils/scene3dThree'
 
 const props = withDefaults(defineProps<{
@@ -39,6 +39,8 @@ const marks = new THREE.Group()
 let built: BuiltMeshes | null = null
 /** The prim meshes of `built`: what hover and highlight work on. */
 let prims: THREE.Mesh[] = []
+/** What the hover raycast tests, per build: the slab (it hides what is behind it), then the prims. */
+let pickable: THREE.Object3D[] = []
 let rebuilds = 0
 
 const wrap = ref<HTMLElement | null>(null)
@@ -66,6 +68,8 @@ function rebuild() {
     old.dispose()
   }
   prims = primMeshes(built.group)
+  const slab = built.group.getObjectByName('board')
+  pickable = slab ? [slab, ...prims] : prims
   setHighlight(prims, props.highlightNets)
   rebuilds++
   invalidate()
@@ -89,6 +93,7 @@ function rebuildMarks() {
     marks.remove(o)
     dispose(o)
   }
+  markVisibility(marks, scene.value, camera)
   invalidate()
 }
 watch([() => props.markHoles, scene], rebuildMarks)
@@ -119,8 +124,7 @@ function castAt(x: number, y: number): Tag | null {
   ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1)
   camera.updateMatrixWorld()
   raycaster.setFromCamera(ndc, camera)
-  const slab = built.group.getObjectByName('board')
-  const hit = raycaster.intersectObjects(slab ? [slab, ...prims] : prims, false)[0]
+  const hit = raycaster.intersectObjects(pickable, false)[0]
   const tag = hit?.object.userData.tag as Tag | undefined
   return tag && tag.kind !== 'board' ? tag : null
 }
@@ -144,6 +148,17 @@ function onPointer(ev: PointerEvent) {
   if (!frame) frame = requestAnimationFrame(onFrame)
 }
 
+/** A drag-orbit may start: hide the tooltip, which would otherwise stay where it was. */
+function onDown() {
+  tipAt.value = null
+}
+
+/** The rings show only on the side the camera is on, since they are drawn over everything. */
+function onCameraChange() {
+  markVisibility(marks, scene.value, camera)
+  invalidate()
+}
+
 function onLeave() {
   pending = null
   if (frame) cancelAnimationFrame(frame)
@@ -163,13 +178,16 @@ function applyPreset(which: CameraPresetName) {
   cam.position.set(...p.position)
   ctl.target.set(...p.target)
   ctl.update()
-  invalidate()
+  onCameraChange()
 }
 
 function onReady(c: TresContext) {
   ctx = c
   // The controls mount with the canvas; wait a tick so their instance exists.
-  nextTick(() => applyPreset('iso'))
+  nextTick(() => {
+    controls.value?.instance?.addEventListener('change', onCameraChange)
+    applyPreset('iso')
+  })
   if (import.meta.dev) {
     (window as unknown as { __wb3d?: unknown }).__wb3d = {
       get info() {
@@ -192,7 +210,11 @@ function onReady(c: TresContext) {
         return prims.length
       },
       get marks() {
-        return (marks.children[0]?.children[0] as THREE.InstancedMesh | undefined)?.count ?? 0
+        const side = (n: string) => {
+          const m = marks.getObjectByName(n) as THREE.InstancedMesh | undefined
+          return m ? { count: m.count, visible: m.visible } : null
+        }
+        return { top: side('marks-top'), bottom: side('marks-bottom') }
       }
     }
   }
@@ -204,6 +226,8 @@ onBeforeUnmount(() => {
   built?.dispose()
   built = null
   prims = []
+  pickable = []
+  controls.value?.instance?.removeEventListener('change', onCameraChange)
   content.clear()
   dispose(marks)
   sun.dispose()
@@ -248,6 +272,7 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
       class="relative h-[70vh] min-h-80 overflow-hidden rounded-md border border-default"
       @pointermove="onPointer"
       @pointerup="onPointer"
+      @pointerdown="onDown"
       @pointerleave="onLeave"
     >
       <TresCanvas

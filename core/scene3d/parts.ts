@@ -53,12 +53,19 @@ function isDiode(pp: PlacedPart): boolean {
   return /diode|\b1N\d{4}/i.test(`${pp.part.value ?? ''} ${pp.part.label ?? ''}`)
 }
 
-/** Body prims, legs and the solder joint under each leg for one placed part. */
-export function partPrims(pp: PlacedPart): Prim[] {
+/**
+ * Body prims, legs and the solder joint under each leg for one placed part. `groupNets`
+ * gives a lead's connectivity-group nets (`ref.pin`) for the leg and joint tags.
+ */
+export function partPrims(pp: PlacedPart, groupNets?: (lead: string) => string[] | undefined): Prim[] {
   const { part, fp, pins, bodyRectMm: r } = pp
   const h = bodyHeightMm(part, fp)
   const body: Tag = { kind: 'part', id: part.ref, label: part.label ?? part.ref }
-  const legTag = (pin: Pin): Tag => ({ kind: 'leg', id: `${part.ref}.${pin.name}`, net: pin.net, label: `${part.ref} pin ${pin.name}` })
+  const netsOf = (pin: Pin) => {
+    const nets = groupNets?.(`${part.ref}.${pin.name}`)
+    return nets ? { nets } : {}
+  }
+  const legTag = (pin: Pin): Tag => ({ kind: 'leg', id: `${part.ref}.${pin.name}`, net: pin.net, ...netsOf(pin), label: `${part.ref} pin ${pin.name}` })
   const out: Prim[] = []
   /** Pin name -> leg top y for straight legs; tubes go in `out` directly. */
   const straight = new Map<string, number>()
@@ -181,7 +188,7 @@ export function partPrims(pp: PlacedPart): Prim[] {
       out.push({ kind: 'cylinder', a: [c.x, top, c.z], b: [c.x, LEG_END_Y, c.z], radius: LEG_R, color: COLORS.leg, tag: legTag(pin) })
     out.push({
       kind: 'cone', base: [c.x, BOARD_BOTTOM_Y, c.z], up: -1, radius: SOLDER_BASE_DIAMETER_MM / 2, height: SOLDER_HEIGHT_MM,
-      color: COLORS.solder, tag: { kind: 'joint', id: `${part.ref}.${pin.name}`, net: pin.net }
+      color: COLORS.solder, tag: { kind: 'joint', id: `${part.ref}.${pin.name}`, net: pin.net, ...netsOf(pin) }
     })
   }
   return out
