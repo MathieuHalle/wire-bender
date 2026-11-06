@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // The side panel: a rail of tab buttons and the open tab next to it. Clicking the open
 // tab collapses the panel to the rail; clicking any tab opens that one. From `lg` up the
-// rail is a vertical strip on the right edge; below it, a row on top of the panel.
+// rail is a vertical strip on the right edge; below it, a row on top of the panel. The rail
+// has its own darker background, and the open tab scrolls inside the panel, not the page.
 // Each tab's content is the slot named after its id; it stays mounted while hidden, so
 // its own state (e.g. the findings' expanded groups) survives a collapse.
 import { nextPanel, PANEL_TABS, type PanelTab } from '~/utils/sidePanel'
@@ -30,7 +31,7 @@ const tipOf = (label: string, id: PanelTab) =>
     aria-label="Side panel"
   >
     <div
-      class="flex shrink-0 gap-1 lg:flex-col"
+      class="flex shrink-0 gap-1 rounded-md border border-default bg-elevated p-1 lg:flex-col"
       role="toolbar"
       aria-label="Side panel tabs"
     >
@@ -61,7 +62,7 @@ const tipOf = (label: string, id: PanelTab) =>
     </div>
     <div
       v-show="open"
-      class="min-w-0 lg:w-80 lg:overflow-y-auto"
+      class="min-w-0 lg:max-h-[calc(100vh-2rem)] lg:w-80 lg:overflow-y-auto lg:overscroll-contain"
     >
       <div
         v-for="t in PANEL_TABS"
