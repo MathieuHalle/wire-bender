@@ -80,8 +80,8 @@ describe('wirebender export', () => {
     expect(html.startsWith('<!doctype html>')).toBe(true)
     expect(html).toContain('Channel board 2')
     expect(readFileSync(fixture, 'utf8')).toBe(before) // the board file is never changed
-    // the fixture has 2 check errors: one stderr line, still exit 0
-    expect(r.err.trim()).toBe('board has 2 errors — see the red box on the sheet')
+    // the fixture has 3 check errors: one stderr line, still exit 0
+    expect(r.err.trim()).toBe('board has 3 errors — see the red box on the sheet')
   })
 
   it('export of a clean board writes nothing to stderr', () => {

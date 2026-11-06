@@ -1,3 +1,5 @@
+import { LEG_DIAMETER_MM } from '../footprints'
+
 /** Physical sizes for the 3D scene, mm. */
 export const BOARD_THICKNESS_MM = 1.6
 export const HOLE_DIAMETER_MM = 1.0
@@ -5,7 +7,8 @@ export const PAD_DIAMETER_MM = 1.8
 export const COPPER_THICKNESS_MM = 0.05
 export const BARE_WIRE_DIAMETER_MM = 0.6
 export const INSULATED_WIRE_DIAMETER_MM = 1.4
-export const LEG_DIAMETER_MM = 0.6
+/** Legs share core's diameter, which the check's touchesTab also uses. */
+export { LEG_DIAMETER_MM }
 /** How far legs stick out below the bottom surface. */
 export const LEG_BELOW_MM = 1.5
 export const SOLDER_BASE_DIAMETER_MM = 1.8

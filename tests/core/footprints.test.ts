@@ -117,6 +117,12 @@ describe('body geometry', () => {
     close(r90.bodyRectMm, [pin.x - 2.54 - 5, pin.y - 2.0, 10, 4.5])
     // Flip mirrors the tab the way it mirrors dx.
     expect(placePart(part({ footprint: 'to220-gds', at: 'C3', flip: true })).tab).toEqual({ dx: -1, dy: 0 })
+    const tabAt = (rotation: 0 | 90 | 180 | 270, flip = false) =>
+      placePart(part({ footprint: 'to220-gds', at: 'C3', rotation, flip })).tab
+    expect(tabAt(180)).toEqual({ dx: -1, dy: 0 })
+    expect(tabAt(270)).toEqual({ dx: 0, dy: -1 })
+    // Flip mirrors dx first, then the rotation: (-1, 0) -> (0, -1).
+    expect(tabAt(90, true)).toEqual({ dx: 0, dy: -1 })
     expect(placePart(part({ footprint: 'dip8', at: 'C3' })).tab).toBeUndefined()
   })
 

@@ -1,4 +1,4 @@
-import { bodyHeightMm, FOOTPRINT_PITCH_MM, type PlacedPart, type Rect } from '../footprints'
+import { bodyHeightMm, FOOTPRINT_PITCH_MM, TAB_PLATE_MM, tabPlateMm, type PlacedPart, type Rect } from '../footprints'
 import { holeMm } from '../holes'
 import {
   BOARD_BOTTOM_Y, COLORS, LEG_DIAMETER_MM, LEG_END_Y, LEG_FOLD_Y, SOLDER_BASE_DIAMETER_MM, SOLDER_HEIGHT_MM
@@ -21,7 +21,6 @@ const PIN1_DOT_IN_MM = 1.2
 const HEADER_BAR_MM = 2.5
 const HEADER_CHAMFER_MM = 0.3
 const HEADER_POST_MM = 0.64
-const TO220_TAB_MM = 1.3
 const TO220_TAB_ABOVE_MM = 6
 const TO220_HOLE_MM = 3.6
 const SCREW_R_MM = 1.5
@@ -159,25 +158,22 @@ export function partPrims(
       break
     case 'to220-gds': {
       // Straight-mounted on its legs (the owner's choice): the body stands over the pins and
-      // the tab is its back face on the tab side, reaching the full height.
-      const n: XZ = pp.tab ? { x: pp.tab.dx, z: pp.tab.dy } : awayFromPins(r, pins)
+      // the tab plate (core's tabPlateMm) is its back face on the tab side, reaching the full
+      // height. The footprint always has a tab, so the plate is defined.
+      const n: XZ = { x: pp.tab!.dx, z: pp.tab!.dy }
+      const tab = tabPlateMm(pp)!
       const y0 = 0
       const top = h
-      const t = TO220_TAB_MM
-      // Split the rect across the tab direction: plastic in front, the metal plate at the back.
-      const [front, tab]: [Rect, Rect] = n.x !== 0
-        ? n.x > 0
-          ? [{ ...r, w: r.w - t }, { ...r, x: r.x + r.w - t, w: t }]
-          : [{ ...r, x: r.x + t, w: r.w - t }, { ...r, w: t }]
-        : n.z > 0
-          ? [{ ...r, h: r.h - t }, { ...r, y: r.y + r.h - t, h: t }]
-          : [{ ...r, y: r.y + t, h: r.h - t }, { ...r, h: t }]
+      // The plastic is the rest of the rect, in front of the plate.
+      const front: Rect = n.x !== 0
+        ? { ...r, x: n.x > 0 ? r.x : r.x + tab.w, w: r.w - tab.w }
+        : { ...r, y: n.z > 0 ? r.y : r.y + tab.h, h: r.h - tab.h }
       out.push(rectBox(front, y0, top - TO220_TAB_ABOVE_MM, COLORS.black, body))
       out.push({ ...rectBox(tab, y0, top, COLORS.tab, body), metal: true })
       // The mounting hole: a dark disc through the plate, centred on the part above the body.
       const hc = centreOf(tab)
       const hy = top - TO220_TAB_ABOVE_MM / 2
-      const e = t / 2 + MARK_MM
+      const e = TAB_PLATE_MM / 2 + MARK_MM
       out.push({
         kind: 'cylinder', radius: TO220_HOLE_MM / 2, color: COLORS.tabHole, tag: body,
         a: [hc.x - n.x * e, hy, hc.z - n.z * e], b: [hc.x + n.x * e, hy, hc.z + n.z * e]

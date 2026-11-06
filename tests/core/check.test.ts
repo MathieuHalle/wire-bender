@@ -239,6 +239,39 @@ describe('runCheck', () => {
     expect(u.map(f => f.holes)).toEqual([['C4']])
   })
 
+  describe('touchesTab', () => {
+    // Q1 at C5: pins C5 D5 E5 (col 5), tab +x. The plate is x 1.2..2.5 mm past col 5 and
+    // col 6 sits 2.54 past it: a lead there is 0.04 mm from the plate.
+    const q1 = { ref: 'Q1', footprint: 'to220-gds', at: 'C5', rotation: 0 as const, pins: { G: 'g', D: 'd', S: 's' } }
+    const tabs = (...parts: Parameters<typeof axial>[]) =>
+      only(check({ parts: [q1, ...parts.map(a => axial(...a))] }).findings, 'touchesTab')
+
+    it('a lead in the hole just behind the tab -> error', () => {
+      const t = tabs(['R1', 'D6', 'D9', 'x'])
+      expect(t).toHaveLength(1)
+      expect(t[0]).toMatchObject({ severity: 'error', holes: ['D6'] })
+      expect(t[0]!.message).toBe('R1.a at D6 touches the metal tab of Q1 (connected to d, pin D)')
+    })
+
+    it('a lead on the tab net is fine', () => {
+      expect(tabs(['R1', 'D6', 'D9', 'd'])).toEqual([])
+    })
+
+    it('a lead in front of the body is fine', () => {
+      expect(tabs(['R1', 'D4', 'D1', 'x'])).toEqual([])
+    })
+
+    it('a lead beside the plate past its 10 mm length is fine', () => {
+      expect(tabs(['R1', 'A6', 'A9', 'x'])).toEqual([])
+    })
+
+    it('rotates with the part: tab +y at rotation 90', () => {
+      // Pins C5 C4 C3 (row C), tab toward row D.
+      const t = only(check({ parts: [{ ...q1, rotation: 90 }, axial('R1', 'D4', 'G4', 'x')] }).findings, 'touchesTab')
+      expect(t.map(f => f.holes)).toEqual([['D4']])
+    })
+  })
+
   it('contention: two out pins in one group', () => {
     const { findings } = check({
       parts: [

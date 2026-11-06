@@ -8,8 +8,11 @@ import { runCheck } from '~core/check'
 
 const data = (name: string) => JSON.parse(readFileSync(fileURLToPath(new URL(`../../data/${name}`, import.meta.url)), 'utf8'))
 
+/** The frozen fixture: the live data/ board is edited by the owner and is not a test input. */
+const fixture = () => JSON.parse(readFileSync(fileURLToPath(new URL('../fixtures/channel-board-2.json', import.meta.url)), 'utf8'))
+
 function load(): BoardFile {
-  const res = parseBoard(data('channel-board-2.wirebender.json'))
+  const res = parseBoard(fixture())
   if (!res.ok) throw new Error(res.errors.join('\n'))
   return res.board
 }

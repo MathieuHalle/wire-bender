@@ -9,7 +9,7 @@ import type { BoardFile, HoleName, PinRole, Side } from '../schema'
 
 export type Severity = 'error' | 'warning' | 'caution'
 export type RuleId = 'openNet' | 'short' | 'singleLeadNet' | 'contention' | 'twoInOneHole'
-  | 'bodyCollision' | 'underBody' | 'blockedHole' | 'keepAway' | 'adjacent' | 'missingJoint'
+  | 'bodyCollision' | 'underBody' | 'touchesTab' | 'blockedHole' | 'keepAway' | 'adjacent' | 'missingJoint'
 export type AdjacencyLevel = 'supply' | 'mcu' | 'harmless'
 
 export interface Finding {

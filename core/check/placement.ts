@@ -1,11 +1,14 @@
 // Rule logic ported from perfwire solver.py erc_audit/topology_audit, Apache-2.0
 //
-// Placement rules: twoInOneHole, bodyCollision, underBody, blockedHole.
+// Placement rules: twoInOneHole, bodyCollision, underBody, touchesTab, blockedHole.
+import { FOOTPRINT_PITCH_MM, LEG_DIAMETER_MM, tabPlateMm } from '../footprints'
 import { holeKey, holeMm, holeName, parseHole, type Hole } from '../holes'
 import { joinAnd, names, type CheckContext, type Finding, type Run } from './context'
 
 /** Bodies may touch: only an overlap beyond this in both axes is a collision. */
 const OVERLAP_TOLERANCE_MM = 0.2
+/** A lead closer than its radius plus this to a metal tab plate touches it, mm. */
+const TAB_CLEARANCE_MM = 0.2
 
 /** What occupies each hole, as readable labels, from the given sources. */
 class Occupancy {
@@ -92,6 +95,30 @@ export function placementRules(ctx: CheckContext): Finding[] {
       out.push({
         rule: 'underBody', severity: 'error', holes: names(ctx, [h]),
         message: `Under a body: ${joinAnd(what)} at ${holeName(h)} ${what.length > 1 ? 'are' : 'is'} under the body of ${pp.part.ref}`
+      })
+    }
+  }
+
+  // ---- touchesTab -----------------------------------------------------------------
+  // A metal tab carries its pin's net (TO-220: the drain). Another part's lead whose hole
+  // centre is within a leg radius plus clearance of the plate touches it, unless it is on
+  // that net. Compared on the footprint grid, where placePart lays bodies out.
+  const reach = LEG_DIAMETER_MM / 2 + TAB_CLEARANCE_MM
+  for (const pp of ctx.placed) {
+    const plate = tabPlateMm(pp)
+    if (!plate) continue
+    const tabPin = pp.pins.find(p => p.name === pp.fp.tabPin)
+    const net = tabPin?.net ?? null
+    for (const l of ctx.leads) {
+      if (l.ref === pp.part.ref || (net !== null && l.net === net)) continue
+      const m = holeMm(l.hole, FOOTPRINT_PITCH_MM)
+      const dx = Math.max(plate.x - m.x, 0, m.x - (plate.x + plate.w))
+      const dy = Math.max(plate.y - m.y, 0, m.y - (plate.y + plate.h))
+      if (Math.hypot(dx, dy) >= reach) continue
+      const via = [net, tabPin ? `pin ${tabPin.name}` : null].filter(Boolean).join(', ')
+      out.push({
+        rule: 'touchesTab', severity: 'error', holes: names(ctx, [l.hole]),
+        message: `${l.id} at ${holeName(l.hole)} touches the metal tab of ${pp.part.ref} (connected to ${via})`
       })
     }
   }

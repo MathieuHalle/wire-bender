@@ -166,11 +166,16 @@ describe('benchModel on channel board 2 (frozen fixture)', () => {
     expect(m.cards).toHaveLength(44)
     expect(m.cards.filter(c => c.kind === 'trail')).toHaveLength(35)
     expect(m.legFolds).toHaveLength(12)
-    expect(m.check.errors).toHaveLength(2)
+    expect(m.check.errors).toHaveLength(3)
   })
 
   it('QA\'s tab faces row N and QB\'s faces row P', () => {
     expect(m.placement.find(r => r.ref === 'QA')!.orientation).toBe('metal tab toward row N')
     expect(m.placement.find(r => r.ref === 'QB')!.orientation).toBe('metal tab toward row P')
+  })
+
+  it('RGB.a at P13 touches QB\'s tab', () => {
+    const t = m.check.errors.filter(f => f.rule === 'touchesTab')
+    expect(t.map(f => f.message)).toContain('RGB.a at P13 touches the metal tab of QB (connected to DATA_B, pin D)')
   })
 })

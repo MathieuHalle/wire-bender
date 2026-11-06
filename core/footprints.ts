@@ -4,6 +4,10 @@ import type { Part, PinRole } from './schema'
 /** The hole grid footprint bodies are laid out on (placePart uses it), mm. */
 export const FOOTPRINT_PITCH_MM = 2.54
 const PITCH = FOOTPRINT_PITCH_MM
+/** Round component legs, mm (the 3D scene draws them at this diameter). */
+export const LEG_DIAMETER_MM = 0.6
+/** The metal tab plate: the back face of the body on the `tab` side, this thick, mm. */
+export const TAB_PLATE_MM = 1.3
 
 export interface Footprint {
   id: string
@@ -23,6 +27,8 @@ export interface Footprint {
    * space (x right, y down). placePart flips and rotates it with the pins.
    */
   tab?: Dir
+  /** The pin the metal tab is connected to (TO-220: the drain). */
+  tabPin?: string
 }
 
 /** An axis-aligned unit vector, x right, y down. */
@@ -60,7 +66,7 @@ export const FOOTPRINTS: Record<string, Footprint> = {
     pins: [p('G', 0, 0), p('D', 0, 1), p('S', 0, 2)],
     // Straight-mounted: 4.5 thick over the pin line, the pins 2.5 from the tab (back) face.
     body: { rect: { x: 2.5 - 4.5, y: PITCH - 5, w: 4.5, h: 10.0 }, heightMm: 15.5, side: 'top' },
-    mark: 'tab', tab: { dx: 1, dy: 0 }
+    mark: 'tab', tab: { dx: 1, dy: 0 }, tabPin: 'D'
   },
   'dip8': {
     id: 'dip8', name: 'DIP-8',
@@ -195,4 +201,19 @@ export function placePart(part: Part): PlacedPart {
     }
 
   return { part, fp, pins, bodyHoles, bodyRectMm, ...(tab ? { tab } : {}) }
+}
+
+/**
+ * The metal tab plate in board mm: the back TAB_PLATE_MM of the body rect on the tab side,
+ * or undefined for a footprint without a tab.
+ */
+export function tabPlateMm(pp: PlacedPart): Rect | undefined {
+  const n = pp.tab
+  if (!n || pp.fp.mark !== 'tab') return undefined
+  const r = pp.bodyRectMm
+  const t = TAB_PLATE_MM
+  if (n.dx > 0) return { ...r, x: r.x + r.w - t, w: t }
+  if (n.dx < 0) return { ...r, w: t }
+  if (n.dy > 0) return { ...r, y: r.y + r.h - t, h: t }
+  return { ...r, h: t }
 }
