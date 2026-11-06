@@ -15,6 +15,8 @@ const PRINTABLE_MM = { letter: 215.9 - 24, a4: 210 - 24 } as const
 const OVERVIEW_GAP_MM = 6
 /** Card border plus padding on both sides, mm: what a 1:1 drawing loses inside a card. */
 const CARD_INSET_MM = 10
+/** Gap between the two printed columns of cards and meter rows, mm. */
+const COLUMN_GAP_MM = 5
 
 const PAPER_LABEL = { letter: 'Letter', a4: 'A4' } as const
 
@@ -119,15 +121,18 @@ function card(c: WireCard, board: BoardFile, printable: number, id: (k: string) 
     ? 'no net'
     : `${esc(c.net)}${c.netClass ? ` <span class="muted">(${esc(c.netClass)})</span>` : ''}`
   const showStrip = c.strip.length > 0 || c.kind !== 'trail'
-  const stripW = Math.min(170, printable - CARD_INSET_MM)
+  // In print, cards sit in two columns; a card whose 1:1 drawing is wider than a column spans both.
+  const column = (printable - COLUMN_GAP_MM) / 2 - CARD_INSET_MM
+  const svgs = c.kind === 'flying' ? [] : bendSvgs(c, printable - CARD_INSET_MM)
+  const narrow = svgs.every(s => svgWidthMm(s) <= column)
+  const stripW = narrow ? column : Math.min(170, printable - CARD_INSET_MM)
   let drawing: string
   if (c.kind === 'flying') drawing = '<p class="muted">Flying wire: no bend drawing, route it freely (the cut includes slack).</p>'
   else {
-    const svgs = bendSvgs(c, printable - CARD_INSET_MM)
     drawing = svgs.map(s => `<div class="drawing">${s}</div>`).join('\n')
     if (c.bends.length === 0) drawing += '\n<p class="muted">no bends</p>'
   }
-  return `<section class="card" id="card-${esc(c.id)}">
+  return `<section class="card${narrow ? '' : ' wide'}" id="card-${esc(c.id)}">
 ${scaleBar()}
 <div class="card-head">
 <span class="card-id">${esc(c.id)}</span>
@@ -149,7 +154,7 @@ function cards(m: BenchModel, board: BoardFile, printable: number, id: (k: strin
   return `<section id="cards" class="page">
 <h2>Wire cards</h2>
 <p class="hint">Bend drawings are 1:1: lay the wire on them. Strip bars are not to scale; their marks are measured from the start end.</p>
-${m.cards.length ? m.cards.map(c => card(c, board, printable, id)).join('\n') : '<p>No trails or wires.</p>'}
+${m.cards.length ? `<div class="columns">\n${m.cards.map(c => card(c, board, printable, id)).join('\n')}\n</div>` : '<p>No trails or wires.</p>'}
 </section>`
 }
 
@@ -165,7 +170,8 @@ ${rows.length ? `<p class="hint">Sketches are 3× scale, solder side.</p>\n${row
 </section>`
 }
 
-function meterList(title: string, rows: MeterRow[], prefix: string, id: (k: string) => string): string {
+/** `columns`: print in two columns (short rows only; the must-not-beep reasons are too long). */
+function meterList(title: string, rows: MeterRow[], prefix: string, id: (k: string) => string, columns: boolean): string {
   if (!rows.length) return `<h3>${esc(title)}</h3>\n<p>Nothing to test.</p>`
   const groups = [...new Set(rows.map(r => r.group))]
   const body = groups.flatMap(g => [g, ...rows.filter(r => r.group === g).map(r => [
@@ -175,15 +181,15 @@ function meterList(title: string, rows: MeterRow[], prefix: string, id: (k: stri
     esc(r.expect),
     esc(r.why)
   ])])
-  return `<h3>${esc(title)}</h3>\n${table(['Done', 'Probe', 'Probe', 'Expect', 'Why'], body, 'meter')}`
+  return `<h3>${esc(title)}</h3>\n<div${columns ? ' class="columns"' : ''}>${table(['Done', 'Probe A', 'Probe B', 'Expect', 'Why'], body, 'meter')}</div>`
 }
 
 function meter(m: BenchModel, id: (k: string) => string): string {
   return `<section id="meter" class="page">
 <h2>Meter tests</h2>
 <p class="hint">Continuity mode, board unpowered.</p>
-${meterList('Before power: must beep', m.mustBeep, 'beep', id)}
-${meterList('Before power: must not beep', m.mustNotBeep, 'nobeep', id)}
+${meterList('Before power: must beep', m.mustBeep, 'beep', id, true)}
+${meterList('Before power: must not beep', m.mustNotBeep, 'nobeep', id, false)}
 </section>`
 }
 
@@ -267,6 +273,14 @@ footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); 
   .tick input { width: 4mm; height: 4mm; border: 0.3mm solid #000; background: #fff; box-shadow: none; }
   tr, h2, h3, h4, figure { break-inside: avoid; page-break-inside: avoid; }
   h2, h3, h4 { break-after: avoid; page-break-after: avoid; }
+  .columns { columns: 2; column-gap: ${COLUMN_GAP_MM}mm; }
+  .columns .card { margin: 0 0 4mm; padding: 2mm 3mm; }
+  .columns .card.wide { column-span: all; }
+  tr.group { break-after: avoid; page-break-after: avoid; }
+  .meter { font-size: 8.5pt; }
+  .meter th, .meter td { padding: 0.8mm 1.2mm; }
+  .meter td:nth-child(2), .meter td:nth-child(3), .meter td:nth-child(4) { white-space: nowrap; }
+  .meter .tick input { width: 3.5mm; height: 3.5mm; margin: 0; }
 }
 `
 }
@@ -310,18 +324,24 @@ function script(key: string): string {
 })();`
 }
 
+/** Today's date as YYYY-MM-DD, local time. */
+function today(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 // ---- document ------------------------------------------------------------------------
 
 /**
  * The whole bench sheet. `hash` (e.g. of the board file's text) keys the phone ticks so they
- * reset when the board changes; without it the revision is used.
+ * reset when the board changes; without it the revision is used. `date` (YYYY-MM-DD) pins the
+ * "generated" date; it defaults to today.
  */
-export function benchHtml(board: BoardFile, opts: { hash?: string } = {}): string {
+export function benchHtml(board: BoardFile, opts: { hash?: string, date?: string } = {}): string {
   const m = benchModel(board)
   const printable = PRINTABLE_MM[m.paper]
   const id = tickIds()
-  const now = new Date()
-  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const date = opts.date ?? today()
   const key = `wirebender:${m.name}:${opts.hash ?? m.revision}`
   return `<!doctype html>
 <html lang="en">

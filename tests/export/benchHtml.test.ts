@@ -14,6 +14,8 @@ function board2(): BoardFile {
   return res.board
 }
 
+const DATE = '2026-01-02'
+
 const small = () => mk({
   name: 'tiny <b>&',
   nets: { N: {} },
@@ -32,7 +34,7 @@ function text(html: string): string {
 }
 
 describe('benchHtml', () => {
-  const html = benchHtml(board2())
+  const html = benchHtml(board2(), { date: DATE })
 
   it('document is self-contained', () => {
     expect(html.startsWith('<!doctype html>')).toBe(true)
@@ -47,7 +49,7 @@ describe('benchHtml', () => {
     const open = mk({ nets: { N: {} }, parts: [axial('R1', 'A1', 'A4', 'N'), axial('R2', 'C1', 'C4', 'N')] })
     const m = benchModel(open)
     expect(m.check.errors.length).toBeGreaterThan(0)
-    const out = benchHtml(open)
+    const out = benchHtml(open, { date: DATE })
     const box = out.indexOf('class="errors"')
     expect(box).toBeGreaterThan(0)
     expect(box).toBeLessThan(out.indexOf('id="overview"'))
@@ -55,10 +57,12 @@ describe('benchHtml', () => {
     expect(out).toContain(`This board has ${n} error${n === 1 ? '' : 's'} — fix them before building`)
     for (const f of m.check.errors) expect(out).toContain(f.message.replace(/&/g, '&amp;').replace(/</g, '&lt;'))
     // a clean board has no error box
-    expect(benchHtml(small())).not.toContain('class="errors"')
+    expect(benchHtml(small(), { date: DATE })).not.toContain('class="errors"')
   })
 
   it('every 1:1 page has a scale bar', () => {
+    const ov = html.slice(html.indexOf('<section id="overview"'))
+    expect(ov.slice(0, ov.indexOf('</section>'))).toContain('aria-label="scale bar, 10 mm"')
     const bars = (html.match(/aria-label="scale bar, 10 mm"/g) ?? []).length
     const cards = (html.match(/<section class="card"/g) ?? []).length
     expect(cards).toBe(benchModel(board2()).cards.length)
@@ -70,13 +74,13 @@ describe('benchHtml', () => {
 
   it('advisory is the last text', () => {
     expect(text(html).endsWith(ADVISORY)).toBe(true)
-    expect(text(benchHtml(small())).endsWith(ADVISORY)).toBe(true)
+    expect(text(benchHtml(small(), { date: DATE })).endsWith(ADVISORY)).toBe(true)
   })
 
   it('paper a4 switches @page', () => {
     expect(html).toMatch(/@page\s*\{\s*size:\s*letter;\s*margin:\s*12mm/)
     const b = board2()
-    const a4 = benchHtml({ ...b, bench: { ...b.bench, paper: 'a4' } })
+    const a4 = benchHtml({ ...b, bench: { ...b.bench, paper: 'a4' } }, { date: DATE })
     expect(a4).toMatch(/@page\s*\{\s*size:\s*A4;\s*margin:\s*12mm/)
     expect(a4).not.toMatch(/size:\s*letter/)
   })
@@ -99,12 +103,12 @@ describe('benchHtml', () => {
 
   it('the storage key uses the hash when given, else the revision', () => {
     const b = board2()
-    expect(benchHtml(b)).toContain(JSON.stringify(`wirebender:${b.name}:${b.revision}`).replace(/</g, '\\u003c'))
-    expect(benchHtml(b, { hash: 'abc123' })).toContain(`wirebender:${b.name}:abc123`)
+    expect(benchHtml(b, { date: DATE })).toContain(JSON.stringify(`wirebender:${b.name}:${b.revision}`).replace(/</g, '\\u003c'))
+    expect(benchHtml(b, { hash: 'abc123', date: DATE })).toContain(`wirebender:${b.name}:abc123`)
   })
 
   it('escapes the board name and all sections are present in order', () => {
-    const out = benchHtml(small())
+    const out = benchHtml(small(), { date: DATE })
     expect(out).not.toContain('tiny <b>')
     expect(out).toContain('tiny &lt;b&gt;&amp;')
     const ids = ['header', 'overview', 'placement', 'cards', 'legfolds', 'meter'].map(id => out.indexOf(`id="${id}"`))
@@ -116,12 +120,52 @@ describe('benchHtml', () => {
     const m = benchModel(board2())
     const c = m.cards.find(x => x.kind === 'trail')!
     expect(html).toContain(`Cut ${c.cutMm} mm`)
-    const straight = benchHtml(small())
+    const straight = benchHtml(small(), { date: DATE })
     expect(straight).toContain('no bends')
   })
 
   it('no fixed content wider than the printable width', () => {
     const widths = [...html.matchAll(/<svg width="([\d.]+)mm"/g)].map(m => Number(m[1]))
     expect(Math.max(...widths)).toBeLessThanOrEqual(191.9)
+  })
+
+  it('uses the given date, defaults to today', () => {
+    expect(html).toContain('generated 2026-01-02')
+    expect(benchHtml(small())).toMatch(/generated \d{4}-\d{2}-\d{2}/)
+  })
+
+  it('cards wider than a print column span both columns', () => {
+    const b = mk({ board: { cols: 60, rows: 10 }, trails: [trail('T1', ['A1', 'A50']), trail('T2', ['C1', 'C5'])] })
+    const out = benchHtml(b, { date: DATE })
+    expect(out).toContain('<section class="card wide" id="card-T1">')
+    expect(out).toContain('<section class="card" id="card-T2">')
+    expect(out).toMatch(/\.columns \.card\.wide \{ column-span: all; \}/)
+  })
+
+  it('meter tables name the probes A and B', () => {
+    expect(html).toContain('<th>Probe A</th><th>Probe B</th>')
+  })
+
+  it('escapes hostile strings from the board file', () => {
+    const evil = '<img src=x onerror=1>'
+    const b = mk({
+      name: evil,
+      nets: { [evil]: { class: evil }, N2: {} },
+      netClasses: { [evil]: {} },
+      parts: [
+        { ...axial('R1', 'A1', 'A4', evil, 'N2'), label: evil, value: evil },
+        axial('R2', 'C1', 'C4', evil, 'N2')
+      ],
+      trails: [trail('T1', ['A1', 'C1'])],
+      wires: [{ id: evil, kind: 'laid', side: 'bottom', points: ['A4', 'C4'], bareSegments: [], joints: [] }],
+      legFolds: [{ lead: 'R1.a', to: 'B1' }]
+    })
+    const out = benchHtml(b, { date: DATE })
+    expect(out).not.toMatch(/<img/i)
+    expect(out).toContain('&lt;img src=x onerror=1&gt;')
+    // every src= is escaped text: HTML-escaped in the page, \u003c-escaped in the script's storage key
+    const before = [...out.matchAll(/\bsrc\s*=/gi)].map(m => out.slice(m.index - 10, m.index))
+    expect(before.length).toBeGreaterThan(0)
+    expect(before.every(p => p.endsWith('&lt;img ') || p.endsWith('\\u003cimg '))).toBe(true)
   })
 })
