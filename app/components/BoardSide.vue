@@ -207,7 +207,7 @@ const ringed = computed(() => {
         ref="svgEl"
         :viewBox="viewBox"
         :style="{ width: `${zoom * 100}%` }"
-        class="block h-auto max-w-none select-none"
+        class="mx-auto block h-auto max-w-none select-none"
         :class="tool === 'inspect' ? 'cursor-default' : 'cursor-crosshair'"
         font-family="'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace"
         role="img"
