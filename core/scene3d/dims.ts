@@ -14,6 +14,8 @@ export const SOLDER_HEIGHT_MM = 0.9
 export const BOARD_BOTTOM_Y = -BOARD_THICKNESS_MM
 /** y of a leg's cut end under the board. */
 export const LEG_END_Y = BOARD_BOTTOM_Y - LEG_BELOW_MM
+/** y of a folded leg's axis: lying on the bottom surface. A folded leg ends here, not at LEG_END_Y. */
+export const LEG_FOLD_Y = BOARD_BOTTOM_Y - LEG_DIAMETER_MM / 2
 
 export const COLORS = {
   board: '#8a7a45',

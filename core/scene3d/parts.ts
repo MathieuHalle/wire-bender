@@ -1,7 +1,7 @@
 import { bodyHeightMm, FOOTPRINT_PITCH_MM, type PlacedPart, type Rect } from '../footprints'
 import { holeMm } from '../holes'
 import {
-  BOARD_BOTTOM_Y, COLORS, LEG_DIAMETER_MM, LEG_END_Y, SOLDER_BASE_DIAMETER_MM, SOLDER_HEIGHT_MM
+  BOARD_BOTTOM_Y, COLORS, LEG_DIAMETER_MM, LEG_END_Y, LEG_FOLD_Y, SOLDER_BASE_DIAMETER_MM, SOLDER_HEIGHT_MM
 } from './dims'
 import type { Prim, Tag, V3 } from './types'
 
@@ -24,17 +24,17 @@ const HEADER_POST_MM = 0.64
 const TO220_TAB_MM = 1.3
 const TO220_TAB_ABOVE_MM = 6
 const TO220_HOLE_MM = 3.6
-/** The legs run straight down this far from the body, then kink 90 degrees toward the holes. */
-const TO220_KINK_MM = 2.5
-/** The body stands this high on its kinked legs, so the kink is 0.5 above the board. */
-const TO220_LIFT_MM = TO220_KINK_MM + 0.5
 const SCREW_R_MM = 1.5
+/** Terminal screw heads stand this far proud of the body top; their slots a mark above that. */
+const SCREW_PROUD_MM = MARK_MM
 /** Radial parts (polyfuse) stand on kinked leads. */
 const RADIAL_LIFT_MM = 2
 const STANDING_ARC_STEPS = 8
 /** Where a standing lead b kinks out to a hole more than a pitch away. */
 const STANDING_KINK_Y = 1
 const STRIPE_MM = 0.8
+/** The diode band stands this far proud of the body (under the 0.05 height tolerance on top). */
+const STRIPE_PROUD_MM = 0.04
 
 type Pin = PlacedPart['pins'][number]
 interface XZ { x: number, z: number }
@@ -104,7 +104,7 @@ function cornerNear(r: Rect, q: XZ, inset: number): XZ {
  * the body. The down run is at most a pitch from the body axis; a farther hole gets a kink out
  * to it just above the board.
  */
-function standingLeadB(a: XZ, b: XZ, h: number): V3[] {
+function standingLeadB(a: XZ, b: XZ, h: number, endY: number): V3[] {
   const s = Math.hypot(b.x - a.x, b.z - a.z)
   const { u } = leadAxis(a, b)
   const d = Math.min(s, FOOTPRINT_PITCH_MM)
@@ -116,16 +116,22 @@ function standingLeadB(a: XZ, b: XZ, h: number): V3[] {
   }
   pts[pts.length - 1] = at(d, h) // exact, so the down run is vertical
   if (d < s) pts.push(at(d, STANDING_KINK_Y), [b.x, STANDING_KINK_Y, b.z])
-  pts.push([b.x, LEG_END_Y, b.z])
+  pts.push([b.x, endY, b.z])
   return pts
 }
 
 /**
  * Body prims, legs and the solder joint under each leg for one placed part. `groupNets`
- * gives a lead's connectivity-group nets (`ref.pin`) for the leg and joint tags.
+ * gives a lead's connectivity-group nets (`ref.pin`) for the leg and joint tags. Leads in
+ * `folded` (`ref.pin`, from legFolds) end on the bottom surface, where their fold tube lies,
+ * instead of in a cut stub below the board.
  */
-export function partPrims(pp: PlacedPart, groupNets?: (lead: string) => string[] | undefined): Prim[] {
+export function partPrims(
+  pp: PlacedPart, groupNets?: (lead: string) => string[] | undefined, folded: ReadonlySet<string> = new Set()
+): Prim[] {
   const { part, fp, pins, bodyRectMm: r } = pp
+  // Every body's highest point is this height (the bench sheet's height column), within the
+  // 0.02 marks and screw heads on top.
   const h = bodyHeightMm(part, fp)
   const body: Tag = { kind: 'part', id: part.ref, label: part.label ?? part.ref }
   const netsOf = (pin: Pin) => {
@@ -133,6 +139,8 @@ export function partPrims(pp: PlacedPart, groupNets?: (lead: string) => string[]
     return nets ? { nets } : {}
   }
   const legTag = (pin: Pin): Tag => ({ kind: 'leg', id: `${part.ref}.${pin.name}`, net: pin.net, ...netsOf(pin), label: `${part.ref} pin ${pin.name}` })
+  /** Where a leg ends under the board: cut below it, or on the surface when folded. */
+  const legEnd = (pin: Pin) => (folded.has(`${part.ref}.${pin.name}`) ? LEG_FOLD_Y : LEG_END_Y)
   const out: Prim[] = []
   /** Pin name -> leg top y for straight legs; tubes go in `out` directly. */
   const straight = new Map<string, number>()
@@ -150,16 +158,17 @@ export function partPrims(pp: PlacedPart, groupNets?: (lead: string) => string[]
       allStraight(0)
       break
     case 'to220-gds': {
-      // Standing on legs kinked 2.5 under the body; the tab is on the face farthest from the leads.
+      // Standing on the board on straight legs (the owner's choice); the tab, on the face
+      // farthest from the leads, reaches the full height.
       const n = awayFromPins(r, pins)
-      const y0 = TO220_LIFT_MM
-      const top = y0 + h
+      const y0 = 0
+      const top = h
       out.push(rectBox(r, y0, top - TO220_TAB_ABOVE_MM, COLORS.black, body))
       const t = TO220_TAB_MM
       const tab: Rect = n.x !== 0
         ? { x: n.x > 0 ? r.x + r.w : r.x - t, y: r.y, w: t, h: r.h }
         : { x: r.x, y: n.z > 0 ? r.y + r.h : r.y - t, w: r.w, h: t }
-      out.push(rectBox(tab, y0, top, COLORS.tab, body))
+      out.push({ ...rectBox(tab, y0, top, COLORS.tab, body), metal: true })
       // The mounting hole: a dark disc through the plate, centred on the part above the body.
       const hc = centreOf(tab)
       const hy = top - TO220_TAB_ABOVE_MM / 2
@@ -168,21 +177,13 @@ export function partPrims(pp: PlacedPart, groupNets?: (lead: string) => string[]
         kind: 'cylinder', radius: TO220_HOLE_MM / 2, color: COLORS.tabHole, tag: body,
         a: [hc.x - n.x * e, hy, hc.z - n.z * e], b: [hc.x + n.x * e, hy, hc.z + n.z * e]
       })
-      const kinkY = y0 - TO220_KINK_MM
-      for (const pin of pins) {
-        const q = pinXZ(pin)
-        // Each leg leaves the body bottom at mid-thickness, in line with its hole.
-        const ex = n.x !== 0 ? { x: c.x, z: q.z } : { x: q.x, z: c.z }
-        out.push({
-          kind: 'tube', radius: LEG_R, color: COLORS.leg, tag: legTag(pin),
-          points: [[ex.x, y0 + 0.3, ex.z], [ex.x, kinkY, ex.z], [q.x, kinkY, q.z], [q.x, LEG_END_Y, q.z]]
-        })
-      }
+      allStraight(y0)
       break
     }
     case 'dip8': {
+      // On its 0.5 lead shoulders; the box is 0.5 shorter so the top is at the footprint height.
       const y0 = DIP_LIFT_MM
-      const y1 = DIP_LIFT_MM + h
+      const y1 = h
       out.push(rectBox(r, y0, y1, COLORS.black, body))
       // The notch on the pin-1 end (the end with pins 1 and 8) and the pin-1 dot.
       const p1 = pinNamed('1')
@@ -204,8 +205,8 @@ export function partPrims(pp: PlacedPart, groupNets?: (lead: string) => string[]
         const across = n.x !== 0 ? { x: c.x + n.x * mid, z: q.z } : { x: q.x, z: c.z + n.z * mid }
         const tag = legTag(pin)
         const sh = DIP_SHOULDER_Y
-        out.push(axisBox(across, n, outer - inner, DIP_LEAD_W_MM, sh - DIP_LEAD_T_MM / 2, sh + DIP_LEAD_T_MM / 2, COLORS.leg, tag))
-        out.push(axisBox(q, n, DIP_LEAD_T_MM, DIP_LEAD_W_MM, 0, sh + DIP_LEAD_T_MM / 2, COLORS.leg, tag))
+        out.push({ ...axisBox(across, n, outer - inner, DIP_LEAD_W_MM, sh - DIP_LEAD_T_MM / 2, sh + DIP_LEAD_T_MM / 2, COLORS.leg, tag), metal: true })
+        out.push({ ...axisBox(q, n, DIP_LEAD_T_MM, DIP_LEAD_W_MM, 0, sh + DIP_LEAD_T_MM / 2, COLORS.leg, tag), metal: true })
       }
       allStraight(0)
       break
@@ -220,8 +221,9 @@ export function partPrims(pp: PlacedPart, groupNets?: (lead: string) => string[]
       const face = halfAlong(r, w) - 0.14 // 0.3 deep, 0.02 proud of the face
       for (const pin of pins) {
         const q = pinXZ(pin)
-        out.push({ kind: 'cylinder', a: [q.x, h - 0.4, q.z], b: [q.x, h + 0.3, q.z], radius: SCREW_R_MM, color: COLORS.screw, tag: body })
-        out.push(axisBox(q, along, 2.4, 0.5, h + 0.2, h + 0.34, COLORS.slot, body))
+        // The screw head is flush with the top (it sits in its well) and its slot a mark above.
+        out.push({ kind: 'cylinder', a: [q.x, h - 0.4, q.z], b: [q.x, h + SCREW_PROUD_MM, q.z], radius: SCREW_R_MM, color: COLORS.screw, metal: true, tag: body })
+        out.push(axisBox(q, along, 2.4, 0.5, h - 0.1, h + SCREW_PROUD_MM + MARK_MM, COLORS.slot, body))
         const e = w.x !== 0 ? { x: c.x + w.x * face, z: q.z } : { x: q.x, z: c.z + w.z * face }
         out.push(axisBox(e, along, 3.2, 0.32, 1.2, 4.6, COLORS.wireEntry, body))
       }
@@ -237,10 +239,10 @@ export function partPrims(pp: PlacedPart, groupNets?: (lead: string) => string[]
         const q = pinXZ(pin)
         out.push({
           kind: 'box', center: [q.x, (HEADER_BAR_MM + h) / 2, q.z], size: [HEADER_POST_MM, h - HEADER_BAR_MM, HEADER_POST_MM],
-          color: COLORS.headerPin, tag: body
+          color: COLORS.headerPin, metal: true, tag: body
         })
         // The post's tail under the bar is the leg, in gold.
-        out.push({ kind: 'cylinder', a: [q.x, 0, q.z], b: [q.x, LEG_END_Y, q.z], radius: HEADER_POST_MM / 2, color: COLORS.headerPin, tag: legTag(pin) })
+        out.push({ kind: 'cylinder', a: [q.x, 0, q.z], b: [q.x, legEnd(pin), q.z], radius: HEADER_POST_MM / 2, color: COLORS.headerPin, metal: true, tag: legTag(pin) })
       }
       // A stepped triangle on the bar, outboard of pin 1, pointing at it.
       const p1 = pinNamed('1')
@@ -284,9 +286,9 @@ export function partPrims(pp: PlacedPart, groupNets?: (lead: string) => string[]
         // Vertical over lead a; lead b runs up beside the body and over the top.
         out.push({ kind: 'cylinder', a: [a.x, 0, a.z], b: [a.x, h, a.z], radius: R, color, tag: body })
         if (diode)
-          out.push({ kind: 'cylinder', a: [a.x, h - STRIPE_MM - 0.4, a.z], b: [a.x, h - 0.4, a.z], radius: R + 0.05, color: COLORS.diodeStripe, tag: body })
+          out.push({ kind: 'cylinder', a: [a.x, h - STRIPE_MM - 0.4, a.z], b: [a.x, h - 0.4, a.z], radius: R + STRIPE_PROUD_MM, color: COLORS.diodeStripe, tag: body })
         straight.set('a', 0)
-        out.push({ kind: 'tube', radius: LEG_R, color: COLORS.leg, tag: legTag(pins[1]!), points: standingLeadB(a, b, h) })
+        out.push({ kind: 'tube', radius: LEG_R, color: COLORS.leg, metal: true, tag: legTag(pins[1]!), points: standingLeadB(a, b, h, legEnd(pins[1]!)) })
       } else {
         // Lying on the board along the lead axis; leads bend down at the holes.
         const { u, mid } = axis!
@@ -299,13 +301,13 @@ export function partPrims(pp: PlacedPart, groupNets?: (lead: string) => string[]
           const off = L / 2 - 0.4 - STRIPE_MM / 2
           const s = { x: mid.x + u.x * off, z: mid.z + u.z * off }
           out.push({
-            kind: 'cylinder', radius: R + 0.05, color: COLORS.diodeStripe, tag: body,
+            kind: 'cylinder', radius: R + STRIPE_PROUD_MM, color: COLORS.diodeStripe, tag: body,
             a: [s.x - u.x * STRIPE_MM / 2, R, s.z - u.z * STRIPE_MM / 2], b: [s.x + u.x * STRIPE_MM / 2, R, s.z + u.z * STRIPE_MM / 2]
           })
         }
         const bent = (pin: Pin, end: V3, q: XZ): Prim => ({
-          kind: 'tube', radius: LEG_R, color: COLORS.leg, tag: legTag(pin),
-          points: [end, [q.x, R, q.z], [q.x, LEG_END_Y, q.z]]
+          kind: 'tube', radius: LEG_R, color: COLORS.leg, metal: true, tag: legTag(pin),
+          points: [end, [q.x, R, q.z], [q.x, legEnd(pin), q.z]]
         })
         out.push(bent(pins[0]!, ea, a), bent(pins[1]!, eb, b))
       }
@@ -321,10 +323,11 @@ export function partPrims(pp: PlacedPart, groupNets?: (lead: string) => string[]
     const top = straight.get(pin.name)
     const q = pinXZ(pin)
     if (top !== undefined)
-      out.push({ kind: 'cylinder', a: [q.x, top, q.z], b: [q.x, LEG_END_Y, q.z], radius: LEG_R, color: COLORS.leg, tag: legTag(pin) })
+      out.push({ kind: 'cylinder', a: [q.x, top, q.z], b: [q.x, legEnd(pin), q.z], radius: LEG_R, color: COLORS.leg, metal: true, tag: legTag(pin) })
     out.push({
       kind: 'cone', base: [q.x, BOARD_BOTTOM_Y, q.z], up: -1, radius: SOLDER_BASE_DIAMETER_MM / 2, height: SOLDER_HEIGHT_MM,
-      color: COLORS.solder, tag: { kind: 'joint', id: `${part.ref}.${pin.name}`, net: pin.net, ...netsOf(pin) }
+      color: COLORS.solder, metal: true,
+      tag: { kind: 'joint', id: `${part.ref}.${pin.name}`, net: pin.net, ...netsOf(pin), label: `${part.ref} pin ${pin.name} joint` }
     })
   }
   return out

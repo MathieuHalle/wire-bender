@@ -7,6 +7,9 @@ import { placePart, type PlacedPart } from '../core/footprints'
 import { wireCards, type WireCard } from '../core/bench/cards'
 import type { LegFoldRow } from '../core/bench/sheet'
 import type { BoardFile, Side } from '../core/schema'
+import { safeColor } from '../core/color'
+
+export { safeColor }
 
 export const COPPER = '#b87333'
 export const INSULATED_FALLBACK = '#1f6fb2'
@@ -41,12 +44,6 @@ export function mmExact(x: number): string {
 /** Lengths shown to the owner: rounded to 0.5 mm. */
 export function mmText(x: number): string {
   return `${n(Math.round(x * 2) / 2)} mm`
-}
-
-/** A colour from the board file, or the fallback when it is not a plain colour. */
-export function safeColor(c: string | null | undefined, fallback: string): string {
-  if (!c) return fallback
-  return /^#[0-9a-f]{3,8}$/i.test(c) || /^[a-z]{3,20}$/i.test(c) ? c : fallback
 }
 
 /** Rough text width in mm for the system sans stack (wide enough for digits and capitals). */

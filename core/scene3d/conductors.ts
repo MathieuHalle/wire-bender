@@ -1,11 +1,12 @@
 // Conductors in the 3D scene: bare trails, laid and flying wires, their solder joints,
 // leg folds and solder bridges. Pure: no Node, DOM or three.js.
+import { safeColor } from '../color'
 import { buildConnectivity, type Connectivity } from '../connectivity'
 import { FOOTPRINT_PITCH_MM, placePart } from '../footprints'
 import { holeKey, holeMm, holeName, parseHole, straightRun, walkHoles, type Hole } from '../holes'
 import type { BoardFile, Side } from '../schema'
 import {
-  BARE_WIRE_DIAMETER_MM, BOARD_BOTTOM_Y, COLORS, INSULATED_WIRE_DIAMETER_MM, LEG_DIAMETER_MM,
+  BARE_WIRE_DIAMETER_MM, BOARD_BOTTOM_Y, COLORS, INSULATED_WIRE_DIAMETER_MM, LEG_DIAMETER_MM, LEG_FOLD_Y,
   SOLDER_BASE_DIAMETER_MM, SOLDER_HEIGHT_MM
 } from './dims'
 import type { Prim, Tag, V3, XZ } from './types'
@@ -88,13 +89,13 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
 
   const cone = (q: XZ, up: 1 | -1, tag: Tag): Prim => ({
     kind: 'cone', base: [q.x, up === 1 ? 0 : BOARD_BOTTOM_Y, q.z], up,
-    radius: SOLDER_BASE_DIAMETER_MM / 2, height: SOLDER_HEIGHT_MM, color: COLORS.solder, tag
+    radius: SOLDER_BASE_DIAMETER_MM / 2, height: SOLDER_HEIGHT_MM, color: COLORS.solder, metal: true, tag
   })
   const jointTag = (id: string, h: Hole, net: string | null, nets?: string[]): Tag =>
     ({ kind: 'joint', id, net, ...(nets && { nets }), label: `${id} joint at ${holeName(h)}` })
-  /** A vertical conductor end through its hole, from y0 down to the cone under the board. */
-  const through = (q: XZ, y0: number, r: number, color: string, tag: Tag): Prim =>
-    ({ kind: 'cylinder', a: [q.x, Math.max(y0, 0), q.z], b: [q.x, Math.min(y0, THROUGH_END_Y), q.z], radius: r, color, tag })
+  /** A bare copper conductor end through its hole, from y0 down to the cone under the board. */
+  const through = (q: XZ, y0: number, r: number, tag: Tag): Prim =>
+    ({ kind: 'cylinder', a: [q.x, Math.max(y0, 0), q.z], b: [q.x, Math.min(y0, THROUGH_END_Y), q.z], radius: r, color: COLORS.copper, metal: true, tag })
 
   // ---- Occupancy for the laid-wire lift -----------------------------------------
   const occ = new Map<string, Occupant[]>() // "key|side"
@@ -120,7 +121,7 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
     const nets = groupNets(gi)
     const tag: Tag = { kind: 'trail', id: t.id, net, ...(nets && { nets }), label: `trail ${t.id}` }
     const y = lyingY(t.side, BARE_R)
-    out.push({ kind: 'tube', points: pts.map((h): V3 => [pos(h).x, y, pos(h).z]), radius: BARE_R, color: COLORS.copper, tag })
+    out.push({ kind: 'tube', points: pts.map((h): V3 => [pos(h).x, y, pos(h).z]), radius: BARE_R, color: COLORS.copper, metal: true, tag })
     const solderAt = [pts[0]!, pts[pts.length - 1]!, ...t.joints.map(parseHole)]
     for (const h of solderAt) {
       const q = pos(h)
@@ -128,7 +129,7 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
       else if (!oneSided) out.push(cone(q, 1, jointTag(t.id, h, net, nets)))
       else {
         // No top pads: the trail end goes down through its hole and is soldered underneath.
-        out.push(through(q, y, BARE_R, COLORS.copper, tag), cone(q, -1, jointTag(t.id, h, net, nets)))
+        out.push(through(q, y, BARE_R, tag), cone(q, -1, jointTag(t.id, h, net, nets)))
       }
     }
   }
@@ -149,9 +150,9 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
     // The leg itself is drawn on the footprint pitch.
     const a = pos(from, FOOTPRINT_PITCH_MM)
     const b = pos(to)
-    const y = lyingY('bottom', LEG_R)
+    const y = LEG_FOLD_Y
     out.push({
-      kind: 'tube', points: [[a.x, y, a.z], [b.x, y, b.z]], radius: LEG_R, color: COLORS.leg,
+      kind: 'tube', points: [[a.x, y, a.z], [b.x, y, b.z]], radius: LEG_R, color: COLORS.leg, metal: true,
       tag: { kind: 'fold', id: f.lead, net, ...(nets && { nets }), label: `${f.lead} folded to ${f.to}` }
     })
     out.push(cone(a, -1, jointTag(f.lead, from, net, nets)), cone(b, -1, jointTag(f.lead, to, net, nets)))
@@ -189,7 +190,8 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
     const net = groupNet(gi)
     const nets = groupNets(gi)
     const tag: Tag = { kind: 'wire', id: w.id, net, ...(nets && { nets }), label: `${w.kind} wire ${w.id}` }
-    const insColor = w.color ?? netColor(net) ?? COLORS.insulatedFallback
+    // The same check as the bench sheet: a colour that is not plain falls back to the net's, then blue.
+    const insColor = safeColor(w.color, safeColor(netColor(net), COLORS.insulatedFallback))
     const first = raw[0]!
     const last = raw[raw.length - 1]!
     let yFirst: number
@@ -211,7 +213,11 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
       yFirst = yLast = base
     } else {
       const segs = laidWire(raw, w.bareSegments, w.side, w.id, pitch, pos, occ)
-      for (const s of segs) out.push({ kind: 'tube', points: s.points, radius: s.bare ? BARE_R : INS_R, color: s.bare ? COLORS.copper : insColor, tag })
+      for (const s of segs) {
+        out.push(s.bare
+          ? { kind: 'tube', points: s.points, radius: BARE_R, color: COLORS.copper, metal: true, tag }
+          : { kind: 'tube', points: s.points, radius: INS_R, color: insColor, tag })
+      }
       yFirst = segs[0]!.points[0]![1]
       const lastSeg = segs[segs.length - 1]!
       yLast = lastSeg.points[lastSeg.points.length - 1]![1]
@@ -222,7 +228,7 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
     // Ends go through their holes and are soldered underneath (connectivity solders every wire end on the bottom).
     for (const [h, y] of [[first, yFirst], [last, yLast]] as const) {
       const q = pos(h)
-      out.push(through(q, y, BARE_R, COLORS.copper, tag), cone(q, -1, jointTag(w.id, h, net, nets)))
+      out.push(through(q, y, BARE_R, tag), cone(q, -1, jointTag(w.id, h, net, nets)))
     }
     for (const j of w.joints) {
       const h = parseHole(j)
@@ -246,11 +252,11 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
     const bnets = groupNets(bgi)
     const tag: Tag = { kind: 'bridge', id: `${sb.a}-${sb.b}`, net: groupNet(bgi), ...(bnets && { nets: bnets }), label: `solder bridge ${sb.a}-${sb.b}` }
     const along: Prim = Math.abs(dx) < 1e-9
-      ? { kind: 'box', center, size: [BRIDGE_WIDTH_MM, BRIDGE_HEIGHT_MM, len], color: COLORS.bridge, tag }
+      ? { kind: 'box', center, size: [BRIDGE_WIDTH_MM, BRIDGE_HEIGHT_MM, len], color: COLORS.bridge, metal: true, tag }
       : Math.abs(dz) < 1e-9
-        ? { kind: 'box', center, size: [len, BRIDGE_HEIGHT_MM, BRIDGE_WIDTH_MM], color: COLORS.bridge, tag }
+        ? { kind: 'box', center, size: [len, BRIDGE_HEIGHT_MM, BRIDGE_WIDTH_MM], color: COLORS.bridge, metal: true, tag }
         // rotY: local +x maps to (cos, 0, -sin), as for part boxes.
-        : { kind: 'box', center, size: [len, BRIDGE_HEIGHT_MM, BRIDGE_WIDTH_MM], rotY: Math.atan2(-dz, dx), color: COLORS.bridge, tag }
+        : { kind: 'box', center, size: [len, BRIDGE_HEIGHT_MM, BRIDGE_WIDTH_MM], rotY: Math.atan2(-dz, dx), color: COLORS.bridge, metal: true, tag }
     out.push(along)
   }
 

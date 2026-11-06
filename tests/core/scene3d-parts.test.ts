@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import { parseBoard, type BoardFile, type Part } from '~core/schema'
-import { placePart, FOOTPRINT_PITCH_MM } from '~core/footprints'
+import { bodyHeightMm, placePart, FOOTPRINT_PITCH_MM } from '~core/footprints'
 import { holeMm, parseHole } from '~core/holes'
 import { buildScene, COLORS, type Prim, type V3 } from '~core/scene3d'
 import { mk } from './helpers'
@@ -13,6 +13,8 @@ function board2(): BoardFile {
 }
 
 const LEG_BOTTOM = -1.6 - 1.5
+/** y of a leg-fold tube's axis: lying on the bottom surface, leg radius 0.3. */
+const FOLD_Y = -1.6 - 0.3
 const close = (a: number, b: number) => Math.abs(a - b) < 1e-6
 
 /** Every point of a prim, for y extents. */
@@ -22,6 +24,19 @@ function ys(p: Prim): number[] {
     case 'cylinder': return [p.a[1], p.b[1]]
     case 'tube': return p.points.map(q => q[1])
     case 'cone': return [p.base[1], p.base[1] + p.up * p.height]
+  }
+}
+/** The highest point of a prim, radius included. */
+function topOf(p: Prim): number {
+  switch (p.kind) {
+    case 'box': return p.center[1] + p.size[1] / 2
+    case 'cylinder': {
+      const len = Math.hypot(p.b[0] - p.a[0], p.b[1] - p.a[1], p.b[2] - p.a[2]) || 1
+      const dy = Math.abs(p.b[1] - p.a[1]) / len
+      return Math.max(p.a[1], p.b[1]) + p.radius * Math.sqrt(Math.max(0, 1 - dy * dy))
+    }
+    case 'tube': return Math.max(...p.points.map(q => q[1])) + p.radius
+    case 'cone': return p.up === 1 ? p.base[1] + p.height : p.base[1]
   }
 }
 const pointsOf = (p: Prim): V3[] => p.kind === 'cylinder' ? [p.a, p.b] : p.kind === 'tube' ? p.points : []
@@ -41,6 +56,8 @@ describe('scene3d parts', () => {
 
   it('every part has a body and one leg per pin', () => {
     expect(s.skipped).toEqual([])
+    const folded = new Set(b.legFolds.map(f => f.lead))
+    expect(folded.size).toBeGreaterThan(0)
     for (const part of b.parts) {
       expect(bodies(part.ref).length, part.ref).toBeGreaterThanOrEqual(1)
       expect(legs(part.ref), part.ref).toHaveLength(placePart(part).pins.length)
@@ -50,9 +67,10 @@ describe('scene3d parts', () => {
         const { x, z } = pinXZ(part, pin)
         const pts = pointsOf(leg)
         expect(pts.length, leg.tag.id).toBeGreaterThanOrEqual(2)
-        // Lowest point is under the board, at the pin hole.
+        // Lowest point is under the board, at the pin hole. A folded lead ends where its fold
+        // tube lies; the fold replaces the cut stub.
         const low = pts.reduce((m, q) => q[1] < m[1] ? q : m)
-        expect(low[1]).toBeCloseTo(LEG_BOTTOM)
+        expect(low[1], leg.tag.id).toBeCloseTo(folded.has(leg.tag.id) ? FOLD_Y : LEG_BOTTOM)
         expect(low[0]).toBeCloseTo(x)
         expect(low[2]).toBeCloseTo(z)
         // It passes through the hole: a point at the hole's x,z at or above the top surface.
@@ -74,13 +92,32 @@ describe('scene3d parts', () => {
     expect(u1.find(l => l.tag.id === 'U1.2')!.tag.net).toBe('IN_A')
   })
 
-  it('DIP-8 box has footprint height and sits above the board', () => {
+  it('DIP-8 box stands 0.5 off the board with its top at the footprint height', () => {
     const box = bodies('U1').find(p => p.kind === 'box')
     expect(box?.kind).toBe('box')
     if (box?.kind !== 'box') return
-    expect(box.size[1]).toBeCloseTo(4.5)
-    expect(box.center[1]).toBeGreaterThan(0)
+    expect(box.size[1]).toBeCloseTo(4.0)
     expect(box.center[1] - box.size[1] / 2).toBeCloseTo(0.5)
+    expect(box.center[1] + box.size[1] / 2).toBeCloseTo(4.5)
+  })
+
+  it('every part\'s highest body point is its bench-sheet height', () => {
+    // Board 2 has every footprint; add a lying diode (its band) and a standing resistor.
+    const more: Part[] = [
+      { ref: 'D1', footprint: 'axial', at: 'C2', to: 'C6', rotation: 0, value: '1N4148', pins: {} },
+      { ref: 'R9', footprint: 'axial', at: 'F2', to: 'F5', rotation: 0, standing: true, pins: {} }
+    ]
+    const extra = buildScene(mk({ parts: more }))
+    const cases = [...b.parts.map(part => ({ part, sc: s })), ...more.map(part => ({ part, sc: extra }))]
+    const seen = new Set<string>()
+    for (const { part, sc } of cases) {
+      const pp = placePart(part)
+      seen.add(pp.fp.id)
+      const own = sc.prims.filter(p => p.tag.kind === 'part' && p.tag.id === part.ref)
+      const top = Math.max(...own.map(topOf))
+      expect(Math.abs(top - bodyHeightMm(part, pp.fp)), `${part.ref} top ${top}`).toBeLessThanOrEqual(0.05)
+    }
+    expect(seen.size).toBe(8)
   })
 
   it('lying axial is a 2.5 cylinder along the lead axis, body-rect long', () => {
@@ -132,7 +169,24 @@ describe('scene3d parts', () => {
         expect(c.base[1]).toBeCloseTo(-1.6)
         expect(c.radius * 2).toBeCloseTo(1.8)
         expect(c.height).toBeCloseTo(0.9)
+        // The kept cone names the leg it solders.
+        expect(c.tag.label, c.tag.id).toBe(`${c.tag.id.replace('.', ' pin ')} joint`)
       }
+    expect(cones.find(c => c.tag.id === 'U1.1')!.tag.label).toBe('U1 pin 1 joint')
+  })
+
+  it('metal parts are marked metal, moulded bodies are not', () => {
+    const metal = (p: Prim) => p.metal === true
+    // Header posts (body boxes and the leg tails), the TO-220 tab, legs and joints.
+    expect(bodies('JH').filter(p => p.color === COLORS.headerPin).every(metal)).toBe(true)
+    expect(legs('JH').every(metal)).toBe(true)
+    expect(bodies('QA').filter(p => p.color === COLORS.tab).every(metal)).toBe(true)
+    expect(bodies('QA').filter(p => p.color === COLORS.tab).length).toBe(1)
+    expect(s.prims.filter(p => p.tag.kind === 'leg').every(metal)).toBe(true)
+    expect(s.prims.filter(p => p.tag.kind === 'joint').every(metal)).toBe(true)
+    // Moulded and printed parts are not.
+    for (const c of [COLORS.black, COLORS.relay, COLORS.terminal, COLORS.tabHole, COLORS.resistor, COLORS.capDisc])
+      expect(s.prims.filter(p => p.tag.kind === 'part' && p.color === c).some(metal), c).toBe(false)
   })
 
   it('one solder cone per hole and side', () => {
@@ -273,13 +327,26 @@ describe('scene3d parts', () => {
       const thin = tab.size[0] < tab.size[2] ? 0 : 2
       expect(Math.abs(hole.b[thin] - hole.a[thin])).toBeGreaterThanOrEqual(tab.size[thin] - 1e-9)
       expect(Math.abs(hole.b[2 - thin] - hole.a[2 - thin])).toBeCloseTo(0)
-      // The legs kink 90 degrees 2.5 mm under the body, then drop into the holes.
-      const bodyBottom = body.center[1] - body.size[1] / 2
+    }
+  })
+
+  it('TO-220 legs are straight; body top = heightMm', () => {
+    for (const ref of ['QA', 'QB']) {
+      const part = b.parts.find(p => p.ref === ref)!
+      const pp = placePart(part)
+      const own = bodies(ref)
+      // The body and tab stand on the board; the tab reaches the footprint height (15.5).
+      expect(Math.min(...own.flatMap(ys)), ref).toBeCloseTo(0)
+      expect(Math.max(...own.map(topOf)), ref).toBeCloseTo(pp.fp.body.heightMm)
+      expect(pp.fp.body.heightMm).toBe(15.5)
       for (const leg of legs(ref)) {
-        expect(leg.kind).toBe('tube')
-        if (leg.kind !== 'tube') continue
-        expect(leg.points.some(q => close(q[1], bodyBottom - 2.5))).toBe(true)
-        expect(bodyBottom - 2.5).toBeGreaterThan(0)
+        const { x, z } = pinXZ(part, leg.tag.id.split('.')[1]!)
+        // Vertical at its hole, from the body bottom down through the board: no kink.
+        for (const q of pointsOf(leg)) {
+          expect(q[0], leg.tag.id).toBeCloseTo(x)
+          expect(q[2], leg.tag.id).toBeCloseTo(z)
+        }
+        expect(Math.max(...ys(leg)), leg.tag.id).toBeCloseTo(0)
       }
     }
   })

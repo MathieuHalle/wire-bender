@@ -7,6 +7,7 @@ import type { Prim, Scene3D, V3 } from './types'
 
 export * from './types'
 export * from './dims'
+export * from './tags'
 
 /** Keep the first solder cone per (hole, side); every cone in the scene goes through here. */
 export function dedupCones(prims: Prim[]): Prim[] {
@@ -63,6 +64,8 @@ export function buildScene(board: BoardFile): Scene3D {
   const skipped: string[] = []
   let prims: Prim[] = []
   const conn = sceneConnectivity(board)
+  // A folded lead's fold tube replaces its cut stub under the board.
+  const folded = new Set(board.legFolds.map(f => f.lead))
   for (const part of board.parts) {
     let placed
     try {
@@ -73,7 +76,7 @@ export function buildScene(board: BoardFile): Scene3D {
         : `part ${part.ref}: unknown footprint ${part.footprint}`)
       continue
     }
-    prims.push(...partPrims(placed, lead => leadNets(conn, lead)))
+    prims.push(...partPrims(placed, lead => leadNets(conn, lead), folded))
   }
   // After the parts, so a leg's own joint keeps its cone.
   prims.push(...conductorPrims(board, skipped, conn))

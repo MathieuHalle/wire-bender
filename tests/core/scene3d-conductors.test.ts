@@ -237,4 +237,83 @@ describe('scene3d conductors', () => {
     expect(s.prims.find(p => p.tag.kind === 'leg' && p.tag.id === 'R1.b')!.tag.nets).toEqual([])
     expect(s.prims.find(p => p.tag.kind === 'part')!.tag.nets).toBeUndefined()
   })
+
+  it('bare copper, folds, bridges and joints are metal; insulation is not', () => {
+    const s = buildScene(mk({
+      wires: [wire({ id: 'W1', points: ['B2', 'B4', 'D4', 'D7'], bareSegments: [0, 2], color: '#ff0000' })],
+      trails: [trail('T1', ['F2', 'F6'])],
+      solderBridges: [{ side: 'bottom', a: 'H3', b: 'H4' }]
+    }))
+    const ts = tubes(s.prims, 'wire', 'W1')
+    expect(ts.map(t => t.metal === true)).toEqual([true, false, true])
+    // The copper ends through the holes are bare too.
+    expect(cyls(s.prims).filter(c => c.tag.id === 'W1').every(c => c.metal)).toBe(true)
+    expect(tubes(s.prims, 'trail', 'T1')[0]!.metal).toBe(true)
+    expect(s.prims.filter(p => p.tag.kind === 'bridge').every(p => p.metal)).toBe(true)
+    expect(cones(s.prims).every(c => c.metal)).toBe(true)
+    const b2 = buildScene(board2())
+    expect(tubes(b2.prims, 'fold').every(t => t.metal)).toBe(true)
+    // An insulated flying wire is not metal.
+    const fly = buildScene(mk({ wires: [wire({ id: 'W2', kind: 'flying', points: ['B2', 'B8'] })] }))
+    expect(tubes(fly.prims, 'wire', 'W2')[0]!.metal).toBeFalsy()
+  })
+
+  it('a wire colour that is not a plain colour falls back to the net colour, then blue', () => {
+    const bad = 'red;stroke:url(javascript:alert(1))'
+    const withNet = buildScene(mk({
+      nets: { SIG: { color: '#00aa00' } },
+      parts: [axial('R1', 'B2', 'E2', 'SIG')],
+      wires: [wire({ id: 'W1', points: ['B2', 'B6'], color: bad })]
+    }))
+    expect(tubes(withNet.prims, 'wire', 'W1')[0]!.color).toBe('#00aa00')
+    const noNet = buildScene(mk({ wires: [wire({ id: 'W1', points: ['B2', 'B6'], color: bad })] }))
+    expect(tubes(noNet.prims, 'wire', 'W1')[0]!.color).toBe('#1f6fb2')
+    // A bad net colour is not used either.
+    const badNet = buildScene(mk({
+      nets: { SIG: { color: 'x(1)' } },
+      parts: [axial('R1', 'B2', 'E2', 'SIG')],
+      wires: [wire({ id: 'W1', points: ['B2', 'B6'], color: bad })]
+    }))
+    expect(tubes(badNet.prims, 'wire', 'W1')[0]!.color).toBe('#1f6fb2')
+    // A plain colour is kept.
+    const ok = buildScene(mk({ wires: [wire({ id: 'W1', points: ['B2', 'B6'], color: 'orange' })] }))
+    expect(tubes(ok.prims, 'wire', 'W1')[0]!.color).toBe('orange')
+  })
+
+  it('odd conductors and a short go through buildScene without breaking it', () => {
+    let s: ReturnType<typeof buildScene> | undefined
+    expect(() => {
+      s = buildScene(mk({
+        nets: { GND: {}, V12: {} },
+        parts: [axial('R1', 'B2', 'E2', 'GND'), axial('R2', 'B6', 'E6', 'V12')],
+        trails: [
+          trail('T1', ['B2', 'B6']), // the short: GND to V12
+          trail('T2', [])
+        ],
+        wires: [
+          wire({ id: 'W1', kind: 'flying', points: ['G2', 'G2'] }),
+          wire({ id: 'W2', points: ['H3', 'H3'] })
+        ],
+        legFolds: [{ lead: 'R7.a', to: 'J5' }],
+        solderBridges: [{ side: 'bottom', a: 'C8', b: 'C8' }]
+      }))
+    }).not.toThrow()
+    const sc = s!
+    for (const v of [...sc.bounds.min, ...sc.bounds.max]) expect(Number.isFinite(v)).toBe(true)
+    for (const p of sc.prims) {
+      const pts = p.kind === 'box' ? [p.center] : p.kind === 'cylinder' ? [p.a, p.b] : p.kind === 'tube' ? p.points : [p.base]
+      for (const q of pts) for (const v of q) expect(Number.isFinite(v), `${p.tag.kind} ${p.tag.id}`).toBe(true)
+    }
+    expect(sc.skipped).toEqual([
+      'trail T2: 0 points, skipped',
+      'leg fold R7.a: unknown lead, skipped',
+      'wire W1: both ends in hole G2, skipped',
+      'wire W2: zero length (all points at H3), skipped'
+    ])
+    // The short is drawn and carries both nets.
+    expect(tubes(sc.prims, 'trail', 'T1')[0]!.tag.nets).toEqual(['GND', 'V12'])
+    // The self-bridge is a single pad-sized blob.
+    const bridge = sc.prims.find(p => p.tag.kind === 'bridge')
+    expect(bridge?.kind).toBe('box')
+  })
 })
