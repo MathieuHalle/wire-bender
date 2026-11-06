@@ -15,13 +15,17 @@ describe('pageKey', () => {
     expect(pageKey('Escape', 'bottom', 'bottom')).toBeNull()
   })
 
-  it('F flips one large side, not in 3D', () => {
+  it('tool keys (H I P E J) are not page keys', () => {
+    for (const k of ['h', 'H', 'i', 'p', 'e', 'j']) expect(pageKey(k, 'both', 'both'), k).toBeNull()
+  })
+
+  it('F flips between framing the top and the bottom side, not in 3D', () => {
     expect(pageKey('f', 'both', 'both')).toEqual({ view: 'top' })
     expect(pageKey('F', 'top', 'top')).toEqual({ view: 'bottom' })
     expect(pageKey('f', '3d', 'both')).toBeNull()
   })
 
-  it('zoom keys work in 2D and are off in 3D', () => {
+  it('zoom keys (+ − step, 0 fits both) work in 2D and are off in 3D', () => {
     expect(pageKey('+', 'both', 'both')).toEqual({ zoom: 1 })
     expect(pageKey('=', 'top', 'top')).toEqual({ zoom: 1 })
     expect(pageKey('-', 'both', 'both')).toEqual({ zoom: -1 })

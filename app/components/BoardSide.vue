@@ -5,8 +5,9 @@ import { holeKey, holeName, type Hole } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
 import { placePart, type PlacedPart } from '~core/footprints'
 import { buildConnectivity, type Connectivity } from '~core/connectivity'
-import { litOf, makeGeo, type Group, type Tool } from '~/utils/boardView'
+import { litOf, makeGeo, SIDE_MARGIN, sideBox, sideExtent, type Group, type Tool } from '~/utils/boardView'
 import { ALL_LAYERS, type Layers } from '~/utils/layers'
+import { CANVAS_CONTEXT } from '~/utils/canvasContext'
 
 const props = withDefaults(defineProps<{
   board: BoardFile
@@ -24,14 +25,12 @@ const props = withDefaults(defineProps<{
   drawFrom?: Hole | null
   /** Holes of the finding picked in the findings panel (a second highlight, separate from the net). */
   markHoles?: Hole[]
-  /** 1 = fit the width; above 1 the side scrolls in its box. */
-  zoom?: number
   /**
    * The Edit tab's view layers. A hidden layer is not drawn; hover, tooltips and clicks
    * still work on the board data (connectivity is unchanged).
    */
   layers?: Layers
-}>(), { layers: () => ({ ...ALL_LAYERS }), zoom: 1, mirrored: false, highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
+}>(), { layers: () => ({ ...ALL_LAYERS }), mirrored: false, highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
 
 const emit = defineEmits<{
   'hole-click': [hole: Hole]
@@ -39,7 +38,7 @@ const emit = defineEmits<{
   'hover': [hole: Hole | null]
 }>()
 
-const MARGIN = 3
+const MARGIN = SIDE_MARGIN
 const LABEL = 1.25 // font size, mm
 
 const geo = computed(() => makeGeo(props.board, props.mirrored))
@@ -48,25 +47,10 @@ const connectivity = computed(() => props.conn ?? buildConnectivity(props.board)
 const lit = computed(() => litOf(props.highlightNet))
 
 /** Board outline (half a pitch past the outer holes) and everything that overhangs it. */
-const extent = computed(() => {
-  const g = geo.value
-  const half = g.pitch / 2
-  let x0 = -half
-  let y0 = -half
-  let x1 = g.span + half
-  let y1 = (g.rows - 1) * g.pitch + half
-  for (const p of placedParts.value) {
-    const r = g.rect(p.bodyRectMm)
-    x0 = Math.min(x0, r.x)
-    y0 = Math.min(y0, r.y)
-    x1 = Math.max(x1, r.x + r.w)
-    y1 = Math.max(y1, r.y + r.h)
-  }
-  return { x0, y0, x1, y1 }
-})
+const extent = computed(() => sideExtent(geo.value, placedParts.value))
 const viewBox = computed(() => {
-  const e = extent.value
-  return `${e.x0 - MARGIN} ${e.y0 - MARGIN} ${e.x1 - e.x0 + 2 * MARGIN} ${e.y1 - e.y0 + 2 * MARGIN}`
+  const b = sideBox(geo.value, placedParts.value)
+  return `${b.x} ${b.y} ${b.w} ${b.h}`
 })
 
 const colLabels = computed(() =>
@@ -77,26 +61,19 @@ const rowLabels = computed(() =>
     y: geo.value.pt({ col: 1, row: i + 1 }).y
   })))
 
-// ---- Zoom: keep the centre of the view where it was --------------------------------
-const scroller = ref<HTMLDivElement | null>(null)
-watch(() => props.zoom, async (z, old) => {
-  const el = scroller.value
-  if (!el || !old) return
-  const cx = (el.scrollLeft + el.clientWidth / 2) / old
-  const cy = (el.scrollTop + el.clientHeight / 2) / old
-  await nextTick()
-  el.scrollLeft = cx * z - el.clientWidth / 2
-  el.scrollTop = cy * z - el.clientHeight / 2
-})
-
 // ---- Pointer -> hole / segment ------------------------------------------------------
+const rootEl = ref<HTMLDivElement | null>(null)
 const svgEl = ref<SVGSVGElement | null>(null)
 const hovered = ref<Hole | null>(null)
-const tipAt = ref<{ x: number, y: number, flip: boolean } | null>(null)
+const tipAt = ref<{ x: number, y: number, flip: boolean, up: boolean } | null>(null)
 /** Pointer in fractional hole coordinates (col, row), while over the board. */
 const pointer = ref<{ fc: number, fr: number } | null>(null)
+/** The canvas this side is drawn in (absent when drawn on its own). */
+const canvas = inject(CANVAS_CONTEXT, null)
+/** Where the pointer last was over this side, in client px. */
+let lastClient: { x: number, y: number } | null = null
 
-function boardPoint(ev: PointerEvent | MouseEvent) {
+function boardPoint(ev: { clientX: number, clientY: number }) {
   const svg = svgEl.value
   const ctm = svg?.getScreenCTM()
   if (!svg || !ctm) return null
@@ -116,19 +93,39 @@ function holeAt(fc: number, fr: number): Hole | null {
 }
 
 function onMove(ev: PointerEvent) {
-  const p = boardPoint(ev)
+  track(ev.clientX, ev.clientY)
+}
+
+/** Hover, tooltip and rubber band for the pointer at (cx, cy) client px. */
+function track(cx: number, cy: number) {
+  lastClient = { x: cx, y: cy }
+  const p = boardPoint({ clientX: cx, clientY: cy })
   pointer.value = p
   const h = p ? holeAt(p.fc, p.fr) : null
-  const wrap = svgEl.value?.parentElement?.getBoundingClientRect()
-  tipAt.value = h && wrap
-    ? { x: ev.clientX - wrap.left, y: ev.clientY - wrap.top, flip: ev.clientX - wrap.left > wrap.width * 0.6 }
+  // The tooltip sits in the canvas when there is one, flipped so it stays inside it.
+  const box = (canvas?.overlay.value ?? rootEl.value)?.getBoundingClientRect()
+  tipAt.value = h && box
+    ? { x: cx - box.left, y: cy - box.top, flip: cx - box.left > box.width * 0.6, up: cy - box.top > box.height * 0.6 }
     : null
   if (h?.col === hovered.value?.col && h?.row === hovered.value?.row) return
   hovered.value = h
   emit('hover', h)
 }
 
+// A zoom or pan moves the board under a resting pointer: hit-test again once it is drawn.
+if (canvas) {
+  watch(canvas.camera, () => {
+    const c = lastClient
+    const svg = svgEl.value
+    if (!c || !svg) return
+    const under = document.elementFromPoint(c.x, c.y)
+    if (under && svg.contains(under)) track(c.x, c.y)
+    else onLeave()
+  }, { flush: 'post' })
+}
+
 function onLeave() {
+  lastClient = null
   tipAt.value = null
   pointer.value = null
   if (hovered.value) emit('hover', null)
@@ -196,6 +193,22 @@ const band = computed(() => {
 
 const marks = computed(() => props.markHoles.map(h => ({ k: holeKey(h), ...geo.value.pt(h) })))
 
+/** The tooltip's place: next to the cursor, on the side that keeps it inside the box. */
+const tipStyle = computed(() => {
+  const t = tipAt.value
+  if (!t) return {}
+  return {
+    ...(t.flip ? { right: `calc(100% - ${t.x - 14}px)` } : { left: `${t.x + 14}px` }),
+    ...(t.up ? { bottom: `calc(100% - ${t.y - 14}px)` } : { top: `${t.y + 14}px` })
+  }
+})
+
+/** Navigate shows the canvas's grab cursor; inspect an arrow; the edit tools a crosshair. */
+const cursorClass = computed(() => {
+  if (props.tool === 'navigate') return ''
+  return props.tool === 'inspect' ? 'cursor-default' : 'cursor-crosshair'
+})
+
 const ringed = computed(() => {
   const h = hovered.value ?? props.hoverHole
   return h ? geo.value.pt(h) : null
@@ -203,18 +216,16 @@ const ringed = computed(() => {
 </script>
 
 <template>
-  <div class="relative">
-    <div
-      ref="scroller"
-      class="overflow-auto"
-      :class="zoom > 1 ? 'max-h-[80vh] rounded border border-default' : ''"
-    >
+  <div
+    ref="rootEl"
+    class="relative size-full"
+  >
+    <div class="size-full">
       <svg
         ref="svgEl"
         :viewBox="viewBox"
-        :style="{ width: `${zoom * 100}%` }"
-        class="mx-auto block h-auto max-w-none select-none"
-        :class="tool === 'inspect' ? 'cursor-default' : 'cursor-crosshair'"
+        class="block size-full select-none"
+        :class="cursorClass"
         font-family="'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace"
         role="img"
         :aria-label="`Board ${side} side${mirrored ? ', mirrored (seen from below)' : ''}`"
@@ -342,25 +353,28 @@ const ringed = computed(() => {
       </svg>
     </div>
 
-    <div
-      v-if="tip && tipAt"
-      class="pointer-events-none absolute z-10 w-max rounded-md border border-default bg-default px-2 py-1 font-mono text-xs whitespace-nowrap shadow-md"
-      :style="tipAt.flip
-        ? { right: `calc(100% - ${tipAt.x - 14}px)`, top: `${tipAt.y + 14}px` }
-        : { left: `${tipAt.x + 14}px`, top: `${tipAt.y + 14}px` }"
+    <Teleport
+      :to="canvas?.overlay.value ?? 'body'"
+      :disabled="!canvas?.overlay.value"
     >
-      <div class="font-semibold">
-        {{ tip.name }}
-      </div>
       <div
-        v-for="p in tip.pins"
-        :key="p"
+        v-if="tip && tipAt"
+        class="pointer-events-none absolute z-10 w-max rounded-md border border-default bg-default px-2 py-1 font-mono text-xs whitespace-nowrap shadow-md"
+        :style="tipStyle"
       >
-        {{ p }}
+        <div class="font-semibold">
+          {{ tip.name }}
+        </div>
+        <div
+          v-for="p in tip.pins"
+          :key="p"
+        >
+          {{ p }}
+        </div>
+        <div class="text-muted">
+          {{ tip.net }}
+        </div>
       </div>
-      <div class="text-muted">
-        {{ tip.net }}
-      </div>
-    </div>
+    </Teleport>
   </div>
 </template>

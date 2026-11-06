@@ -5,13 +5,16 @@ import { runCheck, type Finding } from '~core/check'
 import { tagNets, type Tag } from '~core/scene3d'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
-import { jointSide, pageKey, zoomStep, type View } from '~/utils/boardView'
+import { jointSide, makeGeo, pageKey, sideBox, sideFrames, type View } from '~/utils/boardView'
 import { fallbackAlert } from '~/utils/board3dFallback'
 import { defaultPanel, loadPanel, savePanel, type PanelState } from '~/utils/sidePanel'
 import { ALL_LAYERS } from '~/utils/layers'
 
 const { board, errors, errorKind, path, revision, status, canUndo, canRedo, undo, redo, reloadFromDisk, keepMine } = useBoard()
-/** 'both' side by side, one large side (key F flips), or the 3D view (key 3, look only). */
+/**
+ * What the canvas was last framed on: both sides, one side (key F flips), or the 3D view
+ * (key 3, look only). In 2D a view is a camera move; the user can pan away from it.
+ */
 const view = ref<View>('both')
 const { tool, drawing, onHoleClick, onSegmentClick, addJoint, endDrawing } = useTools({ locked: () => view.value === '3d' })
 /** The 2D view the 3D one was entered from; key 3 goes back to it. */
@@ -23,8 +26,15 @@ watch(view, (v) => {
 })
 
 const mirrorBottom = ref(true)
-/** Shared by both sides so they stay the same scale. */
-const zoom = ref(1)
+/** The canvas zoom, in percent of "fit both sides". */
+const zoomPct = ref(100)
+const canvas = ref<{ frame(which: 'both' | Side, animate?: boolean): void, zoomStep(dir: 1 | -1): void } | null>(null)
+
+/** Picks a view; a 2D one frames its sides (once the canvas is there, coming from 3D). */
+function pickView(v: View) {
+  view.value = v
+  if (v !== '3d') nextTick(() => canvas.value?.frame(v))
+}
 
 const placed = computed(() => board.value?.parts.map(placePart) ?? [])
 const conn = computed(() => (board.value ? buildConnectivity(board.value) : null))
@@ -88,11 +98,31 @@ const hint = computed(() => (drawing.value
   ? `Drawing ${drawing.value.trailId} on ${drawing.value.side}: click the last hole again or press Esc to end`
   : null))
 
-const sides = computed<Side[]>(() => (view.value === 'both' || view.value === '3d' ? ['top', 'bottom'] : [view.value]))
-
 function onHover(side: Side, hole: Hole | null) {
   hover.value = hole ? { side, hole } : null
 }
+
+/**
+ * Per-side handlers, made once: the canvas re-renders its frames on every pan, and a new
+ * handler each time would re-render both sides with it.
+ */
+const sideEvents = Object.fromEntries((['top', 'bottom'] as const).map(s => [s, {
+  hover: (h: Hole | null) => onHover(s, h),
+  hole: (h: Hole) => onHoleClick(s, h),
+  segment: (a: Hole, b: Hole) => onSegmentClick(s, a, b)
+}])) as Record<Side, { hover(h: Hole | null): void, hole(h: Hole): void, segment(a: Hole, b: Hole): void }>
+
+/** The two sides as frames on the canvas, in mm: top on the left, bottom on the right. */
+const frames = computed(() => {
+  const b = board.value
+  if (!b) return []
+  const size = (s: Side) => {
+    const box = sideBox(makeGeo(b, s === 'bottom' && mirrorBottom.value), placed.value)
+    return { w: box.w, h: box.h }
+  }
+  const at = sideFrames({ top: size('top'), bottom: size('bottom') })
+  return (['top', 'bottom'] as const).map(s => ({ id: s, title: sideTitle(s), rect: at[s] }))
+})
 
 const STATUS = {
   saved: { label: 'saved', color: 'success' },
@@ -148,8 +178,12 @@ function onKey(e: KeyboardEvent) {
   const a = pageKey(e.key, view.value, last2d.value)
   if (!a) return
   if ('panel' in a) panel.value.open = !panel.value.open
-  else if ('view' in a) view.value = a.view
-  else zoom.value = a.zoom === 0 ? 1 : zoomStep(zoom.value, a.zoom)
+  // In and out of 3D the canvas keeps its camera; F frames a side.
+  else if ('view' in a) {
+    if (view.value === '3d' || a.view === '3d') view.value = a.view
+    else pickView(a.view)
+  } else if (a.zoom === 0) pickView('both')
+  else canvas.value?.zoomStep(a.zoom)
 }
 onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
@@ -160,8 +194,8 @@ const sideTitle = (s: Side) => (s === 'top'
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col">
-    <header class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-default px-4 py-2">
+  <div class="flex h-dvh flex-col overflow-hidden">
+    <header class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-default px-4 py-2">
       <img
         src="/icon.svg"
         alt=""
@@ -198,15 +232,20 @@ const sideTitle = (s: Side) => (s === 'top'
     </header>
 
     <Toolbar
-      v-model:view="view"
       v-model:mirror-bottom="mirrorBottom"
-      v-model:zoom="zoom"
+      class="shrink-0"
+      :view="view"
+      :zoom="zoomPct"
       :hint="hint"
+      @update:view="pickView"
+      @zoom-in="canvas?.zoomStep(1)"
+      @zoom-out="canvas?.zoomStep(-1)"
+      @fit="pickView('both')"
     />
 
     <UAlert
       v-if="status === 'conflict'"
-      class="mx-4 mt-3"
+      class="mx-4 mt-3 shrink-0"
       color="warning"
       variant="subtle"
       icon="i-lucide-file-warning"
@@ -250,7 +289,7 @@ const sideTitle = (s: Side) => (s === 'top'
 
     <UAlert
       v-if="errors.length"
-      class="mx-4 mt-3"
+      class="mx-4 mt-3 max-h-[30dvh] shrink-0 overflow-y-auto"
       color="error"
       variant="subtle"
       icon="i-lucide-triangle-alert"
@@ -274,8 +313,8 @@ const sideTitle = (s: Side) => (s === 'top'
       </template>
     </UAlert>
 
-    <div class="flex flex-1 flex-col gap-4 p-4 lg:flex-row">
-      <main class="min-w-0 flex-1">
+    <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:flex-row">
+      <main class="flex min-h-0 min-w-0 flex-1 flex-col">
         <p
           v-if="!board || !loaded"
           class="text-muted"
@@ -286,6 +325,7 @@ const sideTitle = (s: Side) => (s === 'top'
           <!-- A failed 3D load (or a throw while it starts) shows the fallback, not nothing. -->
           <NuxtErrorBoundary>
             <LazyBoard3D
+              class="min-h-0 flex-1"
               :board="board"
               :highlight-nets="highlightNets"
               :mark-holes="markHoles"
@@ -301,38 +341,34 @@ const sideTitle = (s: Side) => (s === 'top'
             </template>
           </NuxtErrorBoundary>
         </ClientOnly>
-        <div
+        <BoardCanvas
           v-else
-          class="grid gap-4"
-          :class="view === 'both' ? 'md:grid-cols-2' : 'mx-auto max-w-4xl'"
+          ref="canvas"
+          class="min-h-0 flex-1"
+          :frames="frames"
+          :persist-key="board.name"
+          :tool="tool"
+          @zoom="(p: number) => zoomPct = p"
         >
-          <section
-            v-for="s in sides"
-            :key="s"
-            class="min-w-0"
-          >
-            <h2 class="mb-1 text-sm font-medium text-muted">
-              {{ sideTitle(s) }}
-            </h2>
+          <template #frame="{ frame: f }">
             <BoardSide
               :board="board"
-              :side="s"
-              :mirrored="s === 'bottom' && mirrorBottom"
+              :side="f.id"
+              :mirrored="f.id === 'bottom' && mirrorBottom"
               :highlight-net="highlight"
               :hover-hole="hover?.hole ?? null"
               :tool="tool"
               :conn="conn ?? undefined"
               :placed="placed"
-              :draw-from="drawFrom?.side === s ? drawFrom.hole : null"
+              :draw-from="drawFrom?.side === f.id ? drawFrom.hole : null"
               :mark-holes="markHoles"
-              :zoom="zoom"
               :layers="layers"
-              @hover="(h: Hole | null) => onHover(s, h)"
-              @hole-click="(h: Hole) => onHoleClick(s, h)"
-              @segment-click="(a: Hole, b: Hole) => onSegmentClick(s, a, b)"
+              @hover="sideEvents[f.id].hover"
+              @hole-click="sideEvents[f.id].hole"
+              @segment-click="sideEvents[f.id].segment"
             />
-          </section>
-        </div>
+          </template>
+        </BoardCanvas>
       </main>
 
       <SidePanel

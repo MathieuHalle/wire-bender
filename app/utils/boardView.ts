@@ -4,9 +4,11 @@
 import { holeKey, holeMm, type Hole } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
 import type { Conductor, Connectivity } from '~core/connectivity'
+import type { PlacedPart } from '~core/footprints'
 
-export type Tool = 'inspect' | 'pencil' | 'erase' | 'joint'
-/** Both sides side by side, one large side, or the 3D view. */
+/** `navigate` only pans (any left-drag) and never edits; the others click to act. */
+export type Tool = 'navigate' | 'inspect' | 'pencil' | 'erase' | 'joint'
+/** Frame both sides on the canvas, frame one side, or the 3D view. */
 export type View = 'both' | Side | '3d'
 export type Group = Connectivity['groups'][number]
 
@@ -85,13 +87,46 @@ export function jointSide(board: BoardFile, conn: Connectivity, hole: Hole): Sid
   return null
 }
 
-/** Zoom levels of the 2D preview; 1 fits the width, below 1 the board is centred smaller. */
-export const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3, 4, 6] as const
+/** Space (mm) around a side's drawing, for the edge labels. */
+export const SIDE_MARGIN = 3
 
-/** The next zoom level up (dir 1) or down (dir -1) from `z`, clamped to the steps. */
-export function zoomStep(z: number, dir: 1 | -1): number {
-  if (dir > 0) return ZOOM_STEPS.find(s => s > z + 1e-9) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1]!
-  return [...ZOOM_STEPS].reverse().find(s => s < z - 1e-9) ?? ZOOM_STEPS[0]
+/**
+ * A side's drawing area in drawing mm: the board outline (half a pitch past the outer
+ * holes), everything that overhangs it, and SIDE_MARGIN for the labels. Its size is the
+ * same mirrored or not; only its x moves.
+ */
+export function sideExtent(geo: Geo, placed: PlacedPart[]): { x0: number, y0: number, x1: number, y1: number } {
+  const half = geo.pitch / 2
+  let x0 = -half
+  let y0 = -half
+  let x1 = geo.span + half
+  let y1 = (geo.rows - 1) * geo.pitch + half
+  for (const p of placed) {
+    const r = geo.rect(p.bodyRectMm)
+    x0 = Math.min(x0, r.x)
+    y0 = Math.min(y0, r.y)
+    x1 = Math.max(x1, r.x + r.w)
+    y1 = Math.max(y1, r.y + r.h)
+  }
+  return { x0, y0, x1, y1 }
+}
+
+/** The SVG viewBox of a side: its extent plus the label margin. */
+export function sideBox(geo: Geo, placed: PlacedPart[]): { x: number, y: number, w: number, h: number } {
+  const e = sideExtent(geo, placed)
+  return { x: e.x0 - SIDE_MARGIN, y: e.y0 - SIDE_MARGIN, w: e.x1 - e.x0 + 2 * SIDE_MARGIN, h: e.y1 - e.y0 + 2 * SIDE_MARGIN }
+}
+
+/**
+ * Where the two sides sit on the canvas, in world mm: top on the left, bottom on the
+ * right, a gap between them, both aligned at y 0.
+ */
+export function sideFrames(sizes: Record<Side, { w: number, h: number }>): Record<Side, { x: number, y: number, w: number, h: number }> {
+  const gap = Math.max(sizes.top.w, sizes.bottom.w) * 0.2
+  return {
+    top: { x: 0, y: 0, ...sizes.top },
+    bottom: { x: sizes.top.w + gap, y: 0, ...sizes.bottom }
+  }
 }
 
 /** Why a control is off in the 3D view, which has no edit tools. */
@@ -102,14 +137,14 @@ export function lockedAttrs(locked: boolean, title?: string): { disabled: boolea
   return { disabled: locked, title: locked ? LOCKED_TITLE : title }
 }
 
-/** What a page key does: switch the view, step the zoom (0: back to fit), or toggle the side panel. */
+/** What a page key does: switch the view, step the zoom (0: fit both sides), or toggle the side panel. */
 export type KeyAction = { view: View } | { zoom: 1 | -1 | 0 } | { panel: 'toggle' } | null
 
 /**
  * The page's view and zoom keys. `3` toggles the 3D view (off goes back to `last2d`, the 2D
- * view it came from); Esc leaves 3D for both sides; F flips one large side. F and the zoom
- * keys do nothing in 3D, where the drawing is not shown. `[` collapses or opens the side
- * panel, in every view.
+ * view it came from); Esc leaves 3D for both sides; F flips between framing the top and
+ * the bottom side. F and the zoom keys do nothing in 3D, where the canvas is not shown.
+ * `[` collapses or opens the side panel, in every view. Tool keys (H I P E J) are useTools'.
  */
 export function pageKey(key: string, view: View, last2d: Exclude<View, '3d'>): KeyAction {
   if (key === '[') return { panel: 'toggle' }

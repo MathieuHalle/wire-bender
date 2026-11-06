@@ -1,5 +1,5 @@
 // The editing tools: pencil (draw trails), erase (cut a segment), joint (toggle a solder
-// joint), inspect (no edits). Every successful click is one `apply`, so one undo step; a
+// joint), inspect (no edits), navigate (no edits; every left-drag pans the canvas). Every successful click is one `apply`, so one undo step; a
 // rejected edit changes nothing and shows its reason. All edits go through core/edit.
 import { onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
 import type { BoardFile, Side } from '~core/schema'
@@ -17,14 +17,14 @@ export interface ToolDeps {
   notify(reason: string): void
   /** Clock in ms (tests pass a fake). */
   now?: () => number
-  /** True while editing is off (the 3D view): no edits, no tool keys, no undo. */
+  /** True while editing is off (the 3D view): no edits, no edit-tool keys, no undo (H for Navigate still works). */
   locked?: () => boolean
 }
 
 /** A second click this soon on the hole where a drawing just ended is the rest of a double click. */
 const DOUBLE_CLICK_MS = 500
 
-const TOOL_KEYS: Record<string, Tool> = { i: 'inspect', p: 'pencil', e: 'erase', j: 'joint' }
+const TOOL_KEYS: Record<string, Tool> = { h: 'navigate', i: 'inspect', p: 'pencil', e: 'erase', j: 'joint' }
 
 /** Typing in a field must never trigger a shortcut. */
 export function isTyping(target: EventTarget | null): boolean {
@@ -77,7 +77,7 @@ export function createTools(deps: ToolDeps) {
       take(toggleJoint(b, side, hole), b)
       return
     }
-    if (tool.value !== 'pencil') return // inspect: nothing; erase acts on segments
+    if (tool.value !== 'pencil') return // inspect, navigate: nothing; erase acts on segments
     // The side a click lands on is the side being edited.
     if (drawing.value && drawing.value.side !== side) endDrawing()
     // Double click on a hole that already has a trace: the first click added it and ended
@@ -107,8 +107,13 @@ export function createTools(deps: ToolDeps) {
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if (isTyping(e.target) || locked()) return
+    if (isTyping(e.target)) return
     const key = e.key.toLowerCase()
+    // Navigate edits nothing, so it may be picked in 3D too.
+    if (locked()) {
+      if (key === 'h' && !e.metaKey && !e.ctrlKey && !e.altKey) tool.value = 'navigate'
+      return
+    }
     if ((e.metaKey || e.ctrlKey) && key === 'z') {
       e.preventDefault()
       if (e.shiftKey) deps.redo()

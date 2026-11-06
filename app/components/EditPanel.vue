@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// The side panel's Edit tab: the editing tools, undo/redo, and the view layers. The
-// tools are off in 3D (look only); the layers work in both views and never touch the file.
+// The side panel's Edit tab: the tools, undo/redo, and the view layers. The editing tools
+// are off in 3D (look only), Navigate (pan, no edits) stays on; the layers work in both
+// views and never touch the file.
 import { LOCKED_TITLE, type Tool } from '~/utils/boardView'
 import { blindHint, type Layers } from '~/utils/layers'
 
@@ -16,6 +17,7 @@ const tool = defineModel<Tool>('tool', { required: true })
 const layers = defineModel<Layers>('layers', { required: true })
 
 const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
+  { id: 'navigate', label: 'Navigate', icon: 'i-lucide-hand', key: 'H' },
   { id: 'inspect', label: 'Inspect', icon: 'i-lucide-mouse-pointer-2', key: 'I' },
   { id: 'pencil', label: 'Pencil', icon: 'i-lucide-pencil', key: 'P' },
   { id: 'erase', label: 'Erase', icon: 'i-lucide-eraser', key: 'E' },
@@ -54,10 +56,10 @@ const blind = computed(() => (props.locked ? null : blindHint(tool.value, layers
           :icon="t.icon"
           :variant="tool === t.id ? 'solid' : 'outline'"
           :label="`${t.label} (${t.key})`"
-          :title="locked ? LOCKED_TITLE : `${t.label} (${t.key})`"
+          :title="locked && t.id !== 'navigate' ? LOCKED_TITLE : `${t.label} (${t.key})`"
           :aria-pressed="tool === t.id"
-          :disabled="locked"
-          @click="locked || (tool = t.id)"
+          :disabled="locked && t.id !== 'navigate'"
+          @click="(locked && t.id !== 'navigate') || (tool = t.id)"
         />
       </div>
       <div class="mt-2 flex gap-1">

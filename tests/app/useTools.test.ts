@@ -184,8 +184,8 @@ describe('useTools', () => {
     expect(trails()[0]!.joints).toEqual(['B3'])
   })
 
-  test('keys: I P E J pick tools, Ctrl/Cmd+Z undo, Shift+Ctrl/Cmd+Z redo', () => {
-    for (const [k, tool] of [['p', 'pencil'], ['E', 'erase'], ['j', 'joint'], ['i', 'inspect']] as const) {
+  test('keys: H I P E J pick tools, Ctrl/Cmd+Z undo, Shift+Ctrl/Cmd+Z redo', () => {
+    for (const [k, tool] of [['h', 'navigate'], ['p', 'pencil'], ['E', 'erase'], ['j', 'joint'], ['H', 'navigate'], ['i', 'inspect']] as const) {
       t.onKeydown(key(k))
       expect(t.tool.value).toBe(tool)
     }
@@ -232,5 +232,25 @@ describe('useTools', () => {
     locked = true
     t.onKeydown(key('z', { ctrlKey: true }))
     expect(trails()[0]!.joints).toEqual(['B4'])
+  })
+
+  test('navigate edits nothing; H picks it in 3D too, but not with a modifier', () => {
+    f = fakeBoard(mk({ trails: [trail('T1', ['B2', 'B6'])] }))
+    let locked = false
+    t = createTools({ ...f.deps, locked: () => locked })
+    t.onKeydown(key('h'))
+    expect(t.tool.value).toBe('navigate')
+    t.onHoleClick('bottom', h('B4'))
+    t.onSegmentClick('bottom', h('B2'), h('B3'))
+    expect(f.applied).toHaveLength(0)
+    expect(t.drawing.value).toBeNull()
+    t.tool.value = 'joint'
+    locked = true
+    t.onKeydown(key('h', { metaKey: true }))
+    expect(t.tool.value).toBe('joint')
+    t.onKeydown(key('H'))
+    expect(t.tool.value).toBe('navigate')
+    t.onKeydown(key('h', { target: { tagName: 'INPUT', isContentEditable: false } }))
+    expect(t.tool.value).toBe('navigate')
   })
 })

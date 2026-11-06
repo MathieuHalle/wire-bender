@@ -2,7 +2,9 @@
 // The side panel: a rail of tab buttons and the open tab next to it. Clicking the open
 // tab collapses the panel to the rail; clicking any tab opens that one. From `lg` up the
 // rail is a vertical strip on the right edge; below it, a row on top of the panel. The rail
-// has its own darker background, and the open tab scrolls inside the panel, not the page.
+// has its own darker background, and the open tab scrolls inside the panel, not the page
+// (the page itself never scrolls: the panel is as tall as the canvas row, at most).
+// Below lg it sits under the canvas and takes at most 45% of the window.
 // Each tab's content is the slot named after its id; it stays mounted while hidden, so
 // its own state (e.g. the findings' expanded groups) survives a collapse.
 import { nextPanel, PANEL_TABS, type PanelTab } from '~/utils/sidePanel'
@@ -27,11 +29,11 @@ const tipOf = (label: string, id: PanelTab) =>
 
 <template>
   <aside
-    class="flex w-full min-w-0 shrink-0 flex-col gap-2 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:w-auto lg:flex-row-reverse lg:self-start"
+    class="flex max-h-[45dvh] w-full min-w-0 shrink-0 flex-col gap-2 lg:max-h-full lg:w-auto lg:flex-row-reverse lg:self-start"
     aria-label="Side panel"
   >
     <div
-      class="flex shrink-0 gap-1 rounded-md border border-default bg-elevated p-1 lg:flex-col"
+      class="flex shrink-0 gap-1 rounded-md border border-default bg-elevated p-1 lg:flex-col lg:self-start"
       role="toolbar"
       aria-label="Side panel tabs"
     >
@@ -62,7 +64,7 @@ const tipOf = (label: string, id: PanelTab) =>
     </div>
     <div
       v-show="open"
-      class="min-w-0 lg:max-h-[calc(100vh-2rem)] lg:w-80 lg:overflow-y-auto lg:overscroll-contain"
+      class="min-h-0 min-w-0 overflow-y-auto overscroll-contain lg:w-80"
     >
       <div
         v-for="t in PANEL_TABS"

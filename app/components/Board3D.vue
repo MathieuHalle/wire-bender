@@ -302,11 +302,11 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
   />
   <div
     v-else
-    class="flex flex-col gap-1"
+    class="flex min-h-0 flex-col gap-1"
   >
     <div
       ref="wrap"
-      class="relative h-[70vh] min-h-80 overflow-hidden rounded-md border border-default"
+      class="relative min-h-0 flex-1 overflow-hidden rounded-md border border-default"
       @pointermove="onPointer"
       @pointerup="onPointer"
       @pointerdown="onDown"
