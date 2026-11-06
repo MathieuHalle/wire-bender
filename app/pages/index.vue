@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { parseHole, tryParseHole, type Hole } from '~core/holes'
 import type { Side } from '~core/schema'
-import type { Finding } from '~core/check'
+import { runCheck, type Finding } from '~core/check'
 import { tagNets, type Tag } from '~core/scene3d'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
 import { jointSide, pageKey, zoomStep, type View } from '~/utils/boardView'
 import { fallbackAlert } from '~/utils/board3dFallback'
+import { defaultPanel, loadPanel, savePanel, type PanelState } from '~/utils/sidePanel'
 
 const { board, errors, errorKind, path, revision, status, canUndo, canRedo, undo, redo, reloadFromDisk, keepMine } = useBoard()
 /** 'both' side by side, one large side (key F flips), or the 3D view (key 3, look only). */
@@ -42,6 +43,17 @@ const highlight = computed(() => {
  */
 const hoverTag = ref<Tag | null>(null)
 const highlightNets = computed(() => tagNets(hoverTag.value))
+
+/** The side panel: open or collapsed, its tab, and the view layers. Read once mounted (no storage on the server). */
+const panel = ref<PanelState>(defaultPanel())
+const storage = () => window.localStorage
+onMounted(() => {
+  panel.value = loadPanel(storage)
+  watch(panel, p => savePanel(p, storage), { deep: true })
+})
+/** Run once here: the Findings tab lists it and its icon counts the errors. */
+const check = computed(() => (board.value ? runCheck(board.value) : null))
+const badges = computed(() => ({ findings: check.value?.stats.errors ?? 0 }))
 
 /** The finding picked in the panel; its holes are ringed on both sides. */
 const picked = ref<Finding | null>(null)
@@ -125,7 +137,8 @@ function onKey(e: KeyboardEvent) {
   if (e.metaKey || e.ctrlKey || e.altKey) return
   const a = pageKey(e.key, view.value, last2d.value)
   if (!a) return
-  if ('view' in a) view.value = a.view
+  if ('panel' in a) panel.value.open = !panel.value.open
+  else if ('view' in a) view.value = a.view
   else zoom.value = a.zoom === 0 ? 1 : zoomStep(zoom.value, a.zoom)
 }
 onMounted(() => window.addEventListener('keydown', onKey))
@@ -175,15 +188,10 @@ const sideTitle = (s: Side) => (s === 'top'
     </header>
 
     <Toolbar
-      v-model:tool="tool"
       v-model:view="view"
       v-model:mirror-bottom="mirrorBottom"
       v-model:zoom="zoom"
-      :can-undo="canUndo"
-      :can-redo="canRedo"
       :hint="hint"
-      @undo="undo"
-      @redo="redo"
     />
 
     <UAlert
@@ -271,6 +279,7 @@ const sideTitle = (s: Side) => (s === 'top'
               :board="board"
               :highlight-nets="highlightNets"
               :mark-holes="markHoles"
+              :layers="panel.layers"
               @hover-tag="(t: Tag | null) => hoverTag = t"
               @back="view = 'both'"
             />
@@ -307,6 +316,7 @@ const sideTitle = (s: Side) => (s === 'top'
               :draw-from="drawFrom?.side === s ? drawFrom.hole : null"
               :mark-holes="markHoles"
               :zoom="zoom"
+              :layers="panel.layers"
               @hover="(h: Hole | null) => onHover(s, h)"
               @hole-click="(h: Hole) => onHoleClick(s, h)"
               @segment-click="(a: Hole, b: Hole) => onSegmentClick(s, a, b)"
@@ -315,15 +325,33 @@ const sideTitle = (s: Side) => (s === 'top'
         </div>
       </main>
 
-      <aside class="w-full shrink-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:w-80 lg:self-start lg:overflow-y-auto">
-        <FindingsPanel
-          v-if="board"
-          v-model:selected="picked"
-          :board="board"
-          :locked="view === '3d'"
-          @add-joint="onAddJoint"
-        />
-      </aside>
+      <SidePanel
+        v-model:open="panel.open"
+        v-model:tab="panel.tab"
+        :badges="badges"
+      >
+        <template #findings>
+          <FindingsPanel
+            v-if="board"
+            v-model:selected="picked"
+            :board="board"
+            :check="check ?? undefined"
+            :locked="view === '3d'"
+            @add-joint="onAddJoint"
+          />
+        </template>
+        <template #edit>
+          <EditPanel
+            v-model:tool="tool"
+            v-model:layers="panel.layers"
+            :can-undo="canUndo"
+            :can-redo="canRedo"
+            :locked="view === '3d'"
+            @undo="undo"
+            @redo="redo"
+          />
+        </template>
+      </SidePanel>
     </div>
   </div>
 </template>

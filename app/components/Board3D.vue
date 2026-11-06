@@ -13,6 +13,7 @@ import type { BoardFile } from '~core/schema'
 import { holeMm, type Hole } from '~core/holes'
 import { buildScene, type Tag } from '~core/scene3d'
 import { fallbackAlert, type Board3DFailure } from '~/utils/board3dFallback'
+import { ALL_LAYERS, visibleTag, type Layers } from '~/utils/layers'
 import { CAMERA_FOV, cameraPreset, type CameraPresetName } from '~/utils/cameraPresets'
 import {
   buildMeshes, dispose, markRings, markVisibility, primMeshes, setHighlight, tagTip, webglAvailable, type BuiltMeshes
@@ -24,7 +25,9 @@ const props = withDefaults(defineProps<{
   highlightNets?: string[]
   /** Holes of the finding picked in the panel, ringed on both surfaces. */
   markHoles?: Hole[]
-}>(), { highlightNets: () => [], markHoles: () => [] })
+  /** The Edit tab's view layers: hidden prims are not drawn and not hovered. */
+  layers?: Layers
+}>(), { highlightNets: () => [], markHoles: () => [], layers: () => ({ ...ALL_LAYERS }) })
 const emit = defineEmits<{ 'back': [], 'hover-tag': [tag: Tag | null] }>()
 
 // Dev only, to see the fallbacks: `?nowebgl` pretends the browser has WebGL turned off;
@@ -90,14 +93,34 @@ function rebuild() {
     old.dispose()
   }
   prims = primMeshes(built.group)
-  const slab = built.group.getObjectByName('board')
-  pickable = slab ? [slab, ...prims] : prims
+  applyLayers()
   setHighlight(prims, props.highlightNets)
   rebuilds++
   invalidate()
 }
 watch(scene, rebuild)
+
+/**
+ * Shows or hides each prim by its tag under the layers (the scene is not rebuilt), and
+ * keeps only the shown ones pickable, so the hover never lands on a hidden mesh.
+ */
+function applyLayers() {
+  if (!built) return
+  for (const m of prims) m.visible = visibleTag(m.userData.tag as Tag | undefined, props.layers)
+  const slab = built.group.getObjectByName('board')
+  const shown = prims.filter(m => m.visible)
+  pickable = slab ? [slab, ...shown] : shown
+}
 rebuild()
+watch(() => props.layers, () => {
+  applyLayers()
+  // The hovered mesh may have just been hidden.
+  if (hovered.value && !visibleTag(hovered.value, props.layers)) {
+    tipAt.value = null
+    setHovered(null)
+  }
+  invalidate()
+}, { deep: true })
 
 watch(() => props.highlightNets, (nets) => {
   setHighlight(prims, nets)
@@ -231,6 +254,12 @@ function onReady(c: TresContext) {
       },
       get prims() {
         return prims.length
+      },
+      get shown() {
+        return prims.filter(m => m.visible).length
+      },
+      get pickable() {
+        return pickable.length
       },
       get marks() {
         const side = (n: string) => {

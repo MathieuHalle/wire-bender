@@ -102,15 +102,17 @@ export function lockedAttrs(locked: boolean, title?: string): { disabled: boolea
   return { disabled: locked, title: locked ? LOCKED_TITLE : title }
 }
 
-/** What a page key does: switch the view, or step the zoom (0: back to fit). */
-export type KeyAction = { view: View } | { zoom: 1 | -1 | 0 } | null
+/** What a page key does: switch the view, step the zoom (0: back to fit), or toggle the side panel. */
+export type KeyAction = { view: View } | { zoom: 1 | -1 | 0 } | { panel: 'toggle' } | null
 
 /**
  * The page's view and zoom keys. `3` toggles the 3D view (off goes back to `last2d`, the 2D
  * view it came from); Esc leaves 3D for both sides; F flips one large side. F and the zoom
- * keys do nothing in 3D, where the drawing is not shown.
+ * keys do nothing in 3D, where the drawing is not shown. `[` collapses or opens the side
+ * panel, in every view.
  */
 export function pageKey(key: string, view: View, last2d: Exclude<View, '3d'>): KeyAction {
+  if (key === '[') return { panel: 'toggle' }
   if (key === '3') return { view: view === '3d' ? last2d : '3d' }
   if (key === 'Escape') return view === '3d' ? { view: 'both' } : null
   if (view === '3d') return null

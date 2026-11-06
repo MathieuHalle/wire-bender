@@ -28,6 +28,12 @@ describe('pageKey', () => {
     expect(pageKey('0', 'both', 'both')).toEqual({ zoom: 0 })
     for (const k of ['+', '=', '-', '_', '0']) expect(pageKey(k, '3d', 'both'), k).toBeNull()
   })
+
+  it('[ toggles the side panel, in 2D and in 3D', () => {
+    expect(pageKey('[', 'both', 'both')).toEqual({ panel: 'toggle' })
+    expect(pageKey('[', 'bottom', 'bottom')).toEqual({ panel: 'toggle' })
+    expect(pageKey('[', '3d', 'both')).toEqual({ panel: 'toggle' })
+  })
 })
 
 describe('lockedAttrs', () => {

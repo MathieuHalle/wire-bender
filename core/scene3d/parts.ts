@@ -328,7 +328,7 @@ export function partPrims(
     out.push({
       kind: 'cone', base: [q.x, BOARD_BOTTOM_Y, q.z], up: -1, radius: SOLDER_BASE_DIAMETER_MM / 2, height: SOLDER_HEIGHT_MM,
       color: COLORS.solder, metal: true,
-      tag: { kind: 'joint', id: `${part.ref}.${pin.name}`, net: pin.net, ...netsOf(pin), label: `${part.ref} pin ${pin.name} joint` }
+      tag: { kind: 'joint', id: `${part.ref}.${pin.name}`, net: pin.net, ...netsOf(pin), label: `${part.ref} pin ${pin.name} joint`, owners: ['part'] }
     })
   }
   return out

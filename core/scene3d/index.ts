@@ -9,16 +9,30 @@ export * from './types'
 export * from './dims'
 export * from './tags'
 
-/** Keep the first solder cone per (hole, side); every cone in the scene goes through here. */
+/** Keep the first solder cone per (hole, side), with the owners of the ones it replaces; every cone in the scene goes through here. */
 export function dedupCones(prims: Prim[]): Prim[] {
-  const seen = new Set<string>()
-  return prims.filter((p) => {
-    if (p.kind !== 'cone') return true
+  /** Spot -> index in `out` of the cone kept there. */
+  const seen = new Map<string, number>()
+  const out: Prim[] = []
+  for (const p of prims) {
+    if (p.kind !== 'cone') {
+      out.push(p)
+      continue
+    }
     const key = `${p.base[0].toFixed(3)},${p.base[2].toFixed(3)},${p.up}`
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
+    const at = seen.get(key)
+    if (at === undefined) {
+      seen.set(key, out.length)
+      out.push(p)
+      continue
+    }
+    // One cone per spot; it keeps the owners of every joint it stands for (the view layers
+    // show it while any of them is shown). A copy: the input prims are left as they are.
+    const first = out[at]!
+    const more = (p.tag.owners ?? []).filter(o => !first.tag.owners?.includes(o))
+    if (first.tag.owners && more.length) out[at] = { ...first, tag: { ...first.tag, owners: [...first.tag.owners, ...more] } }
+  }
+  return out
 }
 
 function sceneBounds(slab: Scene3D['board'], prims: Prim[]): Scene3D['bounds'] {

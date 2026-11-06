@@ -2,7 +2,7 @@
 // The live check: runCheck on every board change, grouped like the CLI. Clicking a finding
 // highlights its holes on both sides (click it again to clear). Ends with the advisory.
 import type { BoardFile } from '~core/schema'
-import { runCheck, type Finding } from '~core/check'
+import { runCheck, type CheckResult, type Finding } from '~core/check'
 import { ADVISORY, groupFindings, statsLine } from '~~/cli/format'
 import { lockedAttrs } from '~/utils/boardView'
 
@@ -10,12 +10,14 @@ const props = defineProps<{
   board: BoardFile
   /** The 3D view is showing: no edits, so "Add joint" is off. */
   locked?: boolean
+  /** The check of `board`, when the page has already run it (it also counts the errors for the tab). */
+  check?: CheckResult
 }>()
 const emit = defineEmits<{ 'add-joint': [finding: Finding] }>()
 /** The finding whose holes are highlighted. */
 const selected = defineModel<Finding | null>('selected', { default: null })
 
-const check = computed(() => runCheck(props.board))
+const check = computed(() => props.check ?? runCheck(props.board))
 const groups = computed(() => groupFindings(check.value.findings))
 const byTag = (tag: string) => groups.value.find(g => g.tag === tag)?.findings ?? []
 

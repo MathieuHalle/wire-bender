@@ -6,6 +6,7 @@ import type { BoardFile, Side } from '~core/schema'
 import { placePart, type PlacedPart } from '~core/footprints'
 import { buildConnectivity, type Connectivity } from '~core/connectivity'
 import { litOf, makeGeo, type Group, type Tool } from '~/utils/boardView'
+import { ALL_LAYERS, type Layers } from '~/utils/layers'
 
 const props = withDefaults(defineProps<{
   board: BoardFile
@@ -25,7 +26,12 @@ const props = withDefaults(defineProps<{
   markHoles?: Hole[]
   /** 1 = fit the width; above 1 the side scrolls in its box. */
   zoom?: number
-}>(), { zoom: 1, mirrored: false, highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
+  /**
+   * The Edit tab's view layers. A hidden layer is not drawn; hover, tooltips and clicks
+   * still work on the board data (connectivity is unchanged).
+   */
+  layers?: Layers
+}>(), { layers: () => ({ ...ALL_LAYERS }), zoom: 1, mirrored: false, highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
 
 const emit = defineEmits<{
   'hole-click': [hole: Hole]
@@ -223,6 +229,7 @@ const ringed = computed(() => {
           :lit="lit"
         />
         <BoardCopper
+          v-if="layers.trails"
           :board="board"
           :side="side"
           :geo="geo"
@@ -231,6 +238,7 @@ const ringed = computed(() => {
           :placed="placedParts"
         />
         <BoardParts
+          v-if="layers.components"
           :board="board"
           :side="side"
           :geo="geo"
@@ -238,6 +246,7 @@ const ringed = computed(() => {
           :placed="placedParts"
         />
         <BoardWires
+          v-if="layers.wires"
           :board="board"
           :side="side"
           :geo="geo"

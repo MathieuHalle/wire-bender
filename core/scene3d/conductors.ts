@@ -9,7 +9,7 @@ import {
   BARE_WIRE_DIAMETER_MM, BOARD_BOTTOM_Y, COLORS, INSULATED_WIRE_DIAMETER_MM, LEG_DIAMETER_MM, LEG_FOLD_Y,
   SOLDER_BASE_DIAMETER_MM, SOLDER_HEIGHT_MM
 } from './dims'
-import type { Prim, Tag, V3, XZ } from './types'
+import type { JointOwner, Prim, Tag, V3, XZ } from './types'
 
 const BARE_R = BARE_WIRE_DIAMETER_MM / 2
 const INS_R = INSULATED_WIRE_DIAMETER_MM / 2
@@ -91,8 +91,8 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
     kind: 'cone', base: [q.x, up === 1 ? 0 : BOARD_BOTTOM_Y, q.z], up,
     radius: SOLDER_BASE_DIAMETER_MM / 2, height: SOLDER_HEIGHT_MM, color: COLORS.solder, metal: true, tag
   })
-  const jointTag = (id: string, h: Hole, net: string | null, nets?: string[]): Tag =>
-    ({ kind: 'joint', id, net, ...(nets && { nets }), label: `${id} joint at ${holeName(h)}` })
+  const jointTag = (owner: JointOwner, id: string, h: Hole, net: string | null, nets?: string[]): Tag =>
+    ({ kind: 'joint', id, net, ...(nets && { nets }), label: `${id} joint at ${holeName(h)}`, owners: [owner] })
   /** A bare copper conductor end through its hole, from y0 down to the cone under the board. */
   const through = (q: XZ, y0: number, r: number, tag: Tag): Prim =>
     ({ kind: 'cylinder', a: [q.x, Math.max(y0, 0), q.z], b: [q.x, Math.min(y0, THROUGH_END_Y), q.z], radius: r, color: COLORS.copper, metal: true, tag })
@@ -125,11 +125,11 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
     const solderAt = [pts[0]!, pts[pts.length - 1]!, ...t.joints.map(parseHole)]
     for (const h of solderAt) {
       const q = pos(h)
-      if (t.side === 'bottom') out.push(cone(q, -1, jointTag(t.id, h, net, nets)))
-      else if (!oneSided) out.push(cone(q, 1, jointTag(t.id, h, net, nets)))
+      if (t.side === 'bottom') out.push(cone(q, -1, jointTag('trail', t.id, h, net, nets)))
+      else if (!oneSided) out.push(cone(q, 1, jointTag('trail', t.id, h, net, nets)))
       else {
         // No top pads: the trail end goes down through its hole and is soldered underneath.
-        out.push(through(q, y, BARE_R, tag), cone(q, -1, jointTag(t.id, h, net, nets)))
+        out.push(through(q, y, BARE_R, tag), cone(q, -1, jointTag('trail', t.id, h, net, nets)))
       }
     }
   }
@@ -155,7 +155,7 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
       kind: 'tube', points: [[a.x, y, a.z], [b.x, y, b.z]], radius: LEG_R, color: COLORS.leg, metal: true,
       tag: { kind: 'fold', id: f.lead, net, ...(nets && { nets }), label: `${f.lead} folded to ${f.to}` }
     })
-    out.push(cone(a, -1, jointTag(f.lead, from, net, nets)), cone(b, -1, jointTag(f.lead, to, net, nets)))
+    out.push(cone(a, -1, jointTag('fold', f.lead, from, net, nets)), cone(b, -1, jointTag('fold', f.lead, to, net, nets)))
     const path = from.col === to.col || from.row === to.row ? straightRun(from, to) : [from, to]
     for (const h of path) occupy(h, 'bottom', { owner: f.lead, top: LEG_DIAMETER_MM, halfW: LEG_R })
   }
@@ -228,12 +228,12 @@ export function conductorPrims(board: BoardFile, skipped: string[], conn: Connec
     // Ends go through their holes and are soldered underneath (connectivity solders every wire end on the bottom).
     for (const [h, y] of [[first, yFirst], [last, yLast]] as const) {
       const q = pos(h)
-      out.push(through(q, y, BARE_R, tag), cone(q, -1, jointTag(w.id, h, net, nets)))
+      out.push(through(q, y, BARE_R, tag), cone(q, -1, jointTag('wire', w.id, h, net, nets)))
     }
     for (const j of w.joints) {
       const h = parseHole(j)
-      if (w.side === 'bottom') out.push(cone(pos(h), -1, jointTag(w.id, h, net, nets)))
-      else if (!oneSided) out.push(cone(pos(h), 1, jointTag(w.id, h, net, nets)))
+      if (w.side === 'bottom') out.push(cone(pos(h), -1, jointTag('wire', w.id, h, net, nets)))
+      else if (!oneSided) out.push(cone(pos(h), 1, jointTag('wire', w.id, h, net, nets)))
     }
   }
 

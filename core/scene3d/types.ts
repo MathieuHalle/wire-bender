@@ -12,7 +12,16 @@ export interface Tag {
    */
   nets?: string[]
   label?: string
+  /**
+   * Joints only: what the solder joint belongs to. A part lead's joint and a leg-fold's
+   * joints both carry the lead id (`<ref>.<pin>`), so the id alone cannot tell them apart.
+   * One cone is drawn per spot (see `dedupCones`); when several conductors are soldered
+   * there, it lists each owner, the drawn one (whose id and label the tag has) first.
+   */
+  owners?: JointOwner[]
 }
+
+export type JointOwner = 'part' | 'trail' | 'wire' | 'fold'
 
 /** What every prim has: its colour, its tag, and whether it is bare metal. */
 interface PrimLook {
