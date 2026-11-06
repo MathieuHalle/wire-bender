@@ -22,6 +22,7 @@ export const COLORS = {
   insulatedFallback: '#1f6fb2',
   leg: '#c3c7cb',
   solder: '#a9aeb3',
+  bridge: '#c8c8c8',
   black: '#1d1f21',
   relay: '#2f4f7a',
   tab: '#c0c4c8',
