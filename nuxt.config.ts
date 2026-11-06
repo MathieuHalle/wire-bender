@@ -27,6 +27,13 @@ export default defineNuxtConfig({
 
   compatibilityDate: '2026-06-30',
 
+  // export/ is not imported by the app; include it so `nuxt typecheck` covers it.
+  typescript: {
+    tsConfig: {
+      include: ['../export/**/*']
+    }
+  },
+
   eslint: {
     config: {
       stylistic: {
