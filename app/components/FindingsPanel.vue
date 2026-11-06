@@ -63,7 +63,7 @@ watch(check, (c) => {
 
 <template>
   <div class="text-sm">
-    <h2 class="mb-2 font-medium">
+    <h2 class="mb-2 text-lg font-medium">
       Findings
     </h2>
     <p class="mb-3 font-mono text-xs text-muted">

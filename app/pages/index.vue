@@ -431,7 +431,6 @@ const sideTitle = (s: Side) => (s === 'top'
         v-if="loaded"
         v-model:open="panel.open"
         v-model:tab="panel.tab"
-        class="p-2"
         :badges="badges"
       >
         <template #findings>

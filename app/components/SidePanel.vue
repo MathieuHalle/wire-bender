@@ -29,11 +29,11 @@ const tipOf = (label: string, id: PanelTab) =>
 
 <template>
   <aside
-    class="flex max-h-[45dvh] w-full min-w-0 shrink-0 flex-col gap-2 lg:max-h-full lg:w-auto lg:flex-row-reverse lg:self-start"
+    class="flex max-h-[45dvh] w-full min-w-0 shrink-0 flex-col lg:max-h-full lg:w-auto lg:flex-row-reverse"
     aria-label="Side panel"
   >
     <div
-      class="flex shrink-0 gap-1 rounded-md border border-default bg-elevated p-1 lg:flex-col lg:self-start"
+      class="flex shrink-0 gap-1 border-b border-default bg-elevated p-1 lg:flex-col lg:border-b-0 lg:border-l"
       role="toolbar"
       aria-label="Side panel tabs"
     >
@@ -64,7 +64,7 @@ const tipOf = (label: string, id: PanelTab) =>
     </div>
     <div
       v-show="open"
-      class="min-h-0 min-w-0 overflow-y-auto overscroll-contain lg:w-80"
+      class="min-h-0 min-w-0 overflow-y-auto overscroll-contain p-2 lg:w-80"
     >
       <div
         v-for="t in PANEL_TABS"

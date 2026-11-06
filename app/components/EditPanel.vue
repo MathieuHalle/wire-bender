@@ -40,7 +40,7 @@ const blind = computed(() => (props.locked ? null : blindHint(tool.value, layers
 <template>
   <div class="space-y-4 text-sm">
     <section>
-      <h2 class="mb-2 font-medium">
+      <h2 class="mb-2 text-lg font-medium">
         Tools
       </h2>
       <div
@@ -92,7 +92,7 @@ const blind = computed(() => (props.locked ? null : blindHint(tool.value, layers
     </section>
 
     <section>
-      <h2 class="mb-1 font-medium">
+      <h2 class="mb-1 text-lg font-medium">
         Layers
       </h2>
       <p class="mb-2 text-xs text-muted">
