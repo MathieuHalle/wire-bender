@@ -17,14 +17,18 @@
     "@iconify-json/lucide": "^1.2.147",
     "@iconify-json/simple-icons": "^1.2.100",
     "@nuxt/ui": "^4.12.0",
+    "@tresjs/cientos": "5.10.1",
+    "@tresjs/core": "5.10.1",
     "chokidar": "^6.0.0",
     "nuxt": "^4.6.3",
     "tailwindcss": "^4.3.3",
+    "three": "0.187.0",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@nuxt/eslint": "^1.17.0",
     "@types/node": "^26.6.6",
+    "@types/three": "0.187.0",
     "eslint": "^10.13.0",
     "eslint-plugin-better-tailwindcss": "^4.10.0",
     "tsx": "^4.23.15",

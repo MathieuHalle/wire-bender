@@ -4,14 +4,18 @@ import type { Side } from '~core/schema'
 import type { Finding } from '~core/check'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
-import { jointSide, zoomStep } from '~/utils/boardView'
+import { jointSide, zoomStep, type View } from '~/utils/boardView'
 
 const { board, errors, errorKind, path, revision, status, canUndo, canRedo, undo, redo, reloadFromDisk, keepMine } = useBoard()
-const { tool, drawing, onHoleClick, onSegmentClick, addJoint } = useTools()
+/** 'both' side by side, one large side (key F flips), or the 3D view (key 3, look only). */
+const view = ref<View>('both')
+const { tool, drawing, onHoleClick, onSegmentClick, addJoint, endDrawing } = useTools({ locked: () => view.value === '3d' })
+// The 3D view has no edit tools: a trail being drawn ends on the way in.
+watch(view, (v) => {
+  if (v === '3d') endDrawing()
+})
 
 const mirrorBottom = ref(true)
-/** 'both' side by side, or one large side (key F flips). */
-const view = ref<'both' | Side>('both')
 /** Shared by both sides so they stay the same scale. */
 const zoom = ref(1)
 
@@ -48,7 +52,7 @@ const hint = computed(() => (drawing.value
   ? `Drawing ${drawing.value.trailId} on ${drawing.value.side}: click the last hole again or press Esc to end`
   : null))
 
-const sides = computed<Side[]>(() => (view.value === 'both' ? ['top', 'bottom'] : [view.value]))
+const sides = computed<Side[]>(() => (view.value === 'both' || view.value === '3d' ? ['top', 'bottom'] : [view.value]))
 
 function onHover(side: Side, hole: Hole | null) {
   hover.value = hole ? { side, hole } : null
@@ -106,8 +110,9 @@ function onKey(e: KeyboardEvent) {
   if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return
   if (e.metaKey || e.ctrlKey || e.altKey) return
   if (e.key === 'f' || e.key === 'F') {
-    view.value = view.value === 'top' ? 'bottom' : 'top'
-  } else if (e.key === '+' || e.key === '=') zoom.value = zoomStep(zoom.value, 1)
+    if (view.value !== '3d') view.value = view.value === 'top' ? 'bottom' : 'top'
+  } else if (e.key === '3') view.value = '3d'
+  else if (e.key === '+' || e.key === '=') zoom.value = zoomStep(zoom.value, 1)
   else if (e.key === '-' || e.key === '_') zoom.value = zoomStep(zoom.value, -1)
   else if (e.key === '0') zoom.value = 1
 }
@@ -247,6 +252,12 @@ const sideTitle = (s: Side) => (s === 'top'
         >
           Loading board…
         </p>
+        <ClientOnly v-else-if="view === '3d'">
+          <LazyBoard3D
+            :board="board"
+            @back="view = 'both'"
+          />
+        </ClientOnly>
         <div
           v-else
           class="grid gap-4"

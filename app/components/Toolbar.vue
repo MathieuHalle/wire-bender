@@ -1,8 +1,7 @@
 <!-- eslint-disable vue/multi-word-component-names -- the plan names it Toolbar -->
 <script setup lang="ts">
 // The tool row: editing tools, view mode, mirror, undo/redo.
-import type { Side } from '~core/schema'
-import { ZOOM_STEPS, zoomStep, type Tool } from '~/utils/boardView'
+import { ZOOM_STEPS, zoomStep, type Tool, type View } from '~/utils/boardView'
 
 defineProps<{
   canUndo: boolean
@@ -13,9 +12,13 @@ defineProps<{
 const emit = defineEmits<{ undo: [], redo: [] }>()
 
 const tool = defineModel<Tool>('tool', { required: true })
-const view = defineModel<'both' | Side>('view', { required: true })
+const view = defineModel<View>('view', { required: true })
 const mirrorBottom = defineModel<boolean>('mirrorBottom', { required: true })
 const zoom = defineModel<number>('zoom', { required: true })
+
+/** The 3D view is read-only: the edit tools and undo/redo are off there. */
+const LOCKED_TITLE = 'The 3D view is for looking: switch back to edit'
+const locked = computed(() => view.value === '3d')
 
 const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
   { id: 'inspect', label: 'Inspect', icon: 'i-lucide-mouse-pointer-2', key: 'I' },
@@ -31,6 +34,7 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
       class="flex gap-1"
       role="toolbar"
       aria-label="Tools"
+      :title="locked ? LOCKED_TITLE : undefined"
     >
       <UButton
         v-for="t in TOOLS"
@@ -39,9 +43,10 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
         :icon="t.icon"
         :variant="tool === t.id ? 'solid' : 'outline'"
         :label="t.label"
-        :title="`${t.label} (${t.key})`"
+        :title="locked ? LOCKED_TITLE : `${t.label} (${t.key})`"
         :aria-pressed="tool === t.id"
-        @click="tool = t.id"
+        :disabled="locked"
+        @click="locked || (tool = t.id)"
       />
     </div>
     <div class="flex gap-1">
@@ -50,8 +55,8 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
         variant="ghost"
         icon="i-lucide-undo-2"
         aria-label="Undo"
-        title="Undo (Ctrl/Cmd+Z)"
-        :disabled="!canUndo"
+        :title="locked ? LOCKED_TITLE : 'Undo (Ctrl/Cmd+Z)'"
+        :disabled="locked || !canUndo"
         @click="emit('undo')"
       />
       <UButton
@@ -59,8 +64,8 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
         variant="ghost"
         icon="i-lucide-redo-2"
         aria-label="Redo"
-        title="Redo (Shift+Ctrl/Cmd+Z)"
-        :disabled="!canRedo"
+        :title="locked ? LOCKED_TITLE : 'Redo (Shift+Ctrl/Cmd+Z)'"
+        :disabled="locked || !canRedo"
         @click="emit('redo')"
       />
     </div>
@@ -82,6 +87,13 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
         :variant="view === 'bottom' ? 'solid' : 'outline'"
         label="Bottom"
         @click="view = 'bottom'"
+      />
+      <UButton
+        size="xs"
+        :variant="view === '3d' ? 'solid' : 'outline'"
+        label="3D"
+        title="3D view, for looking (3)"
+        @click="view = '3d'"
       />
     </div>
     <div
@@ -120,7 +132,7 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
       v-model="mirrorBottom"
       label="Mirror bottom"
     />
-    <span class="text-xs text-muted">I P E J: tools · Esc: end trail · F: one large side, flip · + − 0: zoom</span>
+    <span class="text-xs text-muted">I P E J: tools · Esc: end trail · F: one large side, flip · 3: 3D view · + − 0: zoom</span>
     <span
       v-if="hint"
       class="font-mono text-xs"

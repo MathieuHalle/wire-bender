@@ -214,4 +214,23 @@ describe('useTools', () => {
     t.onKeydown(key('z', { ctrlKey: true, target: { tagName: 'DIV', isContentEditable: true } }))
     expect(trails()).toHaveLength(1)
   })
+
+  test('locked (the 3D view): no tool keys, no undo, no edits', () => {
+    let locked = false
+    f = fakeBoard(mk({ trails: [trail('T1', ['B2', 'B6'])] }))
+    t = createTools({ ...f.deps, locked: () => locked })
+    t.tool.value = 'joint'
+    locked = true
+    t.onKeydown(key('p'))
+    expect(t.tool.value).toBe('joint')
+    t.onHoleClick('bottom', h('B4'))
+    t.addJoint('bottom', h('B4'))
+    expect(f.applied).toHaveLength(0)
+    locked = false
+    t.addJoint('bottom', h('B4'))
+    expect(f.applied).toHaveLength(1)
+    locked = true
+    t.onKeydown(key('z', { ctrlKey: true }))
+    expect(trails()[0]!.joints).toEqual(['B4'])
+  })
 })

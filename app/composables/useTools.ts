@@ -17,6 +17,8 @@ export interface ToolDeps {
   notify(reason: string): void
   /** Clock in ms (tests pass a fake). */
   now?: () => number
+  /** True while editing is off (the 3D view): no edits, no tool keys, no undo. */
+  locked?: () => boolean
 }
 
 /** A second click this soon on the hole where a drawing just ended is the rest of a double click. */
@@ -38,11 +40,13 @@ export function createTools(deps: ToolDeps) {
   const drawing = ref<Drawing | null>(null)
   const message = ref<string | null>(null)
   const now = deps.now ?? (() => Date.now())
+  const locked = deps.locked ?? (() => false)
   /** Where and when a pencil click last ended a drawing. */
   let ended: { side: Side, col: number, row: number, at: number } | null = null
 
   /** Applies an ok result (only when it changed the board); returns false on a rejection. */
   function take(r: EditResult, current: BoardFile): r is Extract<EditResult, { ok: true }> {
+    if (locked()) return false
     if (!r.ok) {
       message.value = r.reason
       deps.notify(r.reason)
@@ -103,7 +107,7 @@ export function createTools(deps: ToolDeps) {
   }
 
   function onKeydown(e: KeyboardEvent) {
-    if (isTyping(e.target)) return
+    if (isTyping(e.target) || locked()) return
     const key = e.key.toLowerCase()
     if ((e.metaKey || e.ctrlKey) && key === 'z') {
       e.preventDefault()
@@ -132,7 +136,7 @@ export function createTools(deps: ToolDeps) {
 }
 
 /** The tools for the page, on the shared board; keys are listened to while mounted. */
-export function useTools() {
+export function useTools(opts: { locked?: () => boolean } = {}) {
   const { board, apply, undo, redo } = useBoard()
   const toast = useToast()
   const tools = createTools({
@@ -140,6 +144,7 @@ export function useTools() {
     apply,
     undo,
     redo,
+    locked: opts.locked,
     notify: reason => toast.add({ title: reason, color: 'warning', icon: 'i-lucide-ban' })
   })
   onMounted(() => window.addEventListener('keydown', tools.onKeydown))

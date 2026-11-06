@@ -6,6 +6,8 @@ import type { BoardFile, Side } from '~core/schema'
 import type { Conductor, Connectivity } from '~core/connectivity'
 
 export type Tool = 'inspect' | 'pencil' | 'erase' | 'joint'
+/** Both sides side by side, one large side, or the 3D view. */
+export type View = 'both' | Side | '3d'
 export type Group = Connectivity['groups'][number]
 
 /** Board mm -> drawing mm. Mirrored flips x so the bottom reads as seen from below. */

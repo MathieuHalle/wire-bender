@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url'
+import tres from '@tresjs/core/template-compiler-options'
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: [
@@ -20,6 +21,11 @@ export default defineNuxtConfig({
   },
 
   css: ['~/assets/css/main.css'],
+
+  // TresJS elements (<TresMesh>, <primitive>) belong to its own renderer, not to Vue's.
+  vue: {
+    compilerOptions: tres.template.compilerOptions
+  },
 
   alias: {
     '~core': fileURLToPath(new URL('./core', import.meta.url))
