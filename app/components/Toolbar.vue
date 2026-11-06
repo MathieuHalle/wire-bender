@@ -2,7 +2,7 @@
 <script setup lang="ts">
 // The tool row: editing tools, view mode, mirror, undo/redo.
 import type { Side } from '~core/schema'
-import type { Tool } from '~/utils/boardView'
+import { ZOOM_STEPS, zoomStep, type Tool } from '~/utils/boardView'
 
 defineProps<{
   canUndo: boolean
@@ -15,6 +15,7 @@ const emit = defineEmits<{ undo: [], redo: [] }>()
 const tool = defineModel<Tool>('tool', { required: true })
 const view = defineModel<'both' | Side>('view', { required: true })
 const mirrorBottom = defineModel<boolean>('mirrorBottom', { required: true })
+const zoom = defineModel<number>('zoom', { required: true })
 
 const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
   { id: 'inspect', label: 'Inspect', icon: 'i-lucide-mouse-pointer-2', key: 'I' },
@@ -83,11 +84,43 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
         @click="view = 'bottom'"
       />
     </div>
+    <div
+      class="flex items-center gap-1"
+      role="group"
+      aria-label="Zoom"
+    >
+      <UButton
+        size="xs"
+        variant="ghost"
+        icon="i-lucide-zoom-out"
+        aria-label="Zoom out"
+        title="Zoom out (-)"
+        :disabled="zoom <= ZOOM_STEPS[0]!"
+        @click="zoom = zoomStep(zoom, -1)"
+      />
+      <UButton
+        size="xs"
+        variant="ghost"
+        class="w-12 justify-center font-mono"
+        :label="`${Math.round(zoom * 100)}%`"
+        title="Fit the width (0)"
+        @click="zoom = 1"
+      />
+      <UButton
+        size="xs"
+        variant="ghost"
+        icon="i-lucide-zoom-in"
+        aria-label="Zoom in"
+        title="Zoom in (+)"
+        :disabled="zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]!"
+        @click="zoom = zoomStep(zoom, 1)"
+      />
+    </div>
     <USwitch
       v-model="mirrorBottom"
       label="Mirror bottom"
     />
-    <span class="text-xs text-muted">I P E J: tools · Esc: end trail · F: one large side, flip</span>
+    <span class="text-xs text-muted">I P E J: tools · Esc: end trail · F: one large side, flip · + − 0: zoom</span>
     <span
       v-if="hint"
       class="font-mono text-xs"

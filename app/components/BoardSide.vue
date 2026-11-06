@@ -23,7 +23,9 @@ const props = withDefaults(defineProps<{
   drawFrom?: Hole | null
   /** Holes of the finding picked in the findings panel (a second highlight, separate from the net). */
   markHoles?: Hole[]
-}>(), { mirrored: false, highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
+  /** 1 = fit the width; above 1 the side scrolls in its box. */
+  zoom?: number
+}>(), { zoom: 1, mirrored: false, highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
 
 const emit = defineEmits<{
   'hole-click': [hole: Hole]
@@ -68,6 +70,18 @@ const rowLabels = computed(() =>
     name: holeName({ col: 1, row: i + 1 }).replace(/\d+$/, ''),
     y: geo.value.pt({ col: 1, row: i + 1 }).y
   })))
+
+// ---- Zoom: keep the centre of the view where it was --------------------------------
+const scroller = ref<HTMLDivElement | null>(null)
+watch(() => props.zoom, async (z, old) => {
+  const el = scroller.value
+  if (!el || !old) return
+  const cx = (el.scrollLeft + el.clientWidth / 2) / old
+  const cy = (el.scrollTop + el.clientHeight / 2) / old
+  await nextTick()
+  el.scrollLeft = cx * z - el.clientWidth / 2
+  el.scrollTop = cy * z - el.clientHeight / 2
+})
 
 // ---- Pointer -> hole / segment ------------------------------------------------------
 const svgEl = ref<SVGSVGElement | null>(null)
@@ -184,133 +198,140 @@ const ringed = computed(() => {
 
 <template>
   <div class="relative">
-    <svg
-      ref="svgEl"
-      :viewBox="viewBox"
-      class="block h-auto w-full select-none"
-      :class="tool === 'inspect' ? 'cursor-default' : 'cursor-crosshair'"
-      font-family="'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace"
-      role="img"
-      :aria-label="`Board ${side} side${mirrored ? ', mirrored (seen from below)' : ''}`"
-      @pointermove="onMove"
-      @pointerleave="onLeave"
-      @click="onClick"
+    <div
+      ref="scroller"
+      class="overflow-auto"
+      :class="zoom > 1 ? 'max-h-[80vh] rounded border border-default' : ''"
     >
-      <BoardHoles
-        :board="board"
-        :side="side"
-        :geo="geo"
-        :lit="lit"
-      />
-      <BoardCopper
-        :board="board"
-        :side="side"
-        :geo="geo"
-        :lit="lit"
-        :conn="connectivity"
-        :placed="placedParts"
-      />
-      <BoardParts
-        :board="board"
-        :side="side"
-        :geo="geo"
-        :lit="lit"
-        :placed="placedParts"
-      />
-      <BoardWires
-        :board="board"
-        :side="side"
-        :geo="geo"
-        :lit="lit"
-      />
-
-      <!-- edge labels: columns top and bottom, rows left and right -->
-      <g
-        fill="#5b6a62"
-        :font-size="LABEL"
-        text-anchor="middle"
-        dominant-baseline="central"
-        pointer-events="none"
+      <svg
+        ref="svgEl"
+        :viewBox="viewBox"
+        :style="{ width: `${zoom * 100}%` }"
+        class="block h-auto max-w-none select-none"
+        :class="tool === 'inspect' ? 'cursor-default' : 'cursor-crosshair'"
+        font-family="'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace"
+        role="img"
+        :aria-label="`Board ${side} side${mirrored ? ', mirrored (seen from below)' : ''}`"
+        @pointermove="onMove"
+        @pointerleave="onLeave"
+        @click="onClick"
       >
-        <template
-          v-for="c in colLabels"
-          :key="`c${c.n}`"
-        >
-          <text
-            :x="c.x"
-            :y="extent.y0 - MARGIN / 2"
-          >{{ c.n }}</text>
-          <text
-            :x="c.x"
-            :y="extent.y1 + MARGIN / 2"
-          >{{ c.n }}</text>
-        </template>
-        <template
-          v-for="r in rowLabels"
-          :key="`r${r.name}`"
-        >
-          <text
-            :x="extent.x0 - MARGIN / 2"
-            :y="r.y"
-          >{{ r.name }}</text>
-          <text
-            :x="extent.x1 + MARGIN / 2"
-            :y="r.y"
-          >{{ r.name }}</text>
-        </template>
-      </g>
+        <BoardHoles
+          :board="board"
+          :side="side"
+          :geo="geo"
+          :lit="lit"
+        />
+        <BoardCopper
+          :board="board"
+          :side="side"
+          :geo="geo"
+          :lit="lit"
+          :conn="connectivity"
+          :placed="placedParts"
+        />
+        <BoardParts
+          :board="board"
+          :side="side"
+          :geo="geo"
+          :lit="lit"
+          :placed="placedParts"
+        />
+        <BoardWires
+          :board="board"
+          :side="side"
+          :geo="geo"
+          :lit="lit"
+        />
 
-      <g
-        v-if="marks.length"
-        pointer-events="none"
-      >
+        <!-- edge labels: columns top and bottom, rows left and right -->
+        <g
+          fill="#5b6a62"
+          :font-size="LABEL"
+          text-anchor="middle"
+          dominant-baseline="central"
+          pointer-events="none"
+        >
+          <template
+            v-for="c in colLabels"
+            :key="`c${c.n}`"
+          >
+            <text
+              :x="c.x"
+              :y="extent.y0 - MARGIN / 2"
+            >{{ c.n }}</text>
+            <text
+              :x="c.x"
+              :y="extent.y1 + MARGIN / 2"
+            >{{ c.n }}</text>
+          </template>
+          <template
+            v-for="r in rowLabels"
+            :key="`r${r.name}`"
+          >
+            <text
+              :x="extent.x0 - MARGIN / 2"
+              :y="r.y"
+            >{{ r.name }}</text>
+            <text
+              :x="extent.x1 + MARGIN / 2"
+              :y="r.y"
+            >{{ r.name }}</text>
+          </template>
+        </g>
+
+        <g
+          v-if="marks.length"
+          pointer-events="none"
+        >
+          <circle
+            v-for="m in marks"
+            :key="m.k"
+            :cx="m.x"
+            :cy="m.y"
+            r="1.5"
+            fill="none"
+            stroke="#e11d48"
+            stroke-width="0.4"
+            stroke-dasharray="0.8 0.4"
+          />
+        </g>
+
+        <g
+          v-if="band"
+          pointer-events="none"
+        >
+          <line
+            :x1="band.a.x"
+            :y1="band.a.y"
+            :x2="band.b.x"
+            :y2="band.b.y"
+            stroke="#f5b400"
+            stroke-width="0.6"
+            stroke-linecap="round"
+            stroke-dasharray="1 0.6"
+            opacity="0.9"
+          />
+          <circle
+            :cx="band.b.x"
+            :cy="band.b.y"
+            r="0.5"
+            fill="#f5b400"
+          />
+        </g>
+
         <circle
-          v-for="m in marks"
-          :key="m.k"
-          :cx="m.x"
-          :cy="m.y"
-          r="1.5"
+          v-if="ringed"
+          :cx="ringed.x"
+          :cy="ringed.y"
+          r="1.15"
           fill="none"
-          stroke="#e11d48"
-          stroke-width="0.4"
-          stroke-dasharray="0.8 0.4"
-        />
-      </g>
-
-      <g
-        v-if="band"
-        pointer-events="none"
-      >
-        <line
-          :x1="band.a.x"
-          :y1="band.a.y"
-          :x2="band.b.x"
-          :y2="band.b.y"
           stroke="#f5b400"
-          stroke-width="0.6"
-          stroke-linecap="round"
-          stroke-dasharray="1 0.6"
-          opacity="0.9"
+          stroke-width="0.35"
+          pointer-events="none"
         />
-        <circle
-          :cx="band.b.x"
-          :cy="band.b.y"
-          r="0.5"
-          fill="#f5b400"
-        />
-      </g>
-
-      <circle
-        v-if="ringed"
-        :cx="ringed.x"
-        :cy="ringed.y"
-        r="1.15"
-        fill="none"
-        stroke="#f5b400"
-        stroke-width="0.35"
-        pointer-events="none"
-      />
-    </svg>
+      </svg>
+    </div>
 
     <div
       v-if="tip && tipAt"

@@ -82,3 +82,12 @@ export function jointSide(board: BoardFile, conn: Connectivity, hole: Hole): Sid
   }
   return null
 }
+
+/** Zoom levels of the 2D preview; 1 fits the width. */
+export const ZOOM_STEPS = [1, 1.5, 2, 3, 4, 6] as const
+
+/** The next zoom level up (dir 1) or down (dir -1) from `z`, clamped to the steps. */
+export function zoomStep(z: number, dir: 1 | -1): number {
+  if (dir > 0) return ZOOM_STEPS.find(s => s > z + 1e-9) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1]!
+  return [...ZOOM_STEPS].reverse().find(s => s < z - 1e-9) ?? ZOOM_STEPS[0]
+}

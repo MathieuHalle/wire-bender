@@ -4,7 +4,7 @@ import type { Side } from '~core/schema'
 import type { Finding } from '~core/check'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
-import { jointSide } from '~/utils/boardView'
+import { jointSide, zoomStep } from '~/utils/boardView'
 
 const { board, errors, errorKind, path, revision, status, canUndo, canRedo, undo, redo, reloadFromDisk, keepMine } = useBoard()
 const { tool, drawing, onHoleClick, onSegmentClick, addJoint } = useTools()
@@ -12,6 +12,8 @@ const { tool, drawing, onHoleClick, onSegmentClick, addJoint } = useTools()
 const mirrorBottom = ref(true)
 /** 'both' side by side, or one large side (key F flips). */
 const view = ref<'both' | Side>('both')
+/** Shared by both sides so they stay the same scale. */
+const zoom = ref(1)
 
 const placed = computed(() => board.value?.parts.map(placePart) ?? [])
 const conn = computed(() => (board.value ? buildConnectivity(board.value) : null))
@@ -105,7 +107,9 @@ function onKey(e: KeyboardEvent) {
   if (e.metaKey || e.ctrlKey || e.altKey) return
   if (e.key === 'f' || e.key === 'F') {
     view.value = view.value === 'top' ? 'bottom' : 'top'
-  }
+  } else if (e.key === '+' || e.key === '=') zoom.value = zoomStep(zoom.value, 1)
+  else if (e.key === '-' || e.key === '_') zoom.value = zoomStep(zoom.value, -1)
+  else if (e.key === '0') zoom.value = 1
 }
 onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
@@ -157,6 +161,7 @@ const sideTitle = (s: Side) => (s === 'top'
       v-model:tool="tool"
       v-model:view="view"
       v-model:mirror-bottom="mirrorBottom"
+      v-model:zoom="zoom"
       :can-undo="canUndo"
       :can-redo="canRedo"
       :hint="hint"
@@ -266,6 +271,7 @@ const sideTitle = (s: Side) => (s === 'top'
               :placed="placed"
               :draw-from="drawFrom?.side === s ? drawFrom.hole : null"
               :mark-holes="markHoles"
+              :zoom="zoom"
               @hover="(h: Hole | null) => onHover(s, h)"
               @hole-click="(h: Hole) => onHoleClick(s, h)"
               @segment-click="(a: Hole, b: Hole) => onSegmentClick(s, a, b)"
