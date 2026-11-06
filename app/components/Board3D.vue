@@ -302,19 +302,23 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
   />
   <div
     v-else
-    class="flex min-h-0 flex-col gap-1"
+    class="flex min-h-0 flex-col"
   >
     <div
       ref="wrap"
-      class="relative min-h-0 flex-1 overflow-hidden rounded-md border border-default"
+      class="relative min-h-0 flex-1 overflow-hidden bg-muted"
       @pointermove="onPointer"
       @pointerup="onPointer"
       @pointerdown="onDown"
       @pointerleave="onLeave"
     >
+      <!-- A see-through canvas: the wrapper's bg-muted shows, the same as the 2D canvas, in
+           light and dark mode alike. -->
       <TresCanvas
         :camera="camera"
-        clear-color="#2b2f35"
+        alpha
+        clear-color="#000000"
+        :clear-alpha="0"
         render-mode="on-demand"
         @ready="onReady"
       >
@@ -368,12 +372,12 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
         />
       </div>
     </div>
-    <p class="text-xs text-muted">
+    <p class="border-t border-default px-4 py-1 text-xs text-muted">
       Drag to orbit, right-drag to pan, scroll to zoom.
     </p>
     <ul
       v-if="scene.skipped.length"
-      class="font-mono text-xs text-muted"
+      class="px-4 pb-1 font-mono text-xs text-muted"
     >
       <li
         v-for="s in scene.skipped"
