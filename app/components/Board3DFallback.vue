@@ -6,7 +6,7 @@ const emit = defineEmits<{ back: [] }>()
 </script>
 
 <template>
-  <div class="mx-auto max-w-xl">
+  <div class="mx-auto max-w-xl p-4">
     <UAlert
       color="warning"
       variant="subtle"

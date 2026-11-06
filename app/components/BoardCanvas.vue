@@ -56,7 +56,7 @@ const OVERLAY_BAND = 32
 const slots = useSlots()
 /** Fits a rect below the overlay's band (if there is an overlay), with the margin around it. */
 function fitView(r: Rect): Camera {
-  const band = slots.overlay ? OVERLAY_BAND : 0
+  const band = slots.overlay || slots['overlay-end'] ? OVERLAY_BAND : 0
   const c = fitRect(r, { w: size.value.w, h: Math.max(1, size.value.h - band) }, FIT_MARGIN)
   return { ...c, y: c.y + band }
 }
@@ -337,7 +337,7 @@ const frameStyle = (r: Rect) => {
 <template>
   <div
     ref="root"
-    class="relative touch-none overflow-hidden rounded-md border border-default bg-muted select-none"
+    class="relative touch-none overflow-hidden bg-muted select-none"
     :class="{ '[&_*]:cursor-[inherit]!': panning || spaceDown }"
     :style="{ cursor }"
     role="region"
@@ -374,13 +374,15 @@ const frameStyle = (r: Rect) => {
         </div>
       </section>
     </div>
-    <!-- Controls over the canvas (the framing buttons): a press on them is not a pan. -->
+    <!-- Controls over the canvas, left and right along its top. The band lets presses
+         through to the canvas between them; a press on a control is not a pan. -->
     <div
-      v-if="ready && $slots.overlay"
-      class="absolute top-2 left-2 z-10"
+      v-if="ready && ($slots.overlay || $slots['overlay-end'])"
+      class="pointer-events-none absolute inset-x-2 top-2 z-10 flex items-start justify-between gap-2 *:pointer-events-auto"
       @pointerdown.stop
     >
-      <slot name="overlay" />
+      <div><slot name="overlay" /></div>
+      <div><slot name="overlay-end" /></div>
     </div>
   </div>
 </template>

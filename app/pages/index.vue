@@ -235,6 +235,10 @@ const sideTitle = (s: Side) => (s === 'top'
         variant="subtle"
         :label="STATUS[status].label"
       />
+      <Toolbar
+        :view="view"
+        @mode="pickMode"
+      />
       <UTooltip :text="benchTip">
         <span class="ml-auto inline-flex">
           <UButton
@@ -248,17 +252,6 @@ const sideTitle = (s: Side) => (s === 'top'
         </span>
       </UTooltip>
     </header>
-
-    <Toolbar
-      v-model:mirror-bottom="mirrorBottom"
-      class="shrink-0"
-      :view="view"
-      :zoom="zoomPct"
-      @mode="pickMode"
-      @zoom-in="canvas?.zoomStep(1)"
-      @zoom-out="canvas?.zoomStep(-1)"
-      @fit="pickView('both')"
-    />
 
     <UAlert
       v-if="status === 'conflict'"
@@ -330,11 +323,11 @@ const sideTitle = (s: Side) => (s === 'top'
       </template>
     </UAlert>
 
-    <div class="flex min-h-0 flex-1 flex-col gap-4 p-4 lg:flex-row">
-      <main class="flex min-h-0 min-w-0 flex-1 flex-col">
+    <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <main class="flex min-h-0 min-w-0 flex-1 flex-col border-b border-default lg:border-r lg:border-b-0">
         <p
           v-if="!board || !loaded"
-          class="text-muted"
+          class="p-4 text-muted"
         >
           Loading board…
         </p>
@@ -360,7 +353,7 @@ const sideTitle = (s: Side) => (s === 'top'
         </ClientOnly>
         <div
           v-else
-          class="flex min-h-0 flex-1 flex-col gap-1"
+          class="flex min-h-0 flex-1 flex-col"
         >
           <BoardCanvas
             ref="canvas"
@@ -388,6 +381,15 @@ const sideTitle = (s: Side) => (s === 'top'
                 />
               </div>
             </template>
+            <template #overlay-end>
+              <CanvasControls
+                v-model:mirror-bottom="mirrorBottom"
+                :zoom="zoomPct"
+                @zoom-in="canvas?.zoomStep(1)"
+                @zoom-out="canvas?.zoomStep(-1)"
+                @fit="pickView('both')"
+              />
+            </template>
             <template #frame="{ frame: f }">
               <BoardSide
                 :board="board"
@@ -410,14 +412,14 @@ const sideTitle = (s: Side) => (s === 'top'
           <!-- While drawing, the hint takes the keys' place (one line either way: no jump). -->
           <p
             v-if="hint"
-            class="truncate font-mono text-xs"
+            class="truncate border-t border-default px-4 py-1 font-mono text-xs"
             :title="hint"
           >
             {{ hint }}
           </p>
           <p
             v-else
-            class="truncate text-xs text-muted max-md:hidden"
+            class="truncate border-t border-default px-4 py-1 text-xs text-muted max-md:hidden"
             :title="KEYS"
           >
             {{ KEYS }}
@@ -429,6 +431,7 @@ const sideTitle = (s: Side) => (s === 'top'
         v-if="loaded"
         v-model:open="panel.open"
         v-model:tab="panel.tab"
+        class="p-2"
         :badges="badges"
       >
         <template #findings>
