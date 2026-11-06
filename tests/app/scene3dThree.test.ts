@@ -2,8 +2,8 @@ import { readFileSync } from 'node:fs'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import { parseBoard, type BoardFile } from '~core/schema'
-import { buildScene } from '~core/scene3d'
-import { buildMeshes, webglAvailable } from '../../app/utils/scene3dThree'
+import { BOARD_THICKNESS_MM, buildScene, type Tag } from '~core/scene3d'
+import { buildMeshes, dispose, markRings, MARK_COLOR, primMeshes, setHighlight, tagTip, webglAvailable } from '../../app/utils/scene3dThree'
 
 function board2(): BoardFile {
   const res = parseBoard(JSON.parse(readFileSync(new URL('../fixtures/channel-board-2.json', import.meta.url), 'utf8')))
@@ -83,6 +83,101 @@ describe('buildMeshes', () => {
     for (const g of geometries) expect(disposedGeo.has(g)).toBe(true)
     for (const m of materials) expect(disposedMat.has(m)).toBe(true)
     expect(built.group.children).toHaveLength(0)
+  })
+})
+
+describe('highlight and marks', () => {
+  const board = board2()
+  const scene = buildScene(board)
+
+  it('setHighlight dims other nets and restores', () => {
+    const built = buildMeshes(scene)
+    const meshes = primMeshes(built.group)
+    expect(meshes).toHaveLength(scene.prims.length)
+    const original = new Map(meshes.map(m => [m, m.material as THREE.Material]))
+    const net = (m: THREE.Mesh) => (m.userData.tag as Tag).net
+    const gnd = meshes.filter(m => net(m) === 'GND')
+    const rest = meshes.filter(m => net(m) !== 'GND')
+    expect(gnd.length).toBeGreaterThan(0)
+    // Some GND mesh shares its material (the copper colour) with a mesh of another net.
+    expect(gnd.some(g => rest.some(r => original.get(r) === original.get(g)))).toBe(true)
+
+    setHighlight(meshes, ['GND'])
+    for (const m of gnd) {
+      expect(m.material).toBe(original.get(m))
+      expect((m.material as THREE.Material).transparent).toBe(false)
+      expect((m.material as THREE.Material).opacity).toBe(1)
+    }
+    for (const m of rest) {
+      const mat = m.material as THREE.Material
+      expect(mat).not.toBe(original.get(m))
+      expect(mat.transparent).toBe(true)
+      expect(mat.opacity).toBe(0.25)
+    }
+    // The shared originals are untouched.
+    for (const mat of original.values()) {
+      expect(mat.transparent).toBe(false)
+      expect(mat.opacity).toBe(1)
+    }
+
+    // Another net, then none: every mesh gets its own original back.
+    setHighlight(meshes, ['V12'])
+    expect(meshes.filter(m => net(m) === 'V12').every(m => m.material === original.get(m))).toBe(true)
+    expect(gnd.every(m => (m.material as THREE.Material).opacity === 0.25)).toBe(true)
+    setHighlight(meshes, [])
+    for (const m of meshes) expect(m.material).toBe(original.get(m))
+
+    // The dim variants are released by dispose, even while in use.
+    setHighlight(meshes, ['GND'])
+    const dims = new Set(rest.map(m => m.material as THREE.Material))
+    const spy = vi.spyOn(THREE.Material.prototype, 'dispose')
+    built.dispose()
+    const disposed = new Set(spy.mock.contexts)
+    for (const m of [...dims, ...original.values()]) expect(disposed.has(m)).toBe(true)
+  })
+
+  it('finding marks make rings at the holes on both sides', () => {
+    const at = [{ x: 0, z: 0 }, { x: 2.54 * 6, z: 2.54 * 12 }]
+    const marks = markRings(scene, at)
+    const rings = marks.children[0] as THREE.InstancedMesh
+    expect(rings.isInstancedMesh).toBe(true)
+    expect(rings.count).toBe(at.length * 2)
+    expect((rings.material as THREE.MeshBasicMaterial).color.getHexString()).toBe(MARK_COLOR.slice(1))
+    expect(MARK_COLOR).toBe('#e11d48')
+    const m = new THREE.Matrix4()
+    const p = new THREE.Vector3()
+    const seen: string[] = []
+    for (let i = 0; i < rings.count; i++) {
+      rings.getMatrixAt(i, m)
+      p.setFromMatrixPosition(m)
+      const side = p.y > 0 ? 'top' : p.y < -BOARD_THICKNESS_MM ? 'bottom' : 'inside'
+      seen.push(`${p.x.toFixed(2)},${p.z.toFixed(2)},${side}`)
+    }
+    expect(seen.sort()).toEqual(['0.00,0.00,bottom', '0.00,0.00,top', '15.24,30.48,bottom', '15.24,30.48,top'])
+    // Dashed: the ring geometry is several separate arcs, not one closed ring.
+    const box = new THREE.Box3().setFromBufferAttribute(rings.geometry.getAttribute('position') as THREE.BufferAttribute)
+    expect(box.max.x).toBeCloseTo(1.7, 1)
+    const pos = rings.geometry.getAttribute('position')
+    const angles = Array.from({ length: pos.count }, (_, i) => Math.atan2(pos.getZ(i), pos.getX(i))).sort((a, b) => a - b)
+    const gap = Math.max(...angles.slice(1).map((a, i) => a - angles[i]!))
+    expect(gap).toBeGreaterThan(0.15)
+
+    const geo = vi.spyOn(THREE.BufferGeometry.prototype, 'dispose')
+    const mat = vi.spyOn(THREE.Material.prototype, 'dispose')
+    const g = rings.geometry
+    const mm = rings.material
+    dispose(marks)
+    expect(geo.mock.contexts).toContain(g)
+    expect(mat.mock.contexts).toContain(mm)
+    expect(markRings(scene, []).children).toHaveLength(0)
+  })
+
+  it('tagTip reads like the 2D tooltip', () => {
+    expect(tagTip({ kind: 'part', id: 'QA', label: 'QA' }, board)).toEqual({ name: 'QA', lines: ['MOSFET IRLB3813'], net: null })
+    expect(tagTip({ kind: 'part', id: 'RGA', label: 'RGA 10R' }, board)).toEqual({ name: 'RGA', lines: ['RGA 10R'], net: null })
+    expect(tagTip({ kind: 'leg', id: 'QA.1', net: 'GATE_A', label: 'QA pin 1' }, board)).toEqual({ name: 'QA pin 1', lines: [], net: 'GATE_A' })
+    expect(tagTip({ kind: 'trail', id: 'T1', net: null, label: 'trail T1' }, board)).toEqual({ name: 'trail T1', lines: [], net: 'no net' })
+    expect(tagTip({ kind: 'board', id: 'board' }, board)).toBeNull()
   })
 })
 

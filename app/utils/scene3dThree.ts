@@ -2,9 +2,10 @@
 // 3D view imports this file, so three.js stays out of the 2D page's bundle.
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import type { BoardFile } from '~core/schema'
 import {
   COLORS, COPPER_THICKNESS_MM, HOLE_DIAMETER_MM, PAD_DIAMETER_MM,
-  type Prim, type Scene3D, type Tag, type V3
+  type Prim, type Scene3D, type Tag, type V3, type XZ
 } from '~core/scene3d'
 
 const HOLE_COLOR = '#16150f'
@@ -19,7 +20,14 @@ export interface BuiltMeshes {
   dispose(): void
 }
 
-/** Disposes every geometry and material under `root`, then empties it. */
+/** A dimmed mesh's own material, put back when it is lit again. */
+const baseOf = new WeakMap<THREE.Mesh, THREE.Material>()
+/** The dim variant of a (possibly shared) material, made on first use. */
+const dimOf = new WeakMap<THREE.Material, THREE.Material>()
+/** Opacity of the meshes outside the highlighted nets. */
+export const DIM_OPACITY = 0.25
+
+/** Disposes every geometry and material under `root` (dim variants included), then empties it. */
 export function dispose(root: THREE.Object3D): void {
   const geometries = new Set<THREE.BufferGeometry>()
   const materials = new Set<THREE.Material>()
@@ -29,8 +37,14 @@ export function dispose(root: THREE.Object3D): void {
     if (!m.isMesh) return
     geometries.add(m.geometry)
     for (const mat of Array.isArray(m.material) ? m.material : [m.material]) materials.add(mat)
+    const base = baseOf.get(m)
+    if (base) materials.add(base)
     if ((m as THREE.InstancedMesh).isInstancedMesh) instanced.push(m as THREE.InstancedMesh)
   })
+  for (const mat of [...materials]) {
+    const dim = dimOf.get(mat)
+    if (dim) materials.add(dim)
+  }
   for (const g of geometries) g.dispose()
   for (const m of materials) m.dispose()
   for (const i of instanced) i.dispose()
@@ -163,6 +177,89 @@ export function buildMeshes(scene: Scene3D): BuiltMeshes {
   for (const p of scene.prims) group.add(primMesh(p, material))
 
   return { group, dispose: () => dispose(group) }
+}
+
+/** The prim meshes of a build (every tagged mesh but the slab), in `scene.prims` order. */
+export function primMeshes(group: THREE.Object3D): THREE.Mesh[] {
+  return group.children.filter((o): o is THREE.Mesh =>
+    (o as THREE.Mesh).isMesh && !!o.userData.tag && (o.userData.tag as Tag).kind !== 'board')
+}
+
+/**
+ * Lights the meshes whose tag net is in `nets` and dims the rest (transparent, opacity
+ * 0.25). Materials are shared between meshes, so a dimmed mesh is given a dim variant of
+ * its material instead of changing the shared one. An empty `nets` puts every mesh's own
+ * material back.
+ */
+export function setHighlight(meshes: THREE.Mesh[], nets: string[]): void {
+  const lit = new Set(nets)
+  for (const m of meshes) {
+    const base = baseOf.get(m) ?? (m.material as THREE.Material)
+    const net = (m.userData.tag as Tag | undefined)?.net
+    if (!lit.size || (net != null && lit.has(net))) {
+      m.material = base
+      baseOf.delete(m)
+      continue
+    }
+    let dim = dimOf.get(base)
+    if (!dim) {
+      dim = base.clone()
+      dim.transparent = true
+      dim.opacity = DIM_OPACITY
+      dimOf.set(base, dim)
+    }
+    baseOf.set(m, base)
+    m.material = dim
+  }
+}
+
+/** The finding marks' colour, the same as in 2D. */
+export const MARK_COLOR = '#e11d48'
+/** The 2D mark: a ring of radius 1.5 mm, 0.4 mm wide, dashes 0.8 and gaps 0.4. */
+const MARK_R = 1.5
+const MARK_W = 0.4
+const MARK_DASHES = 8
+/** Above the 0.05 mm copper, so the rings don't z-fight with the pads. */
+const MARK_LIFT = 0.06
+
+/**
+ * Red dashed rings at `at` (hole centres in scene x/z) on the top and the bottom surface,
+ * as one instanced mesh in a group. Empty `at` gives an empty group. Free with `dispose`.
+ */
+export function markRings(scene: Scene3D, at: XZ[]): THREE.Group {
+  const group = new THREE.Group()
+  group.name = 'marks'
+  if (!at.length) return group
+  const step = (Math.PI * 2) / MARK_DASHES
+  const arcs = Array.from({ length: MARK_DASHES }, (_, i) =>
+    new THREE.RingGeometry(MARK_R - MARK_W / 2, MARK_R + MARK_W / 2, 6, 1, i * step, step * (2 / 3)))
+  const geometry = (mergeGeometries(arcs) ?? new THREE.BufferGeometry()).rotateX(-Math.PI / 2)
+  for (const g of arcs) g.dispose()
+  const material = new THREE.MeshBasicMaterial({ color: MARK_COLOR, side: THREE.DoubleSide })
+  const { center, thicknessMm } = scene.board
+  group.add(instanced('marks', geometry, material,
+    surfaceMatrices(at, at, center[1] + thicknessMm / 2 + MARK_LIFT, center[1] - thicknessMm / 2 - MARK_LIFT)))
+  return group
+}
+
+export interface TagTip {
+  /** First line, bold: the part ref, `ref pin N`, or what the conductor is. */
+  name: string
+  lines: string[]
+  /** The net line; null for part bodies. */
+  net: string | null
+}
+
+/** What the 3D tooltip shows for a hovered mesh; null for the slab. */
+export function tagTip(tag: Tag, board: BoardFile): TagTip | null {
+  if (tag.kind === 'board') return null
+  if (tag.kind === 'part') {
+    const part = board.parts.find(p => p.ref === tag.id)
+    const label = tag.label && tag.label !== tag.id ? tag.label : undefined
+    const extra = part?.value ?? label
+    return { name: tag.id, lines: extra ? [extra] : [], net: null }
+  }
+  return { name: tag.label ?? tag.id, lines: [], net: tag.net ?? 'no net' }
 }
 
 /** True when this browser hands out a WebGL context. */

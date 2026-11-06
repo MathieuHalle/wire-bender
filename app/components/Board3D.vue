@@ -10,12 +10,21 @@ import { OrbitControls } from '@tresjs/cientos'
 import * as THREE from 'three'
 import type { OrbitControls as OrbitControlsImpl } from 'three/examples/jsm/controls/OrbitControls.js'
 import type { BoardFile } from '~core/schema'
-import { buildScene } from '~core/scene3d'
+import { holeMm, type Hole } from '~core/holes'
+import { buildScene, type Tag } from '~core/scene3d'
 import { CAMERA_FOV, cameraPreset, type CameraPresetName } from '~/utils/cameraPresets'
-import { buildMeshes, webglAvailable, type BuiltMeshes } from '~/utils/scene3dThree'
+import {
+  buildMeshes, dispose, markRings, primMeshes, setHighlight, tagTip, webglAvailable, type BuiltMeshes
+} from '~/utils/scene3dThree'
 
-const props = defineProps<{ board: BoardFile }>()
-const emit = defineEmits<{ back: [] }>()
+const props = withDefaults(defineProps<{
+  board: BoardFile
+  /** Nets to keep bright; every other mesh is dimmed. Empty: nothing dimmed. */
+  highlightNets?: string[]
+  /** Holes of the finding picked in the panel, ringed on both surfaces. */
+  markHoles?: Hole[]
+}>(), { highlightNets: () => [], markHoles: () => [] })
+const emit = defineEmits<{ 'back': [], 'hover-tag': [tag: Tag | null] }>()
 
 // Dev only: `?nowebgl` pretends the browser has WebGL turned off, to see the fallback.
 if (import.meta.dev && new URLSearchParams(window.location.search).has('nowebgl'))
@@ -25,7 +34,11 @@ const hasWebgl = webglAvailable()
 const scene = computed(() => buildScene(props.board))
 /** Stable parent of the board meshes; its child is swapped on every rebuild. */
 const content = new THREE.Group()
+/** Stable parent of the finding marks, rebuilt on their own (the board meshes stay). */
+const marks = new THREE.Group()
 let built: BuiltMeshes | null = null
+/** The prim meshes of `built`: what hover and highlight work on. */
+let prims: THREE.Mesh[] = []
 let rebuilds = 0
 
 const wrap = ref<HTMLElement | null>(null)
@@ -52,11 +65,92 @@ function rebuild() {
     content.remove(old.group)
     old.dispose()
   }
+  prims = primMeshes(built.group)
+  setHighlight(prims, props.highlightNets)
   rebuilds++
   invalidate()
 }
 watch(scene, rebuild)
 if (hasWebgl) rebuild()
+
+watch(() => props.highlightNets, (nets) => {
+  setHighlight(prims, nets)
+  invalidate()
+})
+
+function rebuildMarks() {
+  const old = marks.children.slice()
+  const pitch = props.board.board.pitchMm
+  marks.add(markRings(scene.value, props.markHoles.map((h) => {
+    const m = holeMm(h, pitch)
+    return { x: m.x, z: m.y }
+  })))
+  for (const o of old) {
+    marks.remove(o)
+    dispose(o)
+  }
+  invalidate()
+}
+watch([() => props.markHoles, scene], rebuildMarks)
+if (hasWebgl) rebuildMarks()
+
+// ---- Hover: one raycast per animation frame -------------------------------------
+const raycaster = new THREE.Raycaster()
+const ndc = new THREE.Vector2()
+/** The last pointer position seen; cast at the next frame. */
+let pending: { x: number, y: number, buttons: number } | null = null
+let frame = 0
+const hovered = shallowRef<Tag | null>(null)
+const tipAt = ref<{ x: number, y: number, flip: boolean } | null>(null)
+const tip = computed(() => (hovered.value ? tagTip(hovered.value, props.board) : null))
+
+function setHovered(tag: Tag | null) {
+  if (tag === hovered.value) return
+  hovered.value = tag
+  emit('hover-tag', tag)
+}
+
+/** The tagged mesh under the pointer; the slab hides what is behind it. */
+function castAt(x: number, y: number): Tag | null {
+  const el = ctx?.renderer.instance.domElement
+  if (!el || !built) return null
+  const r = el.getBoundingClientRect()
+  if (r.width <= 0 || r.height <= 0) return null
+  ndc.set(((x - r.left) / r.width) * 2 - 1, -((y - r.top) / r.height) * 2 + 1)
+  camera.updateMatrixWorld()
+  raycaster.setFromCamera(ndc, camera)
+  const slab = built.group.getObjectByName('board')
+  const hit = raycaster.intersectObjects(slab ? [slab, ...prims] : prims, false)[0]
+  const tag = hit?.object.userData.tag as Tag | undefined
+  return tag && tag.kind !== 'board' ? tag : null
+}
+
+function onFrame() {
+  frame = 0
+  const p = pending
+  pending = null
+  // Dragging orbits the camera: leave the hover as it is until the buttons are up.
+  if (!p || p.buttons) return
+  const tag = castAt(p.x, p.y)
+  setHovered(tag)
+  const w = wrap.value?.getBoundingClientRect()
+  tipAt.value = tag && w
+    ? { x: p.x - w.left, y: p.y - w.top, flip: p.x - w.left > w.width * 0.6 }
+    : null
+}
+
+function onPointer(ev: PointerEvent) {
+  pending = { x: ev.clientX, y: ev.clientY, buttons: ev.buttons }
+  if (!frame) frame = requestAnimationFrame(onFrame)
+}
+
+function onLeave() {
+  pending = null
+  if (frame) cancelAnimationFrame(frame)
+  frame = 0
+  tipAt.value = null
+  setHovered(null)
+}
 
 function applyPreset(which: CameraPresetName) {
   const cam = camera
@@ -87,15 +181,31 @@ function onReady(c: TresContext) {
       camera,
       controls: () => controls.value?.instance,
       rebuild,
-      preset: applyPreset
+      preset: applyPreset,
+      get hovered() {
+        return hovered.value
+      },
+      get dimmed() {
+        return prims.filter(m => (m.material as THREE.Material).transparent).length
+      },
+      get prims() {
+        return prims.length
+      },
+      get marks() {
+        return (marks.children[0]?.children[0] as THREE.InstancedMesh | undefined)?.count ?? 0
+      }
     }
   }
 }
 
 onBeforeUnmount(() => {
+  if (frame) cancelAnimationFrame(frame)
+  if (hovered.value) emit('hover-tag', null)
   built?.dispose()
   built = null
+  prims = []
   content.clear()
+  dispose(marks)
   sun.dispose()
   under.dispose()
   if (import.meta.dev) delete (window as unknown as { __wb3d?: unknown }).__wb3d
@@ -136,6 +246,9 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
     <div
       ref="wrap"
       class="relative h-[70vh] min-h-80 overflow-hidden rounded-md border border-default"
+      @pointermove="onPointer"
+      @pointerup="onPointer"
+      @pointerleave="onLeave"
     >
       <TresCanvas
         :camera="camera"
@@ -152,7 +265,31 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
         />
         <primitive :object="lights" />
         <primitive :object="content" />
+        <primitive :object="marks" />
       </TresCanvas>
+      <div
+        v-if="tip && tipAt"
+        class="pointer-events-none absolute z-10 w-max rounded-md border border-default bg-default px-2 py-1 font-mono text-xs whitespace-nowrap shadow-md"
+        :style="tipAt.flip
+          ? { right: `calc(100% - ${tipAt.x - 14}px)`, top: `${tipAt.y + 14}px` }
+          : { left: `${tipAt.x + 14}px`, top: `${tipAt.y + 14}px` }"
+      >
+        <div class="font-semibold">
+          {{ tip.name }}
+        </div>
+        <div
+          v-for="l in tip.lines"
+          :key="l"
+        >
+          {{ l }}
+        </div>
+        <div
+          v-if="tip.net"
+          class="text-muted"
+        >
+          {{ tip.net }}
+        </div>
+      </div>
       <div
         class="absolute top-2 left-2 flex gap-1"
         role="group"

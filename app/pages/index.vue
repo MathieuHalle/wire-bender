@@ -2,6 +2,7 @@
 import { parseHole, tryParseHole, type Hole } from '~core/holes'
 import type { Side } from '~core/schema'
 import type { Finding } from '~core/check'
+import type { Tag } from '~core/scene3d'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
 import { jointSide, zoomStep, type View } from '~/utils/boardView'
@@ -29,6 +30,10 @@ const highlight = computed(() => {
   const gi = conn.value.groupAtHole(h.hole, h.side)
   return gi === null ? null : conn.value.groups[gi]!
 })
+
+/** The mesh hovered in 3D: a conductor or leg lights its net; a part body only shows its tooltip. */
+const hoverTag = ref<Tag | null>(null)
+const highlightNets = computed(() => (hoverTag.value?.net ? [hoverTag.value.net] : []))
 
 /** The finding picked in the panel; its holes are ringed on both sides. */
 const picked = ref<Finding | null>(null)
@@ -255,6 +260,9 @@ const sideTitle = (s: Side) => (s === 'top'
         <ClientOnly v-else-if="view === '3d'">
           <LazyBoard3D
             :board="board"
+            :highlight-nets="highlightNets"
+            :mark-holes="markHoles"
+            @hover-tag="(t: Tag | null) => hoverTag = t"
             @back="view = 'both'"
           />
         </ClientOnly>
