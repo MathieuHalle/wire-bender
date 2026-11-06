@@ -76,12 +76,24 @@ export function spacingRules(ctx: CheckContext): Finding[] {
       (r.classes[0] === ca && r.classes[1] === cb) || (r.classes[0] === cb && r.classes[1] === ca))
     return rule?.level ?? 'harmless'
   }
+  // Holes where the only copper on that side is an insulated wire stretch lying over them:
+  // insulation can't bridge to a neighbour, so they don't count here (keep-away still does).
+  const insulatedOnly = ctx.sides.map((side) => {
+    const exposed = new Set<string>([...ctx.leadsAt.keys(), ...ctx.wireEndsAt.keys()])
+    for (const r of ctx.runs) if (r.side === side) for (const h of r.bare) exposed.add(holeKey(h))
+    const only = new Set<string>()
+    for (const r of ctx.runs)
+      if (r.side === side && r.kind === 'wire')
+        for (const h of r.holes) if (!exposed.has(holeKey(h))) only.add(holeKey(h))
+    return only
+  })
   const pairs = new Map<string, { a: NetHole, b: NetHole, level: AdjacencyLevel }>()
-  for (const at of perSide)
+  for (const [si, at] of perSide.entries())
     for (const a of at.values())
       for (const step of [{ col: 1, row: 0 }, { col: 0, row: 1 }]) {
         const b = at.get(holeKey({ col: a.hole.col + step.col, row: a.hole.row + step.row }))
         if (!b || b.net === a.net) continue
+        if (insulatedOnly[si]!.has(holeKey(a.hole)) || insulatedOnly[si]!.has(holeKey(b.hole))) continue
         const k = `${holeKey(a.hole)}|${holeKey(b.hole)}`
         const level = levelFor(a, b)
         const prev = pairs.get(k)

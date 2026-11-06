@@ -147,6 +147,20 @@ describe('runCheck', () => {
     expect(adj[0]!.message).toContain('IN_A')
   })
 
+  it('an insulated laid wire is not bare copper: no adjacent caution along it, but its bare stretch counts', () => {
+    const laid = (bare: number[]) => check({
+      ...classes,
+      rules: { keepAway: [], adjacency: [{ classes: ['HV12', 'LOGIC'], level: 'mcu' }] },
+      parts: [axial('R1', 'C2', 'F2', 'V12'), axial('R2', 'H6', 'H9', 'IN_A')],
+      trails: [trail('T1', ['H6', 'H3'], 'bottom', ['H6', 'H3'])],
+      // runs up column 3, past R1's legs at C2 and F2, ends at A3 (nothing next to it)
+      wires: [{ id: 'W1', kind: 'laid', side: 'bottom', points: ['H3', 'A3'], bareSegments: bare, joints: [] }]
+    })
+    const near = (fs: Finding[]) => only(fs, 'adjacent').filter(f => f.holes.includes('C2') || f.holes.includes('F2'))
+    expect(near(laid([]).findings)).toEqual([])
+    expect(near(laid([0]).findings).map(f => f.holes)).toEqual([['C2', 'C3']]) // R1.b at F2 has no net
+  })
+
   it('HV12 next to GND -> adjacent level supply (class order does not matter)', () => {
     const { findings } = check({
       ...classes,

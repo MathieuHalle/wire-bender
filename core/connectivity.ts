@@ -33,7 +33,8 @@ export interface Connectivity {
   proposedJoints: { trailId: string, hole: Hole }[]
   /**
    * The group at that hole on that side, most specific first: the pad on that side, then
-   * what goes through the hole (lead, wire end), then a trail or laid wire lying over it.
+   * what goes through the hole (lead, wire end), then bare copper lying over it (trail, bare
+   * wire stretch), then an insulated wire stretch lying over it.
    * null when nothing is there.
    */
   groupAtHole(h: Hole, side: Side): number | null
@@ -284,19 +285,25 @@ export function buildConnectivity(board: BoardFile): Connectivity {
   for (const id of leadNet.keys()) groupOfLead.set(id, groupOfNode(leadNode(id)))
 
   // ---- groupAtHole / netAtHole -----------------------------------------------------
-  // Most specific first: the pad on that side, then what goes through the hole, then
-  // conductors lying over it on that side (laid wires count along their whole path).
-  const overAt = new Map<string, string[]>() // "key|side" -> trail/wire nodes over that hole
-  const addOver = (h: Hole, side: Side, node: string) => {
+  // Most specific first: the pad on that side, then what goes through the hole, then bare
+  // copper lying over it on that side (trails, bare wire stretches), then insulated wire
+  // stretches lying over it. Insulation never hides the bare copper it crosses.
+  const bareOver = new Map<string, string[]>() // "key|side" -> nodes with bare copper over that hole
+  const insulatedOver = new Map<string, string[]>() // "key|side" -> wire nodes insulated over it
+  const addTo = (m: Map<string, string[]>, h: Hole, side: Side, node: string) => {
     const k = `${holeKey(h)}|${side}`
-    overAt.set(k, [...(overAt.get(k) ?? []), node])
+    m.set(k, [...(m.get(k) ?? []), node])
   }
   for (const t of board.trails) {
     const pts = trailPts.get(t.id)!
-    if (pts.length) for (const h of pathHoles(pts)) addOver(h, t.side, trailNode(t.id))
+    if (pts.length) for (const h of pathHoles(pts)) addTo(bareOver, h, t.side, trailNode(t.id))
   }
-  for (const w of board.wires)
-    if (w.kind === 'laid') for (const h of pathHoles(wirePts.get(w.id)!)) addOver(h, w.side, wireNode(w.id))
+  for (const w of board.wires) {
+    if (w.kind !== 'laid') continue
+    const pts = wirePts.get(w.id)!
+    const bare = new Set(pathHoles(pts, w.bareSegments).map(holeKey))
+    for (const h of pathHoles(pts)) addTo(bare.has(holeKey(h)) ? bareOver : insulatedOver, h, w.side, wireNode(w.id))
+  }
 
   /** The groups of the most specific tier with anything in it, in order, without repeats. */
   const groupsAtHole = (h: Hole, side: Side): number[] => {
@@ -304,7 +311,8 @@ export function buildConnectivity(board: BoardFile): Connectivity {
     const tiers: string[][] = [
       hasPad(h, side) ? [padNode(h, side)] : [],
       [...(leadsAt.get(k) ?? []).map(leadNode), ...(wireEnds.get(k) ?? []).map(wireNode)],
-      overAt.get(`${k}|${side}`) ?? []
+      bareOver.get(`${k}|${side}`) ?? [],
+      insulatedOver.get(`${k}|${side}`) ?? []
     ]
     const tier = tiers.find(t => t.length) ?? []
     return [...new Set(tier.map(groupOfNode))]

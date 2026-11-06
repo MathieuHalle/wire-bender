@@ -52,6 +52,17 @@ describe('buildConnectivity', () => {
     expect(c.netAtHole(parseHole('E5'), 'bottom')).toBeNull()
   })
 
+  it('an insulated wire crossing a trail does not hide the trail\'s net at that hole', () => {
+    // T1 (net N) runs along row C; laid wire W1 (net M, from R4 at H5) crosses it at C5, insulated.
+    const c = buildConnectivity(mk({
+      parts: [...rowC(false), axial('R4', 'H5', 'H8', 'M')],
+      trails: [trail('T1', ['C2', 'C8'])],
+      wires: [{ id: 'W1', kind: 'laid', side: 'bottom', points: ['H5', 'A5'], bareSegments: [], joints: [] }]
+    }))
+    expect(c.netAtHole(parseHole('C5'), 'bottom')).toBe('N')
+    expect(c.netAtHole(parseHole('E5'), 'bottom')).toBe('M') // only the wire there
+  })
+
   it('proposed joint for same-net leg passed over', () => {
     const parts = [...rowC(false), axial('R3', 'C5', 'F5', 'N')]
     const c = buildConnectivity(mk({ parts, trails: [trail('T1', ['C2', 'C8'])] }))
