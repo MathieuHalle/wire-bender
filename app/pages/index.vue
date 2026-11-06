@@ -30,6 +30,22 @@ const mirrorBottom = ref(true)
 const zoomPct = ref(100)
 const canvas = ref<{ frame(which: 'both' | Side, animate?: boolean): void, zoomStep(dir: 1 | -1): void } | null>(null)
 
+/** 2D or 3D from the top bar: in and out of 3D the canvas keeps its camera, as key 3 does. */
+function pickMode(m: '2d' | '3d') {
+  if (m === '3d') view.value = '3d'
+  else if (view.value === '3d') view.value = last2d.value
+}
+
+/** The keys, under the 2D canvas (the full line in its tooltip when it is cut). */
+const KEYS = 'H: navigate (drag pans) · I P E J: tools · Ctrl/Cmd+Z: undo · Esc: end trail · scroll: zoom · drag, right-drag or Space+drag: pan · F: frame top/bottom · 0: fit both · + −: zoom · 3: 3D view · [: side panel'
+
+/** What the 2D canvas frames, from the buttons on it. */
+const FRAMINGS = [
+  { id: 'both', label: 'Both sides', key: '0' },
+  { id: 'top', label: 'Top', key: 'F' },
+  { id: 'bottom', label: 'Bottom', key: 'F' }
+] as const
+
 /** Picks a view; a 2D one frames its sides (once the canvas is there, coming from 3D). */
 function pickView(v: View) {
   view.value = v
@@ -201,7 +217,7 @@ const sideTitle = (s: Side) => (s === 'top'
       <img
         src="/icon.svg"
         alt=""
-        width="18"
+        width="24"
         height="24"
       >
       <span class="font-semibold">WireBender</span>
@@ -238,8 +254,7 @@ const sideTitle = (s: Side) => (s === 'top'
       class="shrink-0"
       :view="view"
       :zoom="zoomPct"
-      :hint="hint"
-      @update:view="pickView"
+      @mode="pickMode"
       @zoom-in="canvas?.zoomStep(1)"
       @zoom-out="canvas?.zoomStep(-1)"
       @fit="pickView('both')"
@@ -343,34 +358,71 @@ const sideTitle = (s: Side) => (s === 'top'
             </template>
           </NuxtErrorBoundary>
         </ClientOnly>
-        <BoardCanvas
+        <div
           v-else
-          ref="canvas"
-          class="min-h-0 flex-1"
-          :frames="frames"
-          :persist-key="board.name"
-          :tool="tool"
-          @zoom="(p: number) => zoomPct = p"
+          class="flex min-h-0 flex-1 flex-col gap-1"
         >
-          <template #frame="{ frame: f }">
-            <BoardSide
-              :board="board"
-              :side="f.id"
-              :mirrored="f.id === 'bottom' && mirrorBottom"
-              :highlight-net="highlight"
-              :hover-hole="hover?.hole ?? null"
-              :tool="tool"
-              :conn="conn ?? undefined"
-              :placed="placed"
-              :draw-from="drawFrom?.side === f.id ? drawFrom.hole : null"
-              :mark-holes="markHoles"
-              :layers="layers"
-              @hover="sideEvents[f.id].hover"
-              @hole-click="sideEvents[f.id].hole"
-              @segment-click="sideEvents[f.id].segment"
-            />
-          </template>
-        </BoardCanvas>
+          <BoardCanvas
+            ref="canvas"
+            class="min-h-0 flex-1"
+            :frames="frames"
+            :persist-key="board.name"
+            :tool="tool"
+            @zoom="(p: number) => zoomPct = p"
+          >
+            <template #overlay>
+              <div
+                class="flex gap-1"
+                role="group"
+                aria-label="Frame"
+              >
+                <UButton
+                  v-for="v in FRAMINGS"
+                  :key="v.id"
+                  size="xs"
+                  color="neutral"
+                  :variant="view === v.id ? 'solid' : 'outline'"
+                  :label="v.label"
+                  :title="`${v.label} (${v.key})`"
+                  @click="pickView(v.id)"
+                />
+              </div>
+            </template>
+            <template #frame="{ frame: f }">
+              <BoardSide
+                :board="board"
+                :side="f.id"
+                :mirrored="f.id === 'bottom' && mirrorBottom"
+                :highlight-net="highlight"
+                :hover-hole="hover?.hole ?? null"
+                :tool="tool"
+                :conn="conn ?? undefined"
+                :placed="placed"
+                :draw-from="drawFrom?.side === f.id ? drawFrom.hole : null"
+                :mark-holes="markHoles"
+                :layers="layers"
+                @hover="sideEvents[f.id].hover"
+                @hole-click="sideEvents[f.id].hole"
+                @segment-click="sideEvents[f.id].segment"
+              />
+            </template>
+          </BoardCanvas>
+          <!-- While drawing, the hint takes the keys' place (one line either way: no jump). -->
+          <p
+            v-if="hint"
+            class="truncate font-mono text-xs"
+            :title="hint"
+          >
+            {{ hint }}
+          </p>
+          <p
+            v-else
+            class="truncate text-xs text-muted max-md:hidden"
+            :title="KEYS"
+          >
+            {{ KEYS }}
+          </p>
+        </div>
       </main>
 
       <SidePanel

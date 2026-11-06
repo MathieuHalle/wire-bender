@@ -51,7 +51,16 @@ const pointer: { value: Point | null } = { value: null }
 provide(CANVAS_CONTEXT, { overlay: root, camera, panning, pointer })
 
 const all = computed(() => unionRect(props.frames.map(f => f.rect)))
-const fitScale = computed(() => fitRect(all.value, size.value, FIT_MARGIN).scale)
+/** Room (px) kept clear at the top for the overlay's buttons when framing. */
+const OVERLAY_BAND = 32
+const slots = useSlots()
+/** Fits a rect below the overlay's band (if there is an overlay), with the margin around it. */
+function fitView(r: Rect): Camera {
+  const band = slots.overlay ? OVERLAY_BAND : 0
+  const c = fitRect(r, { w: size.value.w, h: Math.max(1, size.value.h - band) }, FIT_MARGIN)
+  return { ...c, y: c.y + band }
+}
+const fitScale = computed(() => fitView(all.value).scale)
 const limits = computed(() => zoomLimits(fitScale.value))
 
 watch([camera, fitScale], ([c, f]) => {
@@ -86,7 +95,7 @@ function target(which: 'both' | Side): Rect {
 /** Frames both sides, or one, filling the canvas with a margin (the user's choice: it is stored). */
 function frame(which: 'both' | Side, animate = true) {
   moved = true
-  const to = fitRect(target(which), size.value, FIT_MARGIN)
+  const to = fitView(target(which))
   if (animate) animateTo(to)
   else {
     stopAnim()
@@ -124,7 +133,7 @@ function measure() {
 /** The stored view in this canvas, else both sides fitted. */
 function restore() {
   const v = loadView(props.persistKey, storage)
-  camera.value = v ? fromStored(v, size.value, fitScale.value) : fitRect(all.value, size.value, FIT_MARGIN)
+  camera.value = v ? fromStored(v, size.value, fitScale.value) : fitView(all.value)
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined
@@ -364,6 +373,14 @@ const frameStyle = (r: Rect) => {
           />
         </div>
       </section>
+    </div>
+    <!-- Controls over the canvas (the framing buttons): a press on them is not a pan. -->
+    <div
+      v-if="ready && $slots.overlay"
+      class="absolute top-2 left-2 z-10"
+      @pointerdown.stop
+    >
+      <slot name="overlay" />
     </div>
   </div>
 </template>
