@@ -158,16 +158,21 @@ export function partPrims(
       allStraight(0)
       break
     case 'to220-gds': {
-      // Standing on the board on straight legs (the owner's choice); the tab, on the face
-      // farthest from the leads, reaches the full height.
-      const n = awayFromPins(r, pins)
+      // Straight-mounted on its legs (the owner's choice): the body stands over the pins and
+      // the tab is its back face on the tab side, reaching the full height.
+      const n: XZ = pp.tab ? { x: pp.tab.dx, z: pp.tab.dy } : awayFromPins(r, pins)
       const y0 = 0
       const top = h
-      out.push(rectBox(r, y0, top - TO220_TAB_ABOVE_MM, COLORS.black, body))
       const t = TO220_TAB_MM
-      const tab: Rect = n.x !== 0
-        ? { x: n.x > 0 ? r.x + r.w : r.x - t, y: r.y, w: t, h: r.h }
-        : { x: r.x, y: n.z > 0 ? r.y + r.h : r.y - t, w: r.w, h: t }
+      // Split the rect across the tab direction: plastic in front, the metal plate at the back.
+      const [front, tab]: [Rect, Rect] = n.x !== 0
+        ? n.x > 0
+          ? [{ ...r, w: r.w - t }, { ...r, x: r.x + r.w - t, w: t }]
+          : [{ ...r, x: r.x + t, w: r.w - t }, { ...r, w: t }]
+        : n.z > 0
+          ? [{ ...r, h: r.h - t }, { ...r, y: r.y + r.h - t, h: t }]
+          : [{ ...r, y: r.y + t, h: r.h - t }, { ...r, h: t }]
+      out.push(rectBox(front, y0, top - TO220_TAB_ABOVE_MM, COLORS.black, body))
       out.push({ ...rectBox(tab, y0, top, COLORS.tab, body), metal: true })
       // The mounting hole: a dark disc through the plate, centred on the part above the body.
       const hc = centreOf(tab)

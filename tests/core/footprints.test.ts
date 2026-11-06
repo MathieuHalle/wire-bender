@@ -104,6 +104,22 @@ describe('body geometry', () => {
       ['U10', 'U11', 'U8', 'U9', 'V10', 'V11', 'V8', 'V9'])
   })
 
+  it('TO-220 body sits over its pins, tab +x, and they rotate together', () => {
+    // Straight legs: 4.5 thick across the pin line, the pins 2.5 from the tab (back) face.
+    const r0 = placePart(part({ footprint: 'to220-gds', at: 'C3' }))
+    const pin = { x: 2 * 2.54, y: 2 * 2.54 } // G at C3 (col 3, row 3)
+    close(r0.bodyRectMm, [pin.x - 2.0, pin.y + 2.54 - 5, 4.5, 10])
+    expect(r0.tab).toEqual({ dx: 1, dy: 0 })
+    expect(FOOTPRINTS['to220-gds']!.tab).toEqual({ dx: 1, dy: 0 })
+    // Rotation 90 (clockwise from the top): the pins run along -x, the tab points +y (down).
+    const r90 = placePart(part({ footprint: 'to220-gds', at: 'C3', rotation: 90 }))
+    expect(r90.tab).toEqual({ dx: 0, dy: 1 })
+    close(r90.bodyRectMm, [pin.x - 2.54 - 5, pin.y - 2.0, 10, 4.5])
+    // Flip mirrors the tab the way it mirrors dx.
+    expect(placePart(part({ footprint: 'to220-gds', at: 'C3', flip: true })).tab).toEqual({ dx: -1, dy: 0 })
+    expect(placePart(part({ footprint: 'dip8', at: 'C3' })).tab).toBeUndefined()
+  })
+
   it('flipped dip8 body extends to the left of pin 1', () => {
     const r = placePart(part({ footprint: 'dip8', at: 'D10', flip: true })).bodyRectMm
     close(r, [22.86 - 6.985, 7.62 - 1.09, 6.35, 9.8])

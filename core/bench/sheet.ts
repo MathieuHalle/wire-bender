@@ -39,15 +39,16 @@ const MCU_GROUP = 'Kills the MCU'
 const rowName = (row: number) => holeName({ col: 1, row }).replace(/\d+$/, '')
 
 /**
- * Which way a tab or flat side faces: from the pin centroid toward the body centre.
- * `pitch` is the one the body rect was placed at (pin holes in mm are (col - 1) * pitch).
+ * Which way a tab or flat side faces: the placed part's tab direction, else from the pin
+ * centroid toward the body centre. `pitch` is the one the body rect was placed at (pin
+ * holes in mm are (col - 1) * pitch).
  */
 function facing(pp: PlacedPart, pitch: number): string {
   const cx = pp.pins.reduce((a, p) => a + p.hole.col, 0) / pp.pins.length
   const cy = pp.pins.reduce((a, p) => a + p.hole.row, 0) / pp.pins.length
   const r = pp.bodyRectMm
-  const dx = r.x + r.w / 2 - (cx - 1) * pitch
-  const dy = r.y + r.h / 2 - (cy - 1) * pitch
+  const dx = pp.tab ? pp.tab.dx : r.x + r.w / 2 - (cx - 1) * pitch
+  const dy = pp.tab ? pp.tab.dy : r.y + r.h / 2 - (cy - 1) * pitch
   const cols = pp.pins.map(p => p.hole.col)
   const rows = pp.pins.map(p => p.hole.row)
   if (Math.abs(dy) > Math.abs(dx)) {

@@ -18,7 +18,15 @@ export interface Footprint {
    */
   body: { rect: { x: number, y: number, w: number, h: number }, heightMm: number, round?: boolean, side: 'top' }
   mark?: 'pin1' | 'stripe-b' | 'flat' | 'tab'
+  /**
+   * Which way the metal tab (or flat side) faces: a unit vector at rotation 0 in footprint
+   * space (x right, y down). placePart flips and rotates it with the pins.
+   */
+  tab?: Dir
 }
+
+/** An axis-aligned unit vector, x right, y down. */
+export interface Dir { dx: number, dy: number }
 
 export interface Rect { x: number, y: number, w: number, h: number }
 
@@ -30,6 +38,8 @@ export interface PlacedPart {
   bodyHoles: Hole[]
   /** Board mm, after rotation/flip. */
   bodyRectMm: Rect
+  /** The footprint's tab direction after flip and rotation, when it has one. */
+  tab?: Dir
 }
 
 const p = (name: string, dx: number, dy: number) => ({ name, dx, dy })
@@ -48,7 +58,9 @@ export const FOOTPRINTS: Record<string, Footprint> = {
   'to220-gds': {
     id: 'to220-gds', name: 'TO-220 (G D S)',
     pins: [p('G', 0, 0), p('D', 0, 1), p('S', 0, 2)],
-    body: { rect: { x: 1.27, y: PITCH - 5, w: 4.5, h: 10.0 }, heightMm: 15.5, side: 'top' }, mark: 'tab'
+    // Straight-mounted: 4.5 thick over the pin line, the pins 2.5 from the tab (back) face.
+    body: { rect: { x: 2.5 - 4.5, y: PITCH - 5, w: 4.5, h: 10.0 }, heightMm: 15.5, side: 'top' },
+    mark: 'tab', tab: { dx: 1, dy: 0 }
   },
   'dip8': {
     id: 'dip8', name: 'DIP-8',
@@ -119,6 +131,7 @@ export function placePart(part: Part): PlacedPart {
   let local: Rect // mm, relative to the origin point `originMm`
   let originMm: { x: number, y: number }
   let angle = 0 // radians, for twoLead axis
+  let tab: Dir | undefined
 
   if (fp.twoLead) {
     const a = at
@@ -149,6 +162,7 @@ export function placePart(part: Part): PlacedPart {
       })
     local = boxOf(corners)
     originMm = holeMm(at, PITCH)
+    if (fp.tab) tab = rotateOffset(fp.tab.dx * sx, fp.tab.dy, part.rotation)
   }
 
   let bodyRectMm: Rect
@@ -180,5 +194,5 @@ export function placePart(part: Part): PlacedPart {
       if (x > x0 && x < x1 && y > y0 && y < y1 && !own.has(`${col},${row}`)) bodyHoles.push({ col, row })
     }
 
-  return { part, fp, pins, bodyHoles, bodyRectMm }
+  return { part, fp, pins, bodyHoles, bodyRectMm, ...(tab ? { tab } : {}) }
 }

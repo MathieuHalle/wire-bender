@@ -43,6 +43,9 @@ describe('benchModel placement', () => {
     expect(benchModel(q(90)).placement[0]!.orientation).toBe('metal tab toward row D')
     expect(benchModel(q(180)).placement[0]!.orientation).toBe('metal tab toward column 2')
     expect(benchModel(q(270)).placement[0]!.orientation).toBe('metal tab toward row B')
+    // Flipped, the tab mirrors with the pins.
+    const f = mk({ parts: [part({ ref: 'Q1', footprint: 'to220-gds', at: 'C3', flip: true })] })
+    expect(benchModel(f).placement[0]!.orientation).toBe('metal tab toward column 2')
   })
 })
 
@@ -163,6 +166,11 @@ describe('benchModel on channel board 2 (frozen fixture)', () => {
     expect(m.cards).toHaveLength(44)
     expect(m.cards.filter(c => c.kind === 'trail')).toHaveLength(35)
     expect(m.legFolds).toHaveLength(12)
-    expect(m.check.errors).toHaveLength(4)
+    expect(m.check.errors).toHaveLength(2)
+  })
+
+  it('QA\'s tab faces row N and QB\'s faces row P', () => {
+    expect(m.placement.find(r => r.ref === 'QA')!.orientation).toBe('metal tab toward row N')
+    expect(m.placement.find(r => r.ref === 'QB')!.orientation).toBe('metal tab toward row P')
   })
 })

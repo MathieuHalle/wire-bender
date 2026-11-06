@@ -223,8 +223,8 @@ describe('scene3d parts', () => {
     for (const part of b.parts) {
       const pp = placePart(part)
       if (pp.fp.twoLead) continue
-      // The TO-220 tab stands outside the rect, on the face away from the leads.
-      const boxes = bodies(part.ref).filter(p => p.kind === 'box' && p.color !== COLORS.tab)
+      // Every box, the TO-220 tab plate included: it is the back face of the body rect.
+      const boxes = bodies(part.ref).filter(p => p.kind === 'box')
       expect(boxes.length, part.ref).toBeGreaterThan(0)
       const ext = boxes.flatMap((p) => {
         if (p.kind !== 'box') return []
@@ -320,10 +320,18 @@ describe('scene3d parts', () => {
       const tabTop = tab.center[1] + tab.size[1] / 2
       expect(c[1] - hole.radius).toBeGreaterThan(bodyTop)
       expect(c[1] + hole.radius).toBeLessThan(tabTop)
-      // Outside the 2D body rect, on the side away from the leads; axis through the plate.
-      const inX = c[0] > r.x && c[0] < r.x + r.w
-      const inZ = c[2] > r.y && c[2] < r.y + r.h
-      expect(inX && inZ).toBe(false)
+      // The plate is the body's back face on the tab side: inside the 2D rect, flush with
+      // its tab-side edge, 1.3 thick, and past the pins along the tab direction.
+      const n = placePart(part).tab!
+      const back = n.dx > 0 ? r.x + r.w : n.dx < 0 ? r.x : n.dy > 0 ? r.y + r.h : r.y
+      const k = n.dx !== 0 ? 0 : 2
+      const s2 = n.dx !== 0 ? n.dx : n.dy
+      expect(tab.center[k] + s2 * tab.size[k] / 2, ref).toBeCloseTo(back)
+      expect(tab.size[k]).toBeCloseTo(1.3)
+      const pin = pinXZ(part, 'D')
+      expect(s2 * (c[k] - (k === 0 ? pin.x : pin.z)), ref).toBeGreaterThan(0)
+      // The plate does not cover the pins.
+      expect(s2 * (tab.center[k] - s2 * tab.size[k] / 2 - (k === 0 ? pin.x : pin.z)), ref).toBeGreaterThan(0)
       const thin = tab.size[0] < tab.size[2] ? 0 : 2
       expect(Math.abs(hole.b[thin] - hole.a[thin])).toBeGreaterThanOrEqual(tab.size[thin] - 1e-9)
       expect(Math.abs(hole.b[2 - thin] - hole.a[2 - thin])).toBeCloseTo(0)
@@ -347,6 +355,10 @@ describe('scene3d parts', () => {
           expect(q[2], leg.tag.id).toBeCloseTo(z)
         }
         expect(Math.max(...ys(leg)), leg.tag.id).toBeCloseTo(0)
+        expect(Math.min(...ys(leg)), leg.tag.id).toBeCloseTo(LEG_BOTTOM)
+        // Under the body (straight-mounted): the hole is inside the 2D body rect.
+        const r = pp.bodyRectMm
+        expect(x > r.x && x < r.x + r.w && z > r.y && z < r.y + r.h, leg.tag.id).toBe(true)
       }
     }
   })

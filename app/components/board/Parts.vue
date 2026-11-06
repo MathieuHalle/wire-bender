@@ -36,20 +36,24 @@ const parts = computed(() => props.placed.map((p) => {
     const q = { x: p1.x + (dx / len) * 1.6, y: p1.y + (dy / len) * 1.6 }
     marks.push({ d: `M${v(q).x - 0.01} ${q.y}l0.02 0`, w: 0.9, color: '#16201b' }) // a dot
   } else if ((p.fp.mark === 'tab' || p.fp.mark === 'flat') && !round) {
-    // The body edge farthest from the leads.
+    // The body edge on the tab side; without an explicit tab, the edge farthest from the leads.
     const cx = pinPts.reduce((s, q) => s + q.x, 0) / pinPts.length
     const cy = pinPts.reduce((s, q) => s + q.y, 0) / pinPts.length
     const i = 0.3
+    // Top (-y), bottom (+y), left (-x), right (+x).
     const edges: [Pt, Pt][] = [
       [{ x: r.x + i, y: r.y + i }, { x: r.x + r.w - i, y: r.y + i }],
       [{ x: r.x + i, y: r.y + r.h - i }, { x: r.x + r.w - i, y: r.y + r.h - i }],
       [{ x: r.x + i, y: r.y + i }, { x: r.x + i, y: r.y + r.h - i }],
       [{ x: r.x + r.w - i, y: r.y + i }, { x: r.x + r.w - i, y: r.y + r.h - i }]
     ]
-    const far = edges.reduce((best, e) => {
-      const d = (e: [Pt, Pt]) => Math.hypot((e[0].x + e[1].x) / 2 - cx, (e[0].y + e[1].y) / 2 - cy)
-      return d(e) > d(best) ? e : best
-    })
+    const t = p.tab
+    const far = t
+      ? edges[t.dx !== 0 ? (t.dx > 0 ? 3 : 2) : (t.dy > 0 ? 1 : 0)]!
+      : edges.reduce((best, e) => {
+          const d = (e: [Pt, Pt]) => Math.hypot((e[0].x + e[1].x) / 2 - cx, (e[0].y + e[1].y) / 2 - cy)
+          return d(e) > d(best) ? e : best
+        })
     line(far[0], far[1], p.fp.mark === 'tab' ? 0.9 : 0.35, p.fp.mark === 'tab' ? '#8d969b' : '#16201b')
   } else if (p.fp.mark === 'stripe-b' && pinPts.length === 2) {
     const [a, b] = pinPts as [Pt, Pt]
