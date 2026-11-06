@@ -1,12 +1,12 @@
 {
   "format": "wirebender/1",
-  "revision": 0,
+  "revision": 39,
   "name": "Channel board 2",
   "board": {
     "cols": 18,
     "rows": 24,
     "pitchMm": 2.54,
-    "type": "one-sided",
+    "type": "two-sided",
     "blocked": []
   },
   "netClasses": {
@@ -200,13 +200,13 @@
       "label": "KA",
       "pins": {
         "1": "COIL_A",
-        "16": "V12",
         "4": "W1A",
-        "13": "W2A",
         "6": "F12A",
-        "11": "DATA_A",
         "8": "DATA_A",
-        "9": "F12A"
+        "9": "F12A",
+        "11": "DATA_A",
+        "13": "W2A",
+        "16": "V12"
       }
     },
     {
@@ -218,13 +218,13 @@
       "label": "KB",
       "pins": {
         "1": "V12",
-        "16": "COIL_B",
         "4": "W2B",
-        "13": "W1B",
         "6": "DATA_B",
-        "11": "F12B",
         "8": "F12B",
-        "9": "DATA_B"
+        "9": "DATA_B",
+        "11": "F12B",
+        "13": "W1B",
+        "16": "COIL_B"
       }
     },
     {
@@ -348,7 +348,7 @@
     {
       "ref": "RGB",
       "footprint": "axial",
-      "at": "P13",
+      "at": "Q13",
       "to": "T13",
       "rotation": 0,
       "label": "RGB 10R",
@@ -372,27 +372,27 @@
     {
       "ref": "RPA",
       "footprint": "axial",
-      "at": "V17",
-      "to": "V18",
+      "at": "T17",
+      "to": "U17",
       "rotation": 0,
       "standing": true,
       "label": "RPA 10k",
       "pins": {
-        "a": "IN_A",
-        "b": "GND"
+        "a": "GND",
+        "b": "IN_A"
       }
     },
     {
       "ref": "RPB",
       "footprint": "axial",
-      "at": "X11",
-      "to": "X10",
+      "at": "T16",
+      "to": "U16",
       "rotation": 0,
       "standing": true,
       "label": "RPB 10k",
       "pins": {
-        "a": "IN_B",
-        "b": "GND"
+        "a": "GND",
+        "b": "IN_B"
       }
     },
     {
@@ -758,7 +758,8 @@
       ],
       "joints": [
         "A15",
-        "G15"
+        "G15",
+        "E16"
       ]
     },
     {
@@ -846,11 +847,11 @@
       "side": "bottom",
       "points": [
         "O13",
-        "P13"
+        "Q13"
       ],
       "joints": [
         "O13",
-        "P13"
+        "Q13"
       ]
     },
     {
@@ -866,30 +867,6 @@
       ]
     },
     {
-      "id": "T21",
-      "side": "bottom",
-      "points": [
-        "U11",
-        "U16"
-      ],
-      "joints": [
-        "U11",
-        "U16"
-      ]
-    },
-    {
-      "id": "T22",
-      "side": "bottom",
-      "points": [
-        "R16",
-        "U16"
-      ],
-      "joints": [
-        "R16",
-        "U16"
-      ]
-    },
-    {
       "id": "T23",
       "side": "bottom",
       "points": [
@@ -902,41 +879,15 @@
       ]
     },
     {
-      "id": "T24",
-      "side": "bottom",
-      "points": [
-        "W16",
-        "X16"
-      ],
-      "joints": [
-        "W16",
-        "X16"
-      ]
-    },
-    {
       "id": "T25",
       "side": "bottom",
       "points": [
-        "W12",
-        "W11",
-        "X11"
+        "X11",
+        "W11"
       ],
       "joints": [
-        "W12",
-        "W11",
-        "X11"
-      ]
-    },
-    {
-      "id": "T26",
-      "side": "bottom",
-      "points": [
-        "W17",
-        "X17"
-      ],
-      "joints": [
-        "W17",
-        "X17"
+        "X11",
+        "W11"
       ]
     },
     {
@@ -944,11 +895,12 @@
       "side": "bottom",
       "points": [
         "W17",
-        "V17"
+        "U17"
       ],
       "joints": [
         "W17",
-        "V17"
+        "V17",
+        "U17"
       ]
     },
     {
@@ -964,18 +916,6 @@
       ]
     },
     {
-      "id": "T29",
-      "side": "bottom",
-      "points": [
-        "W10",
-        "X10"
-      ],
-      "joints": [
-        "W10",
-        "X10"
-      ]
-    },
-    {
       "id": "T30",
       "side": "bottom",
       "points": [
@@ -984,21 +924,18 @@
       ],
       "joints": [
         "W18",
-        "V18",
-        "R18"
+        "R18",
+        "T18"
       ]
     },
     {
       "id": "T31",
       "side": "bottom",
       "points": [
-        "U11",
-        "V11",
         "V10",
         "W10"
       ],
       "joints": [
-        "U11",
         "W10"
       ]
     },
@@ -1053,12 +990,51 @@
         "P15",
         "R15"
       ]
+    },
+    {
+      "id": "T29",
+      "side": "bottom",
+      "points": [
+        "W16",
+        "U16"
+      ],
+      "joints": [
+        "W16",
+        "V16",
+        "U16"
+      ]
+    },
+    {
+      "id": "T21",
+      "side": "bottom",
+      "points": [
+        "V10",
+        "V1",
+        "R1"
+      ],
+      "joints": [
+        "V10",
+        "R1"
+      ]
+    },
+    {
+      "id": "T39",
+      "side": "bottom",
+      "points": [
+        "T18",
+        "T16"
+      ],
+      "joints": [
+        "T18",
+        "T16",
+        "T17"
+      ]
     }
   ],
   "wires": [
     {
       "id": "W1",
-      "kind": "flying",
+      "kind": "laid",
       "side": "bottom",
       "points": [
         "I2",
@@ -1070,7 +1046,7 @@
     },
     {
       "id": "W2",
-      "kind": "flying",
+      "kind": "laid",
       "side": "bottom",
       "points": [
         "I16",
@@ -1082,10 +1058,11 @@
     },
     {
       "id": "W3",
-      "kind": "flying",
+      "kind": "laid",
       "side": "bottom",
       "points": [
         "P9",
+        "P11",
         "S11"
       ],
       "color": "#d62839",
@@ -1094,10 +1071,11 @@
     },
     {
       "id": "W4",
-      "kind": "flying",
+      "kind": "laid",
       "side": "bottom",
       "points": [
         "S9",
+        "S4",
         "T4"
       ],
       "color": "#7cb342",
@@ -1107,9 +1085,9 @@
     {
       "id": "W5",
       "kind": "flying",
-      "side": "bottom",
+      "side": "top",
       "points": [
-        "X17",
+        "V17",
         "X9"
       ],
       "color": "#0aa294",
@@ -1118,11 +1096,13 @@
     },
     {
       "id": "W6",
-      "kind": "flying",
-      "side": "bottom",
+      "kind": "laid",
+      "side": "top",
       "points": [
-        "X16",
-        "W12"
+        "V16",
+        "V12",
+        "X12",
+        "X11"
       ],
       "color": "#0aa294",
       "bareSegments": [],
@@ -1130,10 +1110,11 @@
     },
     {
       "id": "W7",
-      "kind": "flying",
+      "kind": "laid",
       "side": "bottom",
       "points": [
         "C3",
+        "C14",
         "X14"
       ],
       "color": "#c19a00",
@@ -1142,7 +1123,7 @@
     },
     {
       "id": "W8",
-      "kind": "flying",
+      "kind": "laid",
       "side": "bottom",
       "points": [
         "C15",
@@ -1154,10 +1135,11 @@
     },
     {
       "id": "W9",
-      "kind": "flying",
+      "kind": "laid",
       "side": "bottom",
       "points": [
         "C7",
+        "C8",
         "R8"
       ],
       "color": "#111111",
@@ -1262,6 +1244,7 @@
     "bendAllowanceMm": 1,
     "spareMm": 5,
     "flyingSlackMm": 10,
-    "roundToMm": 5
+    "roundToMm": 5,
+    "paper": "letter"
   }
 }
