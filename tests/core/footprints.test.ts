@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { FOOTPRINTS, placePart, rotateOffset } from '~core/footprints'
+import { FOOTPRINTS, isDiodePart, placePart, rotateOffset } from '~core/footprints'
 import { holeName, parseHole } from '~core/holes'
 import { parseBoard } from '~core/schema'
 import type { Part } from '~core/schema'
@@ -30,6 +30,20 @@ describe('placePart', () => {
   it('standing axial body only around lead a', () => {
     const p = placePart(part({ footprint: 'axial', at: 'L2', to: 'L1', standing: true }))
     expect(p.bodyHoles).toEqual([])
+  })
+
+  it('standing resistors are 2.5 mm wide, standing diodes 2.7 mm', () => {
+    const r = placePart(part({ footprint: 'axial', at: 'L2', to: 'M2', standing: true, value: '10k' }))
+    const d = placePart(part({ footprint: 'axial', at: 'L2', to: 'M2', standing: true, value: '1N4001' }))
+    expect(r.bodyRectMm.w).toBeCloseTo(2.5, 9)
+    expect(d.bodyRectMm.w).toBeCloseTo(2.7, 9)
+    expect(isDiodePart(part({ footprint: 'axial', at: 'A1', label: 'D1N4148' }))).toBe(true)
+  })
+
+  it('two standing resistors fit side by side in one row', () => {
+    const a = placePart(part({ footprint: 'axial', at: 'T17', to: 'U17', standing: true, value: '10k' })).bodyRectMm
+    const b = placePart(part({ footprint: 'axial', at: 'T16', to: 'U16', standing: true, value: '10k' })).bodyRectMm
+    expect(b.x + b.w).toBeLessThan(a.x)
   })
 
   it('twoLead uses at/to and ignores rotation', () => {

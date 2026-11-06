@@ -1,4 +1,4 @@
-import { bodyHeightMm, FOOTPRINT_PITCH_MM, TAB_PLATE_MM, tabPlateMm, type PlacedPart, type Rect } from '../footprints'
+import { bodyHeightMm, isDiodePart, FOOTPRINT_PITCH_MM, TAB_PLATE_MM, tabPlateMm, type PlacedPart, type Rect } from '../footprints'
 import { holeMm } from '../holes'
 import {
   BOARD_BOTTOM_Y, COLORS, LEG_DIAMETER_MM, LEG_END_Y, LEG_FOLD_Y, SOLDER_BASE_DIAMETER_MM, SOLDER_HEIGHT_MM
@@ -67,9 +67,7 @@ function leadAxis(a: XZ, b: XZ): { u: XZ, mid: XZ } {
   return { u: { x: dx / len, z: dz / len }, mid: { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 } }
 }
 
-function isDiode(pp: PlacedPart): boolean {
-  return /diode|1N\d{4}/i.test(`${pp.part.value ?? ''} ${pp.part.label ?? ''}`)
-}
+const isDiode = (pp: PlacedPart): boolean => isDiodePart(pp.part)
 
 const centreOf = (r: Rect): XZ => ({ x: r.x + r.w / 2, z: r.y + r.h / 2 })
 
@@ -284,10 +282,11 @@ export function partPrims(
       const color = diode ? COLORS.diode : COLORS.resistor
       const { a, b } = two!
       if (part.standing) {
-        // Vertical over lead a; lead b runs up beside the body and over the top.
-        out.push({ kind: 'cylinder', a: [a.x, 0, a.z], b: [a.x, h, a.z], radius: R, color, tag: body })
+        // Vertical over lead a, as wide as the 2D body circle; lead b runs up beside it and over the top.
+        const Rs = pp.bodyRectMm.w / 2
+        out.push({ kind: 'cylinder', a: [a.x, 0, a.z], b: [a.x, h, a.z], radius: Rs, color, tag: body })
         if (diode)
-          out.push({ kind: 'cylinder', a: [a.x, h - STRIPE_MM - 0.4, a.z], b: [a.x, h - 0.4, a.z], radius: R + STRIPE_PROUD_MM, color: COLORS.diodeStripe, tag: body })
+          out.push({ kind: 'cylinder', a: [a.x, h - STRIPE_MM - 0.4, a.z], b: [a.x, h - 0.4, a.z], radius: Rs + STRIPE_PROUD_MM, color: COLORS.diodeStripe, tag: body })
         straight.set('a', 0)
         out.push({ kind: 'tube', radius: LEG_R, color: COLORS.leg, metal: true, tag: legTag(pins[1]!), points: standingLeadB(a, b, h, legEnd(pins[1]!)) })
       } else {

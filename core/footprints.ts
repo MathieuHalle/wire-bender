@@ -102,9 +102,18 @@ export const FOOTPRINTS: Record<string, Footprint> = {
   }
 }
 
-/** Standing axial parts are 7 mm tall and cover a circle of this diameter over lead a. */
-const STANDING_DIAMETER_MM = 2.7
+/**
+ * Standing axial parts are 7 mm tall and cover a circle over lead a: 2.7 mm for a diode
+ * (1N4001), 2.5 mm for a 1/4 W resistor, so two standing resistors fit on neighbouring holes.
+ */
+const STANDING_DIODE_DIAMETER_MM = 2.7
+const STANDING_RESISTOR_DIAMETER_MM = 2.5
 const STANDING_HEIGHT_MM = 7
+
+/** A diode, from its value or label ("1N4001", "D1N4148", "diode"). */
+export function isDiodePart(part: Part): boolean {
+  return /diode|1N\d{4}/i.test(`${part.value ?? ''} ${part.label ?? ''}`)
+}
 
 /** Rotate clockwise seen from the top by `rot` degrees: (dx,dy) -> (-dy,dx) per 90 degrees. */
 export function rotateOffset(dx: number, dy: number, rot: number): { dx: number, dy: number } {
@@ -148,7 +157,7 @@ export function placePart(part: Part): PlacedPart {
     const am = holeMm(a, PITCH)
     const bm = holeMm(b, PITCH)
     if (part.standing) {
-      const d = STANDING_DIAMETER_MM
+      const d = isDiodePart(part) ? STANDING_DIODE_DIAMETER_MM : STANDING_RESISTOR_DIAMETER_MM
       local = { x: -d / 2, y: -d / 2, w: d, h: d }
       originMm = am
     } else {
