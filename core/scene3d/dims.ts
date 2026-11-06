@@ -32,5 +32,13 @@ export const COLORS = {
   resistor: '#d9c7a0',
   diode: '#1d1f21',
   diodeStripe: '#9aa0a6',
-  capDisc: '#d9822b'
+  capDisc: '#d9822b',
+  /** Pin-1 marks on dark or blue bodies (relay dot, header triangle). */
+  markLight: '#e8e8e8',
+  /** Moulded marks on a black body (DIP notch and dot). */
+  markDark: '#4a4e52',
+  screw: '#9aa0a6',
+  slot: '#2a2c2e',
+  wireEntry: '#16201b',
+  tabHole: '#16150f'
 } as const

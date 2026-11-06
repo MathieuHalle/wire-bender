@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest'
 import { parseBoard, type BoardFile, type Part } from '~core/schema'
 import { placePart, FOOTPRINT_PITCH_MM } from '~core/footprints'
 import { holeMm, parseHole } from '~core/holes'
-import { buildScene, type Prim, type V3 } from '~core/scene3d'
+import { buildScene, COLORS, type Prim, type V3 } from '~core/scene3d'
 import { mk } from './helpers'
 
 function board2(): BoardFile {
@@ -36,7 +36,8 @@ describe('scene3d parts', () => {
   const b = board2()
   const s = buildScene(b)
   const bodies = (ref: string) => s.prims.filter(p => p.tag.kind === 'part' && p.tag.id === ref)
-  const legs = (ref: string) => s.prims.filter(p => p.tag.kind === 'leg' && p.tag.id.split('.')[0] === ref)
+  /** The round leg (cylinder or tube) per pin; flat lead boxes share its tag but are not counted. */
+  const legs = (ref: string) => s.prims.filter(p => p.tag.kind === 'leg' && p.kind !== 'box' && p.tag.id.split('.')[0] === ref)
 
   it('every part has a body and one leg per pin', () => {
     expect(s.skipped).toEqual([])
@@ -60,6 +61,10 @@ describe('scene3d parts', () => {
         expect(leg.tag.net).toBe(part.pins[pin] ?? null)
       }
       for (const body of bodies(part.ref)) expect(body.tag.net).toBeUndefined()
+      // Extra leg prims (flat DIP leads) carry exactly their round leg's tag.
+      const round = new Map(legs(part.ref).map(l => [l.tag.id, l.tag]))
+      for (const p of s.prims.filter(p => p.tag.kind === 'leg' && p.kind === 'box' && p.tag.id.split('.')[0] === part.ref))
+        expect(p.tag, p.tag.id).toEqual(round.get(p.tag.id))
     }
   })
 
@@ -158,5 +163,205 @@ describe('scene3d parts', () => {
   it('bounds cover the legs and the tallest part', () => {
     expect(s.bounds.min[1]).toBeLessThanOrEqual(LEG_BOTTOM + 1e-9)
     expect(s.bounds.max[1]).toBeGreaterThanOrEqual(15.5)
+  })
+
+  it('non-two-lead body boxes cover exactly the 2D body rect in x/z', () => {
+    for (const part of b.parts) {
+      const pp = placePart(part)
+      if (pp.fp.twoLead) continue
+      // The TO-220 tab stands outside the rect, on the face away from the leads.
+      const boxes = bodies(part.ref).filter(p => p.kind === 'box' && p.color !== COLORS.tab)
+      expect(boxes.length, part.ref).toBeGreaterThan(0)
+      const ext = boxes.flatMap((p) => {
+        if (p.kind !== 'box') return []
+        return [[p.center[0] - p.size[0] / 2, p.center[0] + p.size[0] / 2, p.center[2] - p.size[2] / 2, p.center[2] + p.size[2] / 2]]
+      })
+      const r = pp.bodyRectMm
+      const got = [Math.min(...ext.map(e => e[0]!)), Math.max(...ext.map(e => e[1]!)), Math.min(...ext.map(e => e[2]!)), Math.max(...ext.map(e => e[3]!))]
+      const want = [r.x, r.x + r.w, r.y, r.y + r.h]
+      got.forEach((g, i) => expect(Math.abs(g - want[i]!), `${part.ref} edge ${i}`).toBeLessThan(0.05))
+    }
+  })
+
+  it('header has a gold post per pin', () => {
+    const part = b.parts.find(p => p.ref === 'JH')!
+    const pp = placePart(part)
+    const posts = bodies('JH').filter(p => p.kind === 'box' && p.color === '#d4af37')
+    expect(posts).toHaveLength(pp.pins.length)
+    const black = bodies('JH').filter((p): p is Extract<Prim, { kind: 'box' }> => p.kind === 'box' && p.color === COLORS.black)
+    // The bar is two boxes: the full bar and a narrower chamfered top.
+    expect(black).toHaveLength(2)
+    const [lo, hi] = [...black].sort((p, q) => p.center[1] - q.center[1])
+    expect(hi!.size[0] * hi!.size[2]).toBeLessThan(lo!.size[0] * lo!.size[2])
+    const barTop = hi!.center[1] + hi!.size[1] / 2
+    expect(barTop).toBeCloseTo(2.5)
+    for (const pin of pp.pins) {
+      const { x, z } = pinXZ(part, pin.name)
+      const post = posts.find(p => p.kind === 'box' && close(p.center[0], x) && close(p.center[2], z))
+      expect(post?.kind, pin.name).toBe('box')
+      if (post?.kind !== 'box') continue
+      expect(post.size[0]).toBeCloseTo(0.64)
+      expect(post.size[2]).toBeCloseTo(0.64)
+      expect(post.center[1] - post.size[1] / 2).toBeCloseTo(barTop)
+      expect(post.size[1]).toBeCloseTo(6)
+      // The post's tail under the board is the gold leg.
+      const leg = legs('JH').find(l => l.tag.id === `JH.${pin.name}`)!
+      expect(leg.color).toBe('#d4af37')
+    }
+    // A pin-1 triangle on top of the bar, outboard of pin 1.
+    const marks = bodies('JH').filter(p => p.kind === 'box' && p.color === COLORS.markLight)
+    expect(marks.length).toBeGreaterThanOrEqual(2)
+    const p1 = pinXZ(part, '1')
+    const p2 = pinXZ(part, '2')
+    for (const m of marks) {
+      if (m.kind !== 'box') continue
+      expect(Math.hypot(m.center[0] - p1.x, m.center[2] - p1.z)).toBeLessThan(Math.hypot(m.center[0] - p2.x, m.center[2] - p2.z))
+      expect(m.center[1] - m.size[1] / 2).toBeGreaterThanOrEqual(barTop - 1e-9)
+    }
+  })
+
+  it('terminal block has a screw per position on top', () => {
+    for (const ref of ['JA', 'JB', 'J3']) {
+      const part = b.parts.find(p => p.ref === ref)!
+      const pp = placePart(part)
+      const top = Math.max(...bodies(ref).filter(p => p.color === COLORS.terminal).flatMap(ys))
+      expect(top, ref).toBeCloseTo(10)
+      for (const pin of pp.pins) {
+        const { x, z } = pinXZ(part, pin.name)
+        const screw = bodies(ref).find(p => p.kind === 'cylinder' && p.color === COLORS.screw
+          && close(p.a[0], x) && close(p.a[2], z) && close(p.b[0], x) && close(p.b[2], z))
+        expect(screw?.kind, `${ref}.${pin.name}`).toBe('cylinder')
+        if (screw?.kind !== 'cylinder') continue
+        expect(Math.max(screw.a[1], screw.b[1])).toBeGreaterThan(top)
+        // A dark slot across the head, and a wire entry on the side the pins are nearer.
+        const slot = bodies(ref).find(p => p.kind === 'box' && p.color === COLORS.slot
+          && Math.hypot(p.center[0] - x, p.center[2] - z) < 0.01)
+        expect(slot?.kind, `${ref}.${pin.name} slot`).toBe('box')
+        const entry = bodies(ref).filter(p => p.kind === 'box' && p.color === COLORS.wireEntry && close(p.center[0], x))
+        expect(entry, `${ref}.${pin.name} entry`).toHaveLength(1)
+        const e = entry[0]!
+        if (e.kind !== 'box') continue
+        const r = pp.bodyRectMm
+        // Row A parts: the wire side faces the board's top edge (low z).
+        expect(e.center[2]).toBeLessThan(r.y + 0.5)
+      }
+    }
+  })
+
+  it('TO-220 tab has its mounting hole on the tab side', () => {
+    for (const ref of ['QA', 'QB']) {
+      const part = b.parts.find(p => p.ref === ref)!
+      const r = placePart(part).bodyRectMm
+      const body = bodies(ref).find((p): p is Extract<Prim, { kind: 'box' }> => p.kind === 'box' && p.color === COLORS.black)!
+      const tab = bodies(ref).find((p): p is Extract<Prim, { kind: 'box' }> => p.kind === 'box' && p.color === COLORS.tab)!
+      const hole = bodies(ref).find((p): p is Extract<Prim, { kind: 'cylinder' }> => p.kind === 'cylinder' && p.color === COLORS.tabHole)
+      expect(hole?.kind, ref).toBe('cylinder')
+      if (!hole) continue
+      expect(hole.radius * 2).toBeCloseTo(3.6)
+      const c = hole.a.map((v, i) => (v + hole.b[i]!) / 2) as V3
+      // Centred on the tab plate, above the body.
+      expect(c[0]).toBeCloseTo(tab.center[0])
+      expect(c[2]).toBeCloseTo(tab.center[2])
+      const bodyTop = body.center[1] + body.size[1] / 2
+      const tabTop = tab.center[1] + tab.size[1] / 2
+      expect(c[1] - hole.radius).toBeGreaterThan(bodyTop)
+      expect(c[1] + hole.radius).toBeLessThan(tabTop)
+      // Outside the 2D body rect, on the side away from the leads; axis through the plate.
+      const inX = c[0] > r.x && c[0] < r.x + r.w
+      const inZ = c[2] > r.y && c[2] < r.y + r.h
+      expect(inX && inZ).toBe(false)
+      const thin = tab.size[0] < tab.size[2] ? 0 : 2
+      expect(Math.abs(hole.b[thin] - hole.a[thin])).toBeGreaterThanOrEqual(tab.size[thin] - 1e-9)
+      expect(Math.abs(hole.b[2 - thin] - hole.a[2 - thin])).toBeCloseTo(0)
+      // The legs kink 90 degrees 2.5 mm under the body, then drop into the holes.
+      const bodyBottom = body.center[1] - body.size[1] / 2
+      for (const leg of legs(ref)) {
+        expect(leg.kind).toBe('tube')
+        if (leg.kind !== 'tube') continue
+        expect(leg.points.some(q => close(q[1], bodyBottom - 2.5))).toBe(true)
+        expect(bodyBottom - 2.5).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  for (const rotation of [0, 90] as const) {
+    it(`DIP-8 pin-1 notch is at pin 1 after rotation ${rotation}`, () => {
+      const part: Part = { ref: 'U9', footprint: 'dip8', at: 'D5', rotation, pins: {} }
+      const sc = buildScene(mk({ parts: [part] }))
+      const own = sc.prims.filter(p => p.tag.kind === 'part' && p.tag.id === 'U9')
+      const marks = own.filter(p => p.color === COLORS.markDark)
+      const notch = marks.find(p => p.kind === 'box')
+      const dot = marks.find(p => p.kind === 'cylinder')
+      expect(notch?.kind).toBe('box')
+      expect(dot?.kind).toBe('cylinder')
+      if (notch?.kind !== 'box' || dot?.kind !== 'cylinder') return
+      const at = (n: string) => pinXZ(part, n)
+      const mid = (p: string, q: string) => ({ x: (at(p).x + at(q).x) / 2, z: (at(p).z + at(q).z) / 2 })
+      const d = (c: { x: number, z: number }, x: number, z: number) => Math.hypot(c.x - x, c.z - z)
+      // The notch is on the pin-1 end (pins 1 and 8), the dot nearest pin 1.
+      expect(d(mid('1', '8'), notch.center[0], notch.center[2])).toBeLessThan(d(mid('4', '5'), notch.center[0], notch.center[2]))
+      expect(d(mid('1', '8'), notch.center[0], notch.center[2])).toBeLessThan(2)
+      const near = placePart(part).pins.map(p => ({ n: p.name, d: d(at(p.name), dot.a[0], dot.a[2]) })).sort((p, q) => p.d - q.d)
+      expect(near[0]!.n).toBe('1')
+      // Flat leads: 0.5 x 0.25 boxes tagged as the pin's leg.
+      const flat = sc.prims.filter(p => p.tag.kind === 'leg' && p.kind === 'box' && p.tag.id === 'U9.1')
+      expect(flat.length).toBeGreaterThanOrEqual(2)
+      for (const f of flat) {
+        if (f.kind !== 'box') continue
+        expect([...f.size].sort((p, q) => p - q).slice(0, 2).map(v => +v.toFixed(3))).toEqual([0.25, 0.5])
+      }
+    })
+  }
+
+  it('relay has a pin-1 mark on top', () => {
+    const part = b.parts.find(p => p.ref === 'KA')!
+    const mark = bodies('KA').find(p => p.color === COLORS.markLight)
+    expect(mark?.kind).toBe('cylinder')
+    if (mark?.kind !== 'cylinder') return
+    expect(Math.min(mark.a[1], mark.b[1])).toBeGreaterThanOrEqual(11.5 - 1e-9)
+    const near = placePart(part).pins.map(p => ({ n: p.name, d: Math.hypot(pinXZ(part, p.name).x - mark.a[0], pinXZ(part, p.name).z - mark.a[2]) }))
+      .sort((p, q) => p.d - q.d)
+    expect(near[0]!.n).toBe('1')
+  })
+
+  it('diode band sits at lead b', () => {
+    // Lying, with a value the old word-boundary regex missed.
+    const lying: Part = { ref: 'D1', footprint: 'axial', at: 'C2', to: 'C6', rotation: 0, value: 'D1N4148', pins: {} }
+    const sc = buildScene(mk({ parts: [lying] }))
+    const band = sc.prims.find(p => p.tag.id === 'D1' && p.color === COLORS.diodeStripe)
+    expect(band?.kind).toBe('cylinder')
+    if (band?.kind !== 'cylinder') return
+    const a = pinXZ(lying, 'a')
+    const bb = pinXZ(lying, 'b')
+    const L = 6.3
+    const u = { x: (bb.x - a.x) / Math.hypot(bb.x - a.x, bb.z - a.z), z: (bb.z - a.z) / Math.hypot(bb.x - a.x, bb.z - a.z) }
+    const m = { x: (a.x + bb.x) / 2, z: (a.z + bb.z) / 2 }
+    const proj = (((band.a[0] + band.b[0]) / 2 - m.x) * u.x + ((band.a[2] + band.b[2]) / 2 - m.z) * u.z)
+    expect(proj).toBeGreaterThan(0.35 * L)
+    expect(proj).toBeLessThan(L / 2)
+    // Standing: lead b leaves the top, so the band is at the top end.
+    const da1 = bodies('DA1').find(p => p.color === COLORS.diodeStripe)
+    expect(da1?.kind).toBe('cylinder')
+    if (da1?.kind !== 'cylinder') return
+    expect(Math.min(da1.a[1], da1.b[1])).toBeGreaterThan(7 * 0.75)
+  })
+
+  it('standing lead b hairpins over the top and runs down beside the body', () => {
+    for (const ref of ['RPA', 'DA1']) {
+      const part = b.parts.find(p => p.ref === ref)!
+      const a = pinXZ(part, 'a')
+      const bb = pinXZ(part, 'b')
+      const lb = legs(ref).find(l => l.tag.id === `${ref}.b`)!
+      if (lb.kind !== 'tube') throw new Error('tube')
+      // More than a flat bridge: an arc of several points above the top.
+      expect(lb.points.filter(q => q[1] > 7).length).toBeGreaterThanOrEqual(3)
+      // Every point outside the body's radius is clear of it.
+      for (const q of lb.points) {
+        const r = Math.hypot(q[0] - a.x, q[2] - a.z)
+        if (q[1] < 7) expect(r, `${ref} ${q.join(',')}`).toBeGreaterThan(1.25 + 0.3)
+      }
+      // The run down the side is at lead b, above the board.
+      expect(lb.points.some(q => close(q[0], bb.x) && close(q[2], bb.z) && q[1] >= 7)).toBe(true)
+    }
   })
 })
