@@ -46,6 +46,12 @@ describe('placePart', () => {
     expect(b.x + b.w).toBeLessThan(a.x)
   })
 
+  it('a polyfuse fits within its 3 holes and stays clear of the next one', () => {
+    const r = placePart(part({ footprint: 'polyfuse-radial', at: 'F9', to: 'F7' })).bodyRectMm
+    expect(r.w).toBeCloseTo(7.0, 9)
+    expect(r.w).toBeLessThan(3 * 2.54)
+  })
+
   it('twoLead uses at/to and ignores rotation', () => {
     const n = names(part({ footprint: 'axial', at: 'C2', to: 'C6', rotation: 90 }))
     expect(n).toEqual({ a: 'C2', b: 'C6' })

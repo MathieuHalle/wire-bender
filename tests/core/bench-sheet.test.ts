@@ -166,7 +166,8 @@ describe('benchModel on channel board 2 (frozen fixture)', () => {
     expect(m.cards).toHaveLength(44)
     expect(m.cards.filter(c => c.kind === 'trail')).toHaveLength(35)
     expect(m.legFolds).toHaveLength(12)
-    expect(m.check.errors).toHaveLength(3)
+    // KA/FA and KB/FB no longer collide (7.0 mm polyfuse); RGB.a still touches QB's tab on the frozen copy
+    expect(m.check.errors).toHaveLength(1)
   })
 
   it('QA\'s tab faces row N and QB\'s faces row P', () => {

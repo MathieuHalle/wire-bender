@@ -88,7 +88,7 @@ export const FOOTPRINTS: Record<string, Footprint> = {
   'polyfuse-radial': {
     id: 'polyfuse-radial', name: 'Polyfuse (radial)',
     pins: [p('a', 0, 0), p('b', 2, 0)], twoLead: { minSpan: 2, maxSpan: 2 },
-    body: { rect: centredOrigin(8.9, 3.0), heightMm: 13, side: 'top' }
+    body: { rect: centredOrigin(7.0, 3.0), heightMm: 13, side: 'top' }
   },
   'axial': {
     id: 'axial', name: 'Axial (resistor, diode)',
