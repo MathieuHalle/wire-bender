@@ -4,7 +4,7 @@
 // rail is a vertical strip on the right edge; below it, a row on top of the panel.
 // Each tab's content is the slot named after its id; it stays mounted while hidden, so
 // its own state (e.g. the findings' expanded groups) survives a collapse.
-import { PANEL_TABS, type PanelTab } from '~/utils/sidePanel'
+import { nextPanel, PANEL_TABS, type PanelTab } from '~/utils/sidePanel'
 
 defineProps<{
   /** A count to show on a tab's icon (e.g. the errors on Findings); 0 shows none. */
@@ -15,12 +15,9 @@ const open = defineModel<boolean>('open', { required: true })
 const tab = defineModel<PanelTab>('tab', { required: true })
 
 function onTab(id: PanelTab) {
-  if (open.value && tab.value === id) {
-    open.value = false
-    return
-  }
-  tab.value = id
-  open.value = true
+  const next = nextPanel({ open: open.value, tab: tab.value }, id)
+  tab.value = next.tab
+  open.value = next.open
 }
 
 const tipOf = (label: string, id: PanelTab) =>

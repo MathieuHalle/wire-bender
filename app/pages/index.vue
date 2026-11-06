@@ -8,6 +8,7 @@ import { buildConnectivity } from '~core/connectivity'
 import { jointSide, pageKey, zoomStep, type View } from '~/utils/boardView'
 import { fallbackAlert } from '~/utils/board3dFallback'
 import { defaultPanel, loadPanel, savePanel, type PanelState } from '~/utils/sidePanel'
+import { ALL_LAYERS } from '~/utils/layers'
 
 const { board, errors, errorKind, path, revision, status, canUndo, canRedo, undo, redo, reloadFromDisk, keepMine } = useBoard()
 /** 'both' side by side, one large side (key F flips), or the 3D view (key 3, look only). */
@@ -44,13 +45,22 @@ const highlight = computed(() => {
 const hoverTag = ref<Tag | null>(null)
 const highlightNets = computed(() => tagNets(hoverTag.value))
 
-/** The side panel: open or collapsed, its tab, and the view layers. Read once mounted (no storage on the server). */
+/**
+ * The side panel: open or collapsed, its tab, and the view layers. Read once mounted (no
+ * storage on the server). Until then the panel and the board views are not rendered, on
+ * the server and on the client alike (no hydration mismatch), so a stored collapsed or
+ * layer-off state never shows its default first.
+ */
 const panel = ref<PanelState>(defaultPanel())
+const loaded = ref(false)
 const storage = () => window.localStorage
 onMounted(() => {
   panel.value = loadPanel(storage)
+  loaded.value = true
   watch(panel, p => savePanel(p, storage), { deep: true })
 })
+/** The layers the views draw: the stored ones once loaded. */
+const layers = computed(() => (loaded.value ? panel.value.layers : ALL_LAYERS))
 /** Run once here: the Findings tab lists it and its icon counts the errors. */
 const check = computed(() => (board.value ? runCheck(board.value) : null))
 const badges = computed(() => ({ findings: check.value?.stats.errors ?? 0 }))
@@ -267,7 +277,7 @@ const sideTitle = (s: Side) => (s === 'top'
     <div class="flex flex-1 flex-col gap-4 p-4 lg:flex-row">
       <main class="min-w-0 flex-1">
         <p
-          v-if="!board"
+          v-if="!board || !loaded"
           class="text-muted"
         >
           Loading board…
@@ -279,7 +289,7 @@ const sideTitle = (s: Side) => (s === 'top'
               :board="board"
               :highlight-nets="highlightNets"
               :mark-holes="markHoles"
-              :layers="panel.layers"
+              :layers="layers"
               @hover-tag="(t: Tag | null) => hoverTag = t"
               @back="view = 'both'"
             />
@@ -316,7 +326,7 @@ const sideTitle = (s: Side) => (s === 'top'
               :draw-from="drawFrom?.side === s ? drawFrom.hole : null"
               :mark-holes="markHoles"
               :zoom="zoom"
-              :layers="panel.layers"
+              :layers="layers"
               @hover="(h: Hole | null) => onHover(s, h)"
               @hole-click="(h: Hole) => onHoleClick(s, h)"
               @segment-click="(a: Hole, b: Hole) => onSegmentClick(s, a, b)"
@@ -326,6 +336,7 @@ const sideTitle = (s: Side) => (s === 'top'
       </main>
 
       <SidePanel
+        v-if="loaded"
         v-model:open="panel.open"
         v-model:tab="panel.tab"
         :badges="badges"

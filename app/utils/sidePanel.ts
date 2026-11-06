@@ -52,6 +52,14 @@ export function parsePanel(raw: string | null): PanelState {
   }
 }
 
+/**
+ * A click on a tab: the open tab collapses the panel (keeping its tab), any other click
+ * opens that tab. Returns a new state; the rest of it (e.g. the layers) is carried over.
+ */
+export function nextPanel<S extends Pick<PanelState, 'open' | 'tab'>>(state: S, id: PanelTab): S {
+  return state.open && state.tab === id ? { ...state, open: false } : { ...state, open: true, tab: id }
+}
+
 /** Reads the state; `storage` is a getter because reading `window.localStorage` itself can throw. */
 export function loadPanel(storage: () => PanelStorage | null | undefined): PanelState {
   try {

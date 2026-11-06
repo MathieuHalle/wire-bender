@@ -121,7 +121,7 @@ describe('joint owners in the 3D scene', () => {
 describe('blindHint', () => {
   it('warns while an editing tool is on with Trails hidden', () => {
     for (const t of ['pencil', 'erase', 'joint'] as const)
-      expect(blindHint(t, only('trails')), t).toMatch(/Trails are hidden/)
+      expect(blindHint(t, only('trails')), t).toBe('Trails are hidden: you\'re drawing blind.')
   })
   it('says nothing for Inspect, or with Trails shown', () => {
     expect(blindHint('inspect', only('trails'))).toBeNull()

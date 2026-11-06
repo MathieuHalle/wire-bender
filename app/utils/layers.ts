@@ -48,6 +48,6 @@ const EDITING: readonly Tool[] = ['pencil', 'erase', 'joint']
 /** The Edit tab's one-line warning while editing what is not drawn; null otherwise. */
 export function blindHint(tool: Tool, layers: Layers): string | null {
   return EDITING.includes(tool) && !layers.trails
-    ? 'Trails are hidden: you\'re editing blind. Clicks still change the board.'
+    ? 'Trails are hidden: you\'re drawing blind.'
     : null
 }

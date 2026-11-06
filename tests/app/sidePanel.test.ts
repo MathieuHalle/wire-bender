@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultPanel, loadPanel, PANEL_KEY, PANEL_TABS, parsePanel, savePanel, type PanelState } from '../../app/utils/sidePanel'
+import { defaultPanel, loadPanel, nextPanel, PANEL_KEY, PANEL_TABS, parsePanel, savePanel, type PanelState } from '../../app/utils/sidePanel'
 
 /** A Map-backed Storage, enough for get/set. */
 function memStorage(init: Record<string, string> = {}) {
@@ -65,5 +65,25 @@ describe('side panel state', () => {
     const a = defaultPanel()
     a.layers.trails = false
     expect(defaultPanel().layers.trails).toBe(true)
+  })
+})
+
+describe('nextPanel', () => {
+  const layers = { components: false, wires: true, trails: true }
+  it('clicking the open tab collapses the panel, keeping the tab', () => {
+    expect(nextPanel({ open: true, tab: 'edit', layers }, 'edit')).toEqual({ open: false, tab: 'edit', layers })
+  })
+  it('clicking another tab while open switches to it', () => {
+    expect(nextPanel({ open: true, tab: 'findings', layers }, 'edit')).toEqual({ open: true, tab: 'edit', layers })
+  })
+  it('clicking any tab while collapsed opens that tab', () => {
+    expect(nextPanel({ open: false, tab: 'edit', layers }, 'edit')).toEqual({ open: true, tab: 'edit', layers })
+    expect(nextPanel({ open: false, tab: 'edit', layers }, 'findings')).toEqual({ open: true, tab: 'findings', layers })
+  })
+  it('returns a new state and leaves the input alone', () => {
+    const s: PanelState = { open: true, tab: 'edit', layers }
+    const n = nextPanel(s, 'edit')
+    expect(n).not.toBe(s)
+    expect(s.open).toBe(true)
   })
 })
