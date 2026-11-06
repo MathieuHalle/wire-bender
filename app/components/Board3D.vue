@@ -12,6 +12,7 @@ import type { OrbitControls as OrbitControlsImpl } from 'three/examples/jsm/cont
 import type { BoardFile } from '~core/schema'
 import { holeMm, type Hole } from '~core/holes'
 import { buildScene, type Tag } from '~core/scene3d'
+import { fallbackAlert, type Board3DFailure } from '~/utils/board3dFallback'
 import { CAMERA_FOV, cameraPreset, type CameraPresetName } from '~/utils/cameraPresets'
 import {
   buildMeshes, dispose, markRings, markVisibility, primMeshes, setHighlight, tagTip, webglAvailable, type BuiltMeshes
@@ -26,10 +27,30 @@ const props = withDefaults(defineProps<{
 }>(), { highlightNets: () => [], markHoles: () => [] })
 const emit = defineEmits<{ 'back': [], 'hover-tag': [tag: Tag | null] }>()
 
-// Dev only: `?nowebgl` pretends the browser has WebGL turned off, to see the fallback.
-if (import.meta.dev && new URLSearchParams(window.location.search).has('nowebgl'))
-  HTMLCanvasElement.prototype.getContext = () => null
+// Dev only, to see the fallbacks: `?nowebgl` pretends the browser has WebGL turned off;
+// `?failrenderer` lets the probe pass, then makes the WebGL renderer's constructor throw;
+// `?fail3d` throws once mounted, which the page's error boundary catches.
+const devFlags = import.meta.dev ? new URLSearchParams(window.location.search) : null
+if (devFlags?.has('nowebgl')) HTMLCanvasElement.prototype.getContext = () => null
+if (devFlags?.has('fail3d')) {
+  onMounted(() => {
+    throw new Error('fail3d: the 3D view failed on purpose (dev flag)')
+  })
+}
 const hasWebgl = webglAvailable()
+if (devFlags?.has('failrenderer')) {
+  HTMLCanvasElement.prototype.getContext = () => {
+    throw new Error('failrenderer: no WebGL context for the renderer (dev flag)')
+  }
+}
+
+/** Set when the view cannot draw: WebGL is off, or the renderer (or another child) threw. */
+const failed = shallowRef<Board3DFailure | null>(hasWebgl ? null : { kind: 'no-webgl' })
+onErrorCaptured((error) => {
+  console.error('3D view failed:', error)
+  failed.value = { kind: 'error', error }
+  return false
+})
 
 const scene = computed(() => buildScene(props.board))
 /** Stable parent of the board meshes; its child is swapped on every rebuild. */
@@ -60,6 +81,7 @@ let ctx: TresContext | null = null
 const invalidate = () => ctx?.renderer.invalidate()
 
 function rebuild() {
+  if (!hasWebgl) return
   const old = built
   built = buildMeshes(scene.value)
   content.add(built.group)
@@ -75,7 +97,7 @@ function rebuild() {
   invalidate()
 }
 watch(scene, rebuild)
-if (hasWebgl) rebuild()
+rebuild()
 
 watch(() => props.highlightNets, (nets) => {
   setHighlight(prims, nets)
@@ -83,6 +105,7 @@ watch(() => props.highlightNets, (nets) => {
 })
 
 function rebuildMarks() {
+  if (!hasWebgl) return
   const old = marks.children.slice()
   const pitch = props.board.board.pitchMm
   marks.add(markRings(scene.value, props.markHoles.map((h) => {
@@ -97,7 +120,7 @@ function rebuildMarks() {
   invalidate()
 }
 watch([() => props.markHoles, scene], rebuildMarks)
-if (hasWebgl) rebuildMarks()
+rebuildMarks()
 
 // ---- Hover: one raycast per animation frame -------------------------------------
 const raycaster = new THREE.Raycaster()
@@ -243,26 +266,11 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
 </script>
 
 <template>
-  <div
-    v-if="!hasWebgl"
-    class="mx-auto max-w-xl"
-  >
-    <UAlert
-      color="warning"
-      variant="subtle"
-      icon="i-lucide-box"
-      title="3D view needs WebGL, which this browser has turned off."
-    >
-      <template #actions>
-        <UButton
-          size="xs"
-          color="warning"
-          label="Both sides"
-          @click="emit('back')"
-        />
-      </template>
-    </UAlert>
-  </div>
+  <Board3DFallback
+    v-if="failed"
+    v-bind="fallbackAlert(failed)"
+    @back="emit('back')"
+  />
   <div
     v-else
     class="flex flex-col gap-1"

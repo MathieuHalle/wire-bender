@@ -4,8 +4,13 @@
 import type { BoardFile } from '~core/schema'
 import { runCheck, type Finding } from '~core/check'
 import { ADVISORY, groupFindings, statsLine } from '~~/cli/format'
+import { lockedAttrs } from '~/utils/boardView'
 
-const props = defineProps<{ board: BoardFile }>()
+const props = defineProps<{
+  board: BoardFile
+  /** The 3D view is showing: no edits, so "Add joint" is off. */
+  locked?: boolean
+}>()
 const emit = defineEmits<{ 'add-joint': [finding: Finding] }>()
 /** The finding whose holes are highlighted. */
 const selected = defineModel<Finding | null>('selected', { default: null })
@@ -121,7 +126,8 @@ watch(check, (c) => {
               variant="soft"
               icon="i-lucide-circle-dot"
               label="Add joint"
-              @click="emit('add-joint', f)"
+              v-bind="lockedAttrs(locked)"
+              @click="locked || emit('add-joint', f)"
             />
           </li>
         </ul>

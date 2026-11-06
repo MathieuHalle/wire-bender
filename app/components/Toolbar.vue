@@ -1,7 +1,7 @@
 <!-- eslint-disable vue/multi-word-component-names -- the plan names it Toolbar -->
 <script setup lang="ts">
 // The tool row: editing tools, view mode, mirror, undo/redo.
-import { ZOOM_STEPS, zoomStep, type Tool, type View } from '~/utils/boardView'
+import { LOCKED_TITLE, lockedAttrs, ZOOM_STEPS, zoomStep, type Tool, type View } from '~/utils/boardView'
 
 defineProps<{
   canUndo: boolean
@@ -16,8 +16,7 @@ const view = defineModel<View>('view', { required: true })
 const mirrorBottom = defineModel<boolean>('mirrorBottom', { required: true })
 const zoom = defineModel<number>('zoom', { required: true })
 
-/** The 3D view is read-only: the edit tools and undo/redo are off there. */
-const LOCKED_TITLE = 'The 3D view is for looking: switch back to edit'
+/** The 3D view is read-only: the edit tools, undo/redo, mirror and zoom are off there. */
 const locked = computed(() => view.value === '3d')
 
 const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
@@ -106,8 +105,8 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
         variant="ghost"
         icon="i-lucide-zoom-out"
         aria-label="Zoom out"
-        title="Zoom out (-)"
-        :disabled="zoom <= ZOOM_STEPS[0]!"
+        :title="lockedAttrs(locked, 'Zoom out (-)').title"
+        :disabled="locked || zoom <= ZOOM_STEPS[0]!"
         @click="zoom = zoomStep(zoom, -1)"
       />
       <UButton
@@ -115,7 +114,7 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
         variant="ghost"
         class="w-12 justify-center font-mono"
         :label="`${Math.round(zoom * 100)}%`"
-        title="Fit the width (0)"
+        v-bind="lockedAttrs(locked, 'Fit the width (0)')"
         @click="zoom = 1"
       />
       <UButton
@@ -123,16 +122,17 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
         variant="ghost"
         icon="i-lucide-zoom-in"
         aria-label="Zoom in"
-        title="Zoom in (+)"
-        :disabled="zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]!"
+        :title="lockedAttrs(locked, 'Zoom in (+)').title"
+        :disabled="locked || zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]!"
         @click="zoom = zoomStep(zoom, 1)"
       />
     </div>
     <USwitch
       v-model="mirrorBottom"
       label="Mirror bottom"
+      v-bind="lockedAttrs(locked)"
     />
-    <span class="text-xs text-muted">I P E J: tools · Esc: end trail · F: one large side, flip · 3: 3D view · + − 0: zoom</span>
+    <span class="text-xs text-muted">I P E J: tools · Esc: end trail · F: one large side, flip · 3: 3D view on/off · Esc: leave 3D · + − 0: zoom</span>
     <span
       v-if="hint"
       class="font-mono text-xs"

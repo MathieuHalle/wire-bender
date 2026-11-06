@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { BoardFile } from '~core/schema'
 import {
-  COLORS, COPPER_THICKNESS_MM, HOLE_DIAMETER_MM, PAD_DIAMETER_MM,
+  COLORS, COPPER_THICKNESS_MM, HOLE_DIAMETER_MM, PAD_DIAMETER_MM, tagNets,
   type Prim, type Scene3D, type Tag, type V3, type XZ
 } from '~core/scene3d'
 
@@ -12,7 +12,6 @@ const HOLE_COLOR = '#16150f'
 const SEGMENTS = 16
 /** Lifts the hole discs off the surface so they don't z-fight with the slab. */
 const LIFT = 0.003
-const METAL_KINDS = new Set<Tag['kind']>(['leg', 'trail', 'joint', 'fold', 'bridge'])
 const Y = new THREE.Vector3(0, 1, 0)
 
 export interface BuiltMeshes {
@@ -80,11 +79,11 @@ function tubeGeometry(points: V3[], radius: number): THREE.BufferGeometry {
   return merged
 }
 
-function primMesh(p: Prim, material: (color: string, kind: Tag['kind']) => THREE.Material): THREE.Mesh {
+function primMesh(p: Prim, material: (color: string, metal: boolean) => THREE.Material): THREE.Mesh {
   let mesh: THREE.Mesh
   switch (p.kind) {
     case 'box': {
-      mesh = new THREE.Mesh(new THREE.BoxGeometry(...p.size), material(p.color, p.tag.kind))
+      mesh = new THREE.Mesh(new THREE.BoxGeometry(...p.size), material(p.color, !!p.metal))
       mesh.position.set(...p.center)
       mesh.rotation.y = p.rotY ?? 0
       break
@@ -93,16 +92,16 @@ function primMesh(p: Prim, material: (color: string, kind: Tag['kind']) => THREE
       const a = new THREE.Vector3(...p.a)
       const dir = new THREE.Vector3(...p.b).sub(a)
       const len = Math.max(dir.length(), 1e-6)
-      mesh = new THREE.Mesh(new THREE.CylinderGeometry(p.radius, p.radius, len, SEGMENTS), material(p.color, p.tag.kind))
+      mesh = new THREE.Mesh(new THREE.CylinderGeometry(p.radius, p.radius, len, SEGMENTS), material(p.color, !!p.metal))
       mesh.position.copy(a).addScaledVector(dir, 0.5)
       if (dir.lengthSq() > 0) mesh.quaternion.setFromUnitVectors(Y, dir.normalize())
       break
     }
     case 'tube':
-      mesh = new THREE.Mesh(tubeGeometry(p.points, p.radius), material(p.color, p.tag.kind))
+      mesh = new THREE.Mesh(tubeGeometry(p.points, p.radius), material(p.color, !!p.metal))
       break
     case 'cone': {
-      mesh = new THREE.Mesh(new THREE.ConeGeometry(p.radius, p.height, SEGMENTS), material(p.color, p.tag.kind))
+      mesh = new THREE.Mesh(new THREE.ConeGeometry(p.radius, p.height, SEGMENTS), material(p.color, !!p.metal))
       mesh.position.set(p.base[0], p.base[1] + (p.up * p.height) / 2, p.base[2])
       if (p.up < 0) mesh.rotation.x = Math.PI
       break
@@ -139,8 +138,8 @@ export function buildMeshes(scene: Scene3D): BuiltMeshes {
   const group = new THREE.Group()
   group.name = 'board3d'
   const cache = new Map<string, THREE.MeshStandardMaterial>()
-  const material = (color: string, kind: Tag['kind']) => {
-    const metal = METAL_KINDS.has(kind)
+  /** One material per colour and finish; metal comes from the prim (core decides what is bare metal). */
+  const material = (color: string, metal: boolean) => {
     const key = `${color}|${metal}`
     let m = cache.get(key)
     if (!m) {
@@ -183,12 +182,6 @@ export function buildMeshes(scene: Scene3D): BuiltMeshes {
 export function primMeshes(group: THREE.Object3D): THREE.Mesh[] {
   return group.children.filter((o): o is THREE.Mesh =>
     (o as THREE.Mesh).isMesh && !!o.userData.tag && (o.userData.tag as Tag).kind !== 'board')
-}
-
-/** The nets a tag stands for: its group's nets, or else its own net. */
-export function tagNets(tag: Tag | null | undefined): string[] {
-  if (!tag) return []
-  return tag.nets ?? (tag.net != null ? [tag.net] : [])
 }
 
 /**
@@ -286,13 +279,32 @@ export function tagTip(tag: Tag, board: BoardFile): TagTip | null {
   return { name: tag.label ?? tag.id, lines: [], net }
 }
 
-/** True when this browser hands out a WebGL context. */
+/** The probe's answer, once asked: every mount of the 3D view reuses it. */
+let webgl: boolean | undefined
+
+/**
+ * True when this browser hands out a WebGL context. Probed once per page load; the probe's
+ * context is released at once, so remounting the 3D view does not use up contexts.
+ */
 export function webglAvailable(): boolean {
+  if (webgl !== undefined) return webgl
+  if (typeof document === 'undefined' || !document) return false
   try {
-    if (typeof document === 'undefined' || !document) return false
     const c = document.createElement('canvas')
-    return !!(c.getContext('webgl2') || c.getContext('webgl'))
+    const gl = (c.getContext('webgl2') || c.getContext('webgl')) as WebGLRenderingContext | null
+    webgl = !!gl
+    try {
+      gl?.getExtension('WEBGL_lose_context')?.loseContext()
+    } catch {
+      // Releasing early is a courtesy; the answer stands.
+    }
   } catch {
-    return false
+    webgl = false
   }
+  return webgl
+}
+
+/** Forgets the probe's answer (tests). */
+export function resetWebglProbe(): void {
+  webgl = undefined
 }

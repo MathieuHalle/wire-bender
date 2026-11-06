@@ -2,18 +2,22 @@
 import { parseHole, tryParseHole, type Hole } from '~core/holes'
 import type { Side } from '~core/schema'
 import type { Finding } from '~core/check'
-import type { Tag } from '~core/scene3d'
+import { tagNets, type Tag } from '~core/scene3d'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
-import { jointSide, zoomStep, type View } from '~/utils/boardView'
+import { jointSide, pageKey, zoomStep, type View } from '~/utils/boardView'
+import { fallbackAlert } from '~/utils/board3dFallback'
 
 const { board, errors, errorKind, path, revision, status, canUndo, canRedo, undo, redo, reloadFromDisk, keepMine } = useBoard()
 /** 'both' side by side, one large side (key F flips), or the 3D view (key 3, look only). */
 const view = ref<View>('both')
 const { tool, drawing, onHoleClick, onSegmentClick, addJoint, endDrawing } = useTools({ locked: () => view.value === '3d' })
+/** The 2D view the 3D one was entered from; key 3 goes back to it. */
+const last2d = ref<Exclude<View, '3d'>>('both')
 // The 3D view has no edit tools: a trail being drawn ends on the way in.
 watch(view, (v) => {
   if (v === '3d') endDrawing()
+  else last2d.value = v
 })
 
 const mirrorBottom = ref(true)
@@ -33,14 +37,11 @@ const highlight = computed(() => {
 
 /**
  * The mesh hovered in 3D: a conductor or leg lights its group's nets (all of a short, as
- * in 2D), else its own net; a part body only shows its tooltip. Same rule as `tagNets` in
- * scene3dThree.ts, written out here so the 2D page doesn't import three.js.
+ * in 2D), else its own net; a part body only shows its tooltip. `tagNets` is the same rule
+ * the 3D highlight uses (core, so the 2D page doesn't import three.js).
  */
 const hoverTag = ref<Tag | null>(null)
-const highlightNets = computed(() => {
-  const t = hoverTag.value
-  return t?.nets ?? (t?.net ? [t.net] : [])
-})
+const highlightNets = computed(() => tagNets(hoverTag.value))
 
 /** The finding picked in the panel; its holes are ringed on both sides. */
 const picked = ref<Finding | null>(null)
@@ -48,6 +49,7 @@ const picked = ref<Finding | null>(null)
 const markHoles = computed(() => picked.value?.holes.flatMap(n => tryParseHole(n) ?? []) ?? [])
 
 function onAddJoint(f: Finding) {
+  if (view.value === '3d') return
   const hole = f.holes[0] ? tryParseHole(f.holes[0]) : null
   if (!hole || !board.value || !conn.value) return
   const side = jointSide(board.value, conn.value, hole) ?? 'bottom'
@@ -121,12 +123,10 @@ function onKey(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null
   if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return
   if (e.metaKey || e.ctrlKey || e.altKey) return
-  if (e.key === 'f' || e.key === 'F') {
-    if (view.value !== '3d') view.value = view.value === 'top' ? 'bottom' : 'top'
-  } else if (e.key === '3') view.value = '3d'
-  else if (e.key === '+' || e.key === '=') zoom.value = zoomStep(zoom.value, 1)
-  else if (e.key === '-' || e.key === '_') zoom.value = zoomStep(zoom.value, -1)
-  else if (e.key === '0') zoom.value = 1
+  const a = pageKey(e.key, view.value, last2d.value)
+  if (!a) return
+  if ('view' in a) view.value = a.view
+  else zoom.value = a.zoom === 0 ? 1 : zoomStep(zoom.value, a.zoom)
 }
 onMounted(() => window.addEventListener('keydown', onKey))
 onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
@@ -265,13 +265,22 @@ const sideTitle = (s: Side) => (s === 'top'
           Loading board…
         </p>
         <ClientOnly v-else-if="view === '3d'">
-          <LazyBoard3D
-            :board="board"
-            :highlight-nets="highlightNets"
-            :mark-holes="markHoles"
-            @hover-tag="(t: Tag | null) => hoverTag = t"
-            @back="view = 'both'"
-          />
+          <!-- A failed 3D load (or a throw while it starts) shows the fallback, not nothing. -->
+          <NuxtErrorBoundary>
+            <LazyBoard3D
+              :board="board"
+              :highlight-nets="highlightNets"
+              :mark-holes="markHoles"
+              @hover-tag="(t: Tag | null) => hoverTag = t"
+              @back="view = 'both'"
+            />
+            <template #error="{ error, clearError }">
+              <Board3DFallback
+                v-bind="fallbackAlert({ kind: 'error', error })"
+                @back="view = 'both'; clearError()"
+              />
+            </template>
+          </NuxtErrorBoundary>
         </ClientOnly>
         <div
           v-else
@@ -311,6 +320,7 @@ const sideTitle = (s: Side) => (s === 'top'
           v-if="board"
           v-model:selected="picked"
           :board="board"
+          :locked="view === '3d'"
           @add-joint="onAddJoint"
         />
       </aside>

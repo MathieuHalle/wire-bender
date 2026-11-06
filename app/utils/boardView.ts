@@ -93,3 +93,30 @@ export function zoomStep(z: number, dir: 1 | -1): number {
   if (dir > 0) return ZOOM_STEPS.find(s => s > z + 1e-9) ?? ZOOM_STEPS[ZOOM_STEPS.length - 1]!
   return [...ZOOM_STEPS].reverse().find(s => s < z - 1e-9) ?? ZOOM_STEPS[0]
 }
+
+/** Why a control is off in the 3D view, which has no edit tools. */
+export const LOCKED_TITLE = 'The 3D view is for looking: switch back to edit'
+
+/** A control that is off in 3D: disabled there with LOCKED_TITLE, else its own title. */
+export function lockedAttrs(locked: boolean, title?: string): { disabled: boolean, title: string | undefined } {
+  return { disabled: locked, title: locked ? LOCKED_TITLE : title }
+}
+
+/** What a page key does: switch the view, or step the zoom (0: back to fit). */
+export type KeyAction = { view: View } | { zoom: 1 | -1 | 0 } | null
+
+/**
+ * The page's view and zoom keys. `3` toggles the 3D view (off goes back to `last2d`, the 2D
+ * view it came from); Esc leaves 3D for both sides; F flips one large side. F and the zoom
+ * keys do nothing in 3D, where the drawing is not shown.
+ */
+export function pageKey(key: string, view: View, last2d: Exclude<View, '3d'>): KeyAction {
+  if (key === '3') return { view: view === '3d' ? last2d : '3d' }
+  if (key === 'Escape') return view === '3d' ? { view: 'both' } : null
+  if (view === '3d') return null
+  if (key === 'f' || key === 'F') return { view: view === 'top' ? 'bottom' : 'top' }
+  if (key === '+' || key === '=') return { zoom: 1 }
+  if (key === '-' || key === '_') return { zoom: -1 }
+  if (key === '0') return { zoom: 0 }
+  return null
+}

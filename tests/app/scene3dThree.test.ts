@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as THREE from 'three'
 import { parseBoard, type BoardFile } from '~core/schema'
 import { axial, mk, trail } from '../core/helpers'
-import { BOARD_THICKNESS_MM, buildScene, type Tag } from '~core/scene3d'
-import { buildMeshes, dispose, markRings, markVisibility, MARK_COLOR, primMeshes, setHighlight, tagTip, webglAvailable } from '../../app/utils/scene3dThree'
+import { BOARD_THICKNESS_MM, buildScene, COLORS, type Scene3D, type Tag } from '~core/scene3d'
+import { buildMeshes, dispose, markRings, markVisibility, MARK_COLOR, primMeshes, resetWebglProbe, setHighlight, tagTip, webglAvailable } from '../../app/utils/scene3dThree'
 
 function board2(): BoardFile {
   const res = parseBoard(JSON.parse(readFileSync(new URL('../fixtures/channel-board-2.json', import.meta.url), 'utf8')))
@@ -227,6 +227,8 @@ describe('highlight and marks', () => {
 })
 
 describe('webglAvailable', () => {
+  beforeEach(() => resetWebglProbe())
+
   it('is false without a document', () => {
     vi.stubGlobal('document', undefined)
     expect(webglAvailable()).toBe(false)
@@ -238,5 +240,72 @@ describe('webglAvailable', () => {
   it('is true when the canvas gives a webgl context', () => {
     vi.stubGlobal('document', { createElement: () => ({ getContext: (k: string) => (k === 'webgl2' ? {} : null) }) })
     expect(webglAvailable()).toBe(true)
+  })
+})
+
+describe('webglAvailable probe', () => {
+  beforeEach(() => resetWebglProbe())
+
+  const stub = (ok: boolean) => {
+    const loseContext = vi.fn()
+    const gl = { getExtension: (n: string) => (n === 'WEBGL_lose_context' ? { loseContext } : null) }
+    const getContext = vi.fn((k: string) => (ok && k === 'webgl2' ? gl : null))
+    const createElement = vi.fn(() => ({ getContext }))
+    vi.stubGlobal('document', { createElement })
+    return { createElement, getContext, loseContext }
+  }
+
+  it('probes once across calls and frees the probe context', () => {
+    const { createElement, loseContext } = stub(true)
+    expect([webglAvailable(), webglAvailable(), webglAvailable()]).toEqual([true, true, true])
+    expect(createElement).toHaveBeenCalledTimes(1)
+    expect(loseContext).toHaveBeenCalledTimes(1)
+  })
+
+  it('remembers a no as well', () => {
+    const { createElement } = stub(false)
+    expect([webglAvailable(), webglAvailable()]).toEqual([false, false])
+    expect(createElement).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('metal by material', () => {
+  /** A one-prim scene per case, on a bare board. */
+  const sceneOf = (prims: Scene3D['prims']): Scene3D => ({
+    board: { widthMm: 10, depthMm: 10, thicknessMm: 1.6, center: [5, -0.8, 5] },
+    holes: [], pads: { top: [], bottom: [] }, prims, bounds: { min: [0, -2, 0], max: [10, 2, 10] }, skipped: []
+  })
+
+  it('metal prims get a metallic material, the rest a plain one, whatever the tag kind', () => {
+    const wireTag: Tag = { kind: 'wire', id: 'W1', net: null }
+    const partTag: Tag = { kind: 'part', id: 'QA' }
+    const built = buildMeshes(sceneOf([
+      { kind: 'tube', points: [[0, 0.3, 0], [5, 0.3, 0]], radius: 0.3, color: COLORS.copper, metal: true, tag: wireTag },
+      { kind: 'tube', points: [[5, 0.7, 0], [9, 0.7, 0]], radius: 0.7, color: COLORS.copper, tag: wireTag },
+      { kind: 'box', center: [5, 5, 5], size: [1, 10, 4], color: COLORS.tab, metal: true, tag: partTag },
+      { kind: 'box', center: [3, 3, 5], size: [4, 6, 4], color: COLORS.black, tag: partTag }
+    ]))
+    const [bare, insulated, tab, body] = primMeshes(built.group).map(m => m.material as THREE.MeshStandardMaterial)
+    expect(bare!.metalness).toBeGreaterThan(0)
+    expect(tab!.metalness).toBeGreaterThan(0)
+    expect(insulated!.metalness).toBe(0)
+    expect(body!.metalness).toBe(0)
+    // Same colour, different finish: two materials.
+    expect(bare).not.toBe(insulated)
+    built.dispose()
+  })
+
+  it('board 2: bare copper stretches, header posts and the TO-220 tab look metallic', () => {
+    const scene = buildScene(board2())
+    const built = buildMeshes(scene)
+    const meshes = primMeshes(built.group)
+    const metalness = (m: THREE.Mesh) => (m.material as THREE.MeshStandardMaterial).metalness
+    meshes.forEach((m, i) => {
+      const p = scene.prims[i]!
+      expect(metalness(m) > 0, `${p.tag.kind} ${p.tag.id} ${p.color}`).toBe(!!p.metal)
+    })
+    expect(meshes.some((m, i) => scene.prims[i]!.color === COLORS.headerPin && metalness(m) > 0)).toBe(true)
+    expect(meshes.some((m, i) => scene.prims[i]!.color === COLORS.tab && metalness(m) > 0)).toBe(true)
+    built.dispose()
   })
 })
