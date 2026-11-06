@@ -7,7 +7,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { parseBoard, type BoardFile } from '~core/schema'
 import { runCheck } from '~core/check'
-import { benchHtml } from '../export/benchHtml'
+import { benchHtml, tickKey } from '../export/benchHtml'
 import { ADVISORY, formatCheck } from './format'
 
 const USAGE = 'usage: wirebender check <file> [--all] [--json]\n       wirebender export <file> [-o out.html]'
@@ -82,7 +82,7 @@ function exportCmd(args: string[]): number {
     console.error(`${target}: refusing to overwrite the board file`)
     return 2
   }
-  const hash = createHash('sha256').update(loaded.text).digest('hex').slice(0, 12)
+  const hash = tickKey(createHash('sha256').update(loaded.text).digest('hex'))
   try {
     writeFileSync(target, benchHtml(loaded.board, { hash }))
   } catch (e) {

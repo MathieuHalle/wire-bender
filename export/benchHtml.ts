@@ -333,6 +333,14 @@ function today(): string {
 // ---- document ------------------------------------------------------------------------
 
 /**
+ * The tick-store key part for a board file: the first 12 hex chars of its sha256.
+ * The CLI export and the editor's /api/bench both use this, so the same file bytes share ticks.
+ */
+export function tickKey(sha256Hex: string): string {
+  return sha256Hex.slice(0, 12)
+}
+
+/**
  * The whole bench sheet. `hash` (e.g. of the board file's text) keys the phone ticks so they
  * reset when the board changes; without it the revision is used. `date` (YYYY-MM-DD) pins the
  * "generated" date; it defaults to today.

@@ -67,6 +67,32 @@ const errorTitle = computed(() => {
   return board.value ? 'The board file has errors. Showing the last good version.' : 'The board file has errors.'
 })
 
+/** The sheet is made from the file on disk: not while it disagrees with what is shown. */
+const benchBlocked = computed(() => !board.value || status.value === 'conflict' || status.value === 'error')
+const benchTip = computed(() => {
+  if (status.value === 'conflict') return 'Resolve the conflict first: the sheet is made from the file on disk.'
+  if (status.value === 'error') return 'Fix the error first: the sheet is made from the file on disk.'
+  return 'Open the printable bench sheet in a new tab'
+})
+
+/** Opens /api/bench once any pending save is on disk, so the sheet shows the latest edit. */
+function openBench() {
+  if (benchBlocked.value) return
+  if (status.value === 'saved') {
+    window.open('/api/bench', '_blank', 'noopener')
+    return
+  }
+  // Open the tab now, inside the click, so popup blockers allow it; point it at the sheet after the save.
+  const tab = window.open('', '_blank')
+  if (tab) tab.document.title = 'Waiting for the save…'
+  const stop = watch(status, (s) => {
+    if (s === 'saving') return
+    stop()
+    if (s === 'saved' && tab) tab.location.href = '/api/bench'
+    else tab?.close()
+  })
+}
+
 /** "Load the file" asks again inside the banner before discarding local edits. */
 const confirmLoad = ref(false)
 watch(status, (s) => {
@@ -113,6 +139,18 @@ const sideTitle = (s: Side) => (s === 'top'
         variant="subtle"
         :label="STATUS[status].label"
       />
+      <UTooltip :text="benchTip">
+        <span class="ml-auto inline-flex">
+          <UButton
+            size="xs"
+            variant="outline"
+            icon="i-lucide-printer"
+            label="Bench sheet"
+            :disabled="benchBlocked"
+            @click="openBench"
+          />
+        </span>
+      </UTooltip>
     </header>
 
     <Toolbar
