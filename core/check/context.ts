@@ -32,6 +32,8 @@ export interface Run {
   joints: Hole[]
   /** Wire ends (through-hole); none for trails. */
   ends: Hole[]
+  /** Holes along its bare stretches (a trail: all of them; a flying wire: none). */
+  bare: Hole[]
 }
 
 export interface CheckContext {
@@ -74,13 +76,18 @@ export function buildContext(board: BoardFile): CheckContext {
   const runs: Run[] = []
   for (const t of board.trails) {
     if (!t.points.length) continue
-    runs.push({ kind: 'trail', id: t.id, side: t.side, holes: pathHoles(t.points.map(parseHole)), joints: t.joints.map(parseHole), ends: [] })
+    const holes = pathHoles(t.points.map(parseHole))
+    runs.push({ kind: 'trail', id: t.id, side: t.side, holes, joints: t.joints.map(parseHole), ends: [], bare: holes })
   }
   for (const w of board.wires) {
     const pts = w.points.map(parseHole)
     for (const end of [pts[0]!, pts[pts.length - 1]!]) push(wireEndsAt, holeKey(end), w.id)
     const ends = [pts[0]!, pts[pts.length - 1]!]
-    runs.push({ kind: 'wire', id: w.id, side: w.side, holes: w.kind === 'laid' ? pathHoles(pts) : [], joints: w.joints.map(parseHole), ends })
+    const laid = w.kind === 'laid'
+    runs.push({
+      kind: 'wire', id: w.id, side: w.side, holes: laid ? pathHoles(pts) : [], joints: w.joints.map(parseHole), ends,
+      bare: laid && w.bareSegments.length ? pathHoles(pts, w.bareSegments) : []
+    })
   }
 
   const { cols, rows } = board.board

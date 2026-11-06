@@ -265,6 +265,48 @@ describe('runCheck', () => {
       expect(tabs(['R1', 'A6', 'A9', 'x'])).toEqual([])
     })
 
+    const msg = (what: string, hole: string) => `${what} at ${hole} touches the metal tab of Q1 (connected to d, pin D)`
+    const two = { type: 'two-sided' as const }
+    const tabsOf = (over: BoardOverrides) => only(check({ board: two, ...over, parts: [q1, ...(over.parts ?? [])] }).findings, 'touchesTab')
+    const wire = (id: string, kind: 'laid' | 'flying', side: 'top' | 'bottom', points: string[], bareSegments: number[] = []) =>
+      ({ id, kind, side, points, bareSegments, joints: [] })
+
+    it('a wire end behind the tab -> error, on either side', () => {
+      for (const side of ['top', 'bottom'] as const) {
+        const t = tabsOf({ wires: [wire('W1', 'flying', side, ['D6', 'D9'])] })
+        expect(t, side).toHaveLength(1)
+        expect(t[0]).toMatchObject({ severity: 'error', holes: ['D6'], message: msg('wire W1 end', 'D6') })
+      }
+    })
+
+    it('a top trail passing behind the tab -> error at its closest hole; on the bottom -> none', () => {
+      // A6..H6 passes B6 (0.09 mm, past the plate corner) then C6 (0.04 mm): one finding, at C6.
+      const t = tabsOf({ trails: [trail('T1', ['A6', 'H6'], 'top')] })
+      expect(t).toEqual([{ rule: 'touchesTab', severity: 'error', holes: ['C6'], message: msg('trail T1', 'C6') }])
+      expect(tabsOf({ trails: [trail('T1', ['A6', 'H6'], 'bottom')] })).toEqual([])
+    })
+
+    it('a top laid wire behind the tab: insulated there -> none, bare there -> error', () => {
+      expect(tabsOf({ wires: [wire('W1', 'laid', 'top', ['A6', 'H6', 'H9'])] })).toEqual([])
+      expect(tabsOf({ wires: [wire('W1', 'laid', 'top', ['A6', 'H6', 'H9'], [1])] })).toEqual([])
+      const t = tabsOf({ wires: [wire('W1', 'laid', 'top', ['A6', 'H6', 'H9'], [0])] })
+      expect(t.map(f => [f.holes, f.message])).toEqual([[['C6'], msg('wire W1', 'C6')]])
+      // Bare on the bottom is under the board, away from the tab.
+      expect(tabsOf({ wires: [wire('W1', 'laid', 'bottom', ['A6', 'H6', 'H9'], [0])] })).toEqual([])
+    })
+
+    it('a trail on the tab net is fine', () => {
+      // Jointed to R1.a (net d) at H6.
+      const t = tabsOf({ parts: [axial('R1', 'H6', 'H9', 'd')], trails: [trail('T1', ['A6', 'H6'], 'top', ['H6'])] })
+      expect(t).toEqual([])
+    })
+
+    it('rotation 270: tab toward row B; a top trail along row B touches at B5', () => {
+      // Pins C5 C6 C7; the plate spans cols 4.04..7.96 (in holes) just below row B.
+      const t = only(check({ board: two, parts: [{ ...q1, rotation: 270 }], trails: [trail('T1', ['B1', 'B10'], 'top')] }).findings, 'touchesTab')
+      expect(t.map(f => f.holes)).toEqual([['B5']])
+    })
+
     it('rotates with the part: tab +y at rotation 90', () => {
       // Pins C5 C4 C3 (row C), tab toward row D.
       const t = only(check({ parts: [{ ...q1, rotation: 90 }, axial('R1', 'D4', 'G4', 'x')] }).findings, 'touchesTab')

@@ -8,6 +8,8 @@ const PITCH = FOOTPRINT_PITCH_MM
 export const LEG_DIAMETER_MM = 0.6
 /** The metal tab plate: the back face of the body on the `tab` side, this thick, mm. */
 export const TAB_PLATE_MM = 1.3
+/** Bare metal closer than its radius plus this to a tab plate touches it, mm. */
+export const TAB_CLEARANCE_MM = 0.2
 
 export interface Footprint {
   id: string

@@ -1,14 +1,12 @@
 // Rule logic ported from perfwire solver.py erc_audit/topology_audit, Apache-2.0
 //
 // Placement rules: twoInOneHole, bodyCollision, underBody, touchesTab, blockedHole.
-import { FOOTPRINT_PITCH_MM, LEG_DIAMETER_MM, tabPlateMm } from '../footprints'
+import { FOOTPRINT_PITCH_MM, LEG_DIAMETER_MM, TAB_CLEARANCE_MM, tabPlateMm, type Rect } from '../footprints'
 import { holeKey, holeMm, holeName, parseHole, type Hole } from '../holes'
 import { joinAnd, names, type CheckContext, type Finding, type Run } from './context'
 
 /** Bodies may touch: only an overlap beyond this in both axes is a collision. */
 const OVERLAP_TOLERANCE_MM = 0.2
-/** A lead closer than its radius plus this to a metal tab plate touches it, mm. */
-const TAB_CLEARANCE_MM = 0.2
 
 /** What occupies each hole, as readable labels, from the given sources. */
 class Occupancy {
@@ -31,6 +29,24 @@ class Occupancy {
 
 /** Holes a run lies over, without its wire ends (those are named as ends). */
 const alongOnly = (r: Run) => r.holes.filter(h => !r.ends.some(e => holeKey(e) === holeKey(h)))
+
+/** The distance from a hole centre to a rect, both on the footprint grid, mm. */
+function holeToRectMm(h: Hole, r: Rect): number {
+  const m = holeMm(h, FOOTPRINT_PITCH_MM)
+  const dx = Math.max(r.x - m.x, 0, m.x - (r.x + r.w))
+  const dy = Math.max(r.y - m.y, 0, m.y - (r.y + r.h))
+  return Math.hypot(dx, dy)
+}
+
+/** The first of `holes` closest to the rect, when it is nearer than `reach`. */
+function closestWithin(holes: { hole: Hole, end: boolean }[], r: Rect, reach: number) {
+  let best: { hole: Hole, end: boolean, d: number } | null = null
+  for (const h of holes) {
+    const d = holeToRectMm(h.hole, r)
+    if (d < reach && (!best || d < best.d)) best = { ...h, d }
+  }
+  return best
+}
 
 export function placementRules(ctx: CheckContext): Finding[] {
   const out: Finding[] = []
@@ -100,26 +116,37 @@ export function placementRules(ctx: CheckContext): Finding[] {
   }
 
   // ---- touchesTab -----------------------------------------------------------------
-  // A metal tab carries its pin's net (TO-220: the drain). Another part's lead whose hole
-  // centre is within a leg radius plus clearance of the plate touches it, unless it is on
-  // that net. Compared on the footprint grid, where placePart lays bodies out.
+  // A metal tab stands above the board and carries its pin's net (TO-220: the drain). Bare
+  // metal on the top whose hole centre is within a leg radius plus clearance of the plate
+  // touches it: other parts' leads, wire ends (they stick up through the hole from either
+  // side), top-side trails and the bare stretches of top-side laid wires. Not when one of
+  // the conductor's nets is the tab's. One finding per conductor and tab, at its closest
+  // hole. Compared on the footprint grid, where placePart lays bodies out.
   const reach = LEG_DIAMETER_MM / 2 + TAB_CLEARANCE_MM
+  const groupNets = (kind: 'trail' | 'wire', id: string) =>
+    ctx.conn.groups.find(g => g.conductors.some(c => c.kind === kind && c.id === id))?.nets ?? []
   for (const pp of ctx.placed) {
     const plate = tabPlateMm(pp)
     if (!plate) continue
     const tabPin = pp.pins.find(p => p.name === pp.fp.tabPin)
     const net = tabPin?.net ?? null
+    const via = [net, tabPin ? `pin ${tabPin.name}` : null].filter(Boolean).join(', ')
+    const touch = (what: string, h: Hole) => out.push({
+      rule: 'touchesTab', severity: 'error', holes: names(ctx, [h]),
+      message: `${what} at ${holeName(h)} touches the metal tab of ${pp.part.ref} (connected to ${via})`
+    })
     for (const l of ctx.leads) {
       if (l.ref === pp.part.ref || (net !== null && l.net === net)) continue
-      const m = holeMm(l.hole, FOOTPRINT_PITCH_MM)
-      const dx = Math.max(plate.x - m.x, 0, m.x - (plate.x + plate.w))
-      const dy = Math.max(plate.y - m.y, 0, m.y - (plate.y + plate.h))
-      if (Math.hypot(dx, dy) >= reach) continue
-      const via = [net, tabPin ? `pin ${tabPin.name}` : null].filter(Boolean).join(', ')
-      out.push({
-        rule: 'touchesTab', severity: 'error', holes: names(ctx, [l.hole]),
-        message: `${l.id} at ${holeName(l.hole)} touches the metal tab of ${pp.part.ref} (connected to ${via})`
-      })
+      if (holeToRectMm(l.hole, plate) < reach) touch(l.id, l.hole)
+    }
+    for (const r of ctx.runs) {
+      const holes = [
+        ...r.ends.map(hole => ({ hole, end: true })),
+        ...(r.side === 'top' ? r.bare.map(hole => ({ hole, end: false })) : [])
+      ]
+      const hit = closestWithin(holes, plate, reach)
+      if (!hit || (net !== null && groupNets(r.kind, r.id).includes(net))) continue
+      touch(`${r.kind} ${r.id}${hit.end ? ' end' : ''}`, hit.hole)
     }
   }
 
