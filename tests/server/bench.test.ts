@@ -34,6 +34,10 @@ describe('benchResponse', () => {
     const parsed = parseBoard(JSON.parse(bytes.toString('utf8')))
     if (!parsed.ok) throw new Error('fixture should parse')
     expect(r.body).toBe(benchHtml(parsed.board, { hash: cliHash, date: '2026-11-05' }))
+    expect(r.headers['x-content-type-options']).toBe('nosniff')
+    expect(r.headers['cache-control']).toBe('no-store')
+    expect(r.headers['content-type']).toBe('text/html; charset=utf-8')
+    expect(r.headers['content-disposition']).toBe('inline; filename="Channel-board-2.bench.html"')
   })
 
   it('answers 422 plain text with the parse errors for an invalid board', async () => {
@@ -43,6 +47,9 @@ describe('benchResponse', () => {
     expect(r.contentType).toBe('text/plain; charset=utf-8')
     expect(r.filename).toBeUndefined()
     expect(r.body).toMatch(/not valid JSON: /)
+    expect(r.headers['x-content-type-options']).toBe('nosniff')
+    expect(r.headers['cache-control']).toBe('no-store')
+    expect(r.headers['content-disposition']).toBeUndefined()
   })
 
   it('answers 422 with schema errors and a missing file', async () => {

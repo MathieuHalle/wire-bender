@@ -64,11 +64,11 @@ describe('benchHtml', () => {
     const ov = html.slice(html.indexOf('<section id="overview"'))
     expect(ov.slice(0, ov.indexOf('</section>'))).toContain('aria-label="scale bar, 10 mm"')
     const bars = (html.match(/aria-label="scale bar, 10 mm"/g) ?? []).length
-    const cards = (html.match(/<section class="card"/g) ?? []).length
+    const cards = (html.match(/<section class="card[ "]/g) ?? []).length
     expect(cards).toBe(benchModel(board2()).cards.length)
     expect(bars).toBeGreaterThanOrEqual(1 + cards)
     // each card carries its own scale bar
-    for (const sec of html.split('<section class="card"').slice(1))
+    for (const sec of html.split(/<section class="card[ "]/).slice(1))
       expect(sec.slice(0, sec.indexOf('</section>'))).toContain('aria-label="scale bar, 10 mm"')
   })
 
@@ -167,5 +167,109 @@ describe('benchHtml', () => {
     const before = [...out.matchAll(/\bsrc\s*=/gi)].map(m => out.slice(m.index - 10, m.index))
     expect(before.length).toBeGreaterThan(0)
     expect(before.every(p => p.endsWith('&lt;img ') || p.endsWith('\\u003cimg '))).toBe(true)
+  })
+
+  it('per-card scale bar check sees wide cards too', () => {
+    expect(html.split(/<section class="card[ "]/).length - 1).toBe(benchModel(board2()).cards.length)
+  })
+
+  describe('wide boards', () => {
+    const wide = (paper: 'letter' | 'a4') => {
+      const b = mk({
+        board: { cols: 90, rows: 30 },
+        nets: { N: {} },
+        parts: [axial('R1', 'A1', 'A4', 'N'), axial('R2', 'C80', 'C84', 'N')],
+        trails: [trail('T1', ['A1', 'A70', 'C70', 'C80']), trail('T2', ['E1', 'E5'])],
+        wires: [{ id: 'W1', kind: 'laid', side: 'bottom', points: ['G1', 'G88', 'P88'], bareSegments: [1], joints: [] }],
+        legFolds: [{ lead: 'R1.b', to: 'A5' }]
+      })
+      return benchHtml({ ...b, bench: { ...b.bench, paper } }, { date: DATE })
+    }
+    const PRINTABLE = { letter: 191.9, a4: 186 }
+
+    it('an overview wider than the page is fitted and says so; every 1:1 svg fits the page', () => {
+      for (const paper of ['letter', 'a4'] as const) {
+        const out = wide(paper)
+        expect(out).toContain('Overview not to scale (board wider than the page). Wire cards are 1:1.')
+        const fitted = [...out.matchAll(/<div class="drawing fitted">(<svg[\s\S]*?<\/svg>)<\/div>/g)]
+        expect(fitted).toHaveLength(2)
+        for (const f of fitted) expect(Number(/^<svg width="([\d.]+)mm"/.exec(f[1]!)![1])).toBeGreaterThan(PRINTABLE[paper])
+        // no 1:1 scale bar claims the fitted overview
+        const ov = out.slice(out.indexOf('<section id="overview"'))
+        expect(ov.slice(0, ov.indexOf('</section>'))).not.toContain('aria-label="scale bar, 10 mm"')
+        const rest = out.replace(/<div class="drawing fitted">[\s\S]*?<\/svg><\/div>/g, '')
+        const widths = [...rest.matchAll(/<svg width="([\d.]+)mm"/g)].map(m => Number(m[1]))
+        expect(widths.length).toBeGreaterThan(5)
+        for (const w of widths) expect(w).toBeLessThanOrEqual(PRINTABLE[paper])
+      }
+    })
+
+    it('fitted overviews shrink with CSS; print containers clip', () => {
+      const out = wide('letter')
+      expect(out).toMatch(/\.drawing\.fitted svg \{[^}]*max-width: 100%;[^}]*height: auto;/)
+      expect(out).toMatch(/@media print \{[\s\S]*\.drawing, \.scale, \.strip, \.sketch[^{]*\{ overflow: hidden; \}/)
+    })
+
+    it('a board that fits keeps its 1:1 overview', () => {
+      expect(html).not.toContain('Overview not to scale')
+      expect(html).not.toContain('class="drawing fitted"')
+    })
+  })
+
+  it('the card hint says to lay the wire from the dashed start', () => {
+    expect(html).toContain('Lay the cut wire on the drawing from the dashed start; bend at each marked corner.')
+  })
+
+  it('cards name the material in words', () => {
+    const b = mk({
+      board: { cols: 20, rows: 10 },
+      trails: [trail('T1', ['A1', 'A5'])],
+      wires: [
+        { id: 'W1', kind: 'laid', side: 'bottom', points: ['C1', 'C5'], bareSegments: [], joints: [], color: 'black' },
+        { id: 'W2', kind: 'flying', side: 'bottom', points: ['E1', 'G5'], bareSegments: [], joints: [] }
+      ]
+    })
+    const out = benchHtml(b, { date: DATE })
+    const sec = (id: string) => {
+      const s = out.slice(out.indexOf(`id="card-${id}"`))
+      return s.slice(0, s.indexOf('</section>'))
+    }
+    expect(sec('T1')).toContain('bare tinned copper')
+    expect(sec('W1')).toContain('insulated wire, black')
+    expect(sec('W2')).toContain('insulated wire, any colour')
+    // spare tail note under the strip bar of wires
+    expect(sec('W1')).toMatch(/<div class="strip">[\s\S]*<\/div>\n<p class="hint">longer tail = spare, trim after soldering<\/p>/)
+    expect(sec('W2')).toContain('longer tail = spare, trim after soldering')
+  })
+
+  it('the cut length has no float noise', () => {
+    const b = small()
+    const out = benchHtml({ ...b, bench: { ...b.bench, roundToMm: 0.1 } }, { date: DATE })
+    // A1 -> C1: 5.08 + 10 + 5 = 20.08 -> 20.1
+    expect(out).toContain('Cut 20.1 mm')
+    expect(out).toContain('rounded up to 0.1 mm: 20.1 mm')
+    expect(out).not.toMatch(/\d\.\d{6,}/)
+  })
+
+  it('an empty net name reads "(unnamed net)"', () => {
+    const b = mk({
+      nets: { '': {} },
+      parts: [axial('R1', 'A1', 'A4', ''), axial('R2', 'C1', 'C4', '')],
+      trails: [trail('T1', ['A1', 'C1'])]
+    })
+    const out = benchHtml(b, { date: DATE })
+    const card = out.slice(out.indexOf('id="card-T1"'))
+    expect(card.slice(0, card.indexOf('</section>'))).toContain('(unnamed net)')
+    expect(out).toContain('<tr class="group"><th colspan="5">(unnamed net)</th></tr>')
+    expect(out).toContain('(unnamed net) continuous')
+  })
+
+  it('says how many nets were left out of must-beep because they are shorted', () => {
+    const b = mk({
+      parts: [axial('R1', 'A1', 'A4', 'p', 'q'), axial('R2', 'C1', 'C4', 'q', 'p')],
+      trails: [trail('T1', ['A1', 'C1'], 'bottom', ['A1', 'C1']), trail('T2', ['A4', 'C4'], 'bottom', ['A4', 'C4'])]
+    })
+    expect(benchHtml(b, { date: DATE })).toContain('2 nets left out of this list: they are shorted (see the errors at the top).')
+    expect(benchHtml(small(), { date: DATE })).not.toContain('left out of this list')
   })
 })

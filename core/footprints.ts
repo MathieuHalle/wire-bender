@@ -1,7 +1,9 @@
 import { holeMm, parseHole, type Hole } from './holes'
 import type { Part, PinRole } from './schema'
 
-const PITCH = 2.54
+/** The hole grid footprint bodies are laid out on (placePart uses it), mm. */
+export const FOOTPRINT_PITCH_MM = 2.54
+const PITCH = FOOTPRINT_PITCH_MM
 
 export interface Footprint {
   id: string

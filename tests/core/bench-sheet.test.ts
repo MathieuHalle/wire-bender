@@ -79,6 +79,20 @@ describe('benchModel meter lists', () => {
       trails: [trail('T1', ['A1', 'C1'], 'bottom', ['A1', 'C1']), trail('T2', ['A4', 'C4'], 'bottom', ['A4', 'C4'])]
     })
     expect(benchModel(b).mustBeep).toEqual([])
+    // both nets were left out because they are shorted together
+    expect(benchModel(b).shortedNets).toBe(2)
+    expect(benchModel(three).shortedNets).toBe(0)
+  })
+
+  it('an empty net name reads "(unnamed net)" in group headings and reasons', () => {
+    const b = mk({
+      nets: { '': {} },
+      parts: [axial('R1', 'A1', 'A4', ''), axial('R2', 'C1', 'C4', '')],
+      trails: [trail('T1', ['A1', 'C1'])]
+    })
+    expect(benchModel(b).mustBeep).toEqual([
+      { a: 'R1.a (A1)', b: 'R2.a (C1)', expect: 'beep', why: '(unnamed net) continuous', group: '(unnamed net)' }
+    ])
   })
 
   const adj = mk({

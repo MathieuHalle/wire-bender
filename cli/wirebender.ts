@@ -90,6 +90,9 @@ function exportCmd(args: string[]): number {
     return 2
   }
   console.log(target)
+  // The sheet still gets written (exit 0); say so where a script will see it.
+  const errors = runCheck(loaded.board).stats.errors
+  if (errors > 0) console.error(`board has ${errors} error${errors === 1 ? '' : 's'} — see the red box on the sheet`)
   return 0
 }
 

@@ -80,6 +80,19 @@ describe('wirebender export', () => {
     expect(html.startsWith('<!doctype html>')).toBe(true)
     expect(html).toContain('Channel board 2')
     expect(readFileSync(fixture, 'utf8')).toBe(before) // the board file is never changed
+    // the fixture has 4 check errors: one stderr line, still exit 0
+    expect(r.err.trim()).toBe('board has 4 errors — see the red box on the sheet')
+  })
+
+  it('export of a clean board writes nothing to stderr', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wb-export-'))
+    const board = JSON.parse(readFileSync(fixture, 'utf8'))
+    Object.assign(board, { parts: [], trails: [], wires: [], legFolds: [], solderBridges: [] })
+    const file = join(dir, 'clean.json')
+    writeFileSync(file, JSON.stringify(board))
+    const r = cli('export', file, '-o', join(dir, 'clean.html'))
+    expect(r.code, r.out + r.err).toBe(0)
+    expect(r.err).toBe('')
   })
 
   it('export without -o writes <basename>.bench.html next to the board file', () => {

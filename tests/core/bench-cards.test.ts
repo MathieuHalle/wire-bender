@@ -199,4 +199,30 @@ describe('wireCards', () => {
     const w1 = cards.find(c => c.id === 'W1')!
     expect(w1).toMatchObject({ net: 'GND', netClass: null, color: 'black' })
   })
+
+  it('cards carry the board pitch', () => {
+    const [c] = wireCards(mk({ board: { pitchMm: 2.0 }, trails: [trail('T1', ['A1', 'A6'])] }))
+    expect(c!.pitchMm).toBe(2.0)
+    expect(c!.segments[0]!.lengthMm).toBeCloseTo(10, 9)
+    expect(wireCards(mk({ trails: [trail('T1', ['A1', 'A6'])] }))[0]!.pitchMm).toBe(2.54)
+  })
+
+  it('a zero-length trail (all points the same hole) is cut 0 with a note', () => {
+    const [c] = wireCards(mk({ trails: [trail('T1', ['C3', 'C3', 'C3'])] }))
+    expect(c!.note).toBe('zero-length trail (all points at C3), skipped')
+    expect(c!.cutMm).toBe(0)
+    expect(c!.segments).toEqual([])
+    expect(c!.stretches).toEqual([])
+    expect(c!.strip).toEqual([])
+    expect(c!.breakdown).toEqual({ pathMm: 0, bendsMm: 0, leadsMm: 0, spareMm: 0, slackMm: 0 })
+  })
+
+  it('cut length has no float noise with a fractional roundToMm', () => {
+    // 4 holes = 10.16 + 10 leads + 5 spare = 25.16 -> 25.2 (not 25.200000000000003)
+    const b = mk({ trails: [trail('T1', ['A1', 'A5'])] })
+    const [c] = wireCards({ ...b, bench: { ...b.bench, roundToMm: 0.1 } })
+    expect(c!.cutMm).toBe(25.2)
+    const total = c!.stretches.reduce((a, s) => a + s.lengthMm, 0)
+    expect(total).toBeCloseTo(25.2, 9)
+  })
 })

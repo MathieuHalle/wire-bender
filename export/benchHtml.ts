@@ -3,10 +3,11 @@
 // tick store (localStorage, every access in try/catch).
 import { ADVISORY } from '../core/advisory'
 import { benchModel, type BenchModel, type MeterRow } from '../core/bench/sheet'
-import type { WireCard } from '../core/bench/cards'
+import { netLabel, type WireCard } from '../core/bench/cards'
 import type { BoardFile } from '../core/schema'
 import {
-  bendSvgs, boardOverviewSvg, COPPER, esc, INSULATED_FALLBACK, legFoldSvg, mmText, safeColor, scaleBarSvg, stripBarSvg
+  bendSvgs, boardOverviewSvg, COPPER, esc, INSULATED_FALLBACK, legFoldSvg, mmExact, mmText, safeColor, scaleBarSvg,
+  SPARE_TAIL_LABEL, stripBarSvg
 } from './svg'
 
 /** Printable width in mm: paper width minus two 12 mm margins. */
@@ -56,15 +57,20 @@ ${box}
 </header>`
 }
 
+export const OVERVIEW_FITTED_NOTE = 'Overview not to scale (board wider than the page). Wire cards are 1:1.'
+
 function overview(board: BoardFile, printable: number): string {
   const top = boardOverviewSvg(board, 'top')
   const bottom = boardOverviewSvg(board, 'bottom')
   const sideBySide = svgWidthMm(top) + OVERVIEW_GAP_MM + svgWidthMm(bottom) <= printable
+  // A board wider than the page would make the browser shrink every printed page; instead
+  // the overviews alone are scaled down to fit (CSS), say so, and carry no scale bar.
+  const fitted = Math.max(svgWidthMm(top), svgWidthMm(bottom)) > printable
   const fig = (svg: string, caption: string) =>
-    `<figure><figcaption>${caption}</figcaption><div class="drawing">${svg}</div></figure>`
+    `<figure><figcaption>${caption}</figcaption><div class="drawing${fitted ? ' fitted' : ''}">${svg}</div></figure>`
   return `<section id="overview" class="overview">
-<h2>Board overview, 1:1</h2>
-${scaleBar()}
+<h2>${fitted ? 'Board overview' : 'Board overview, 1:1'}</h2>
+${fitted ? `<p class="fitted-note"><strong>${esc(OVERVIEW_FITTED_NOTE)}</strong></p>` : scaleBar()}
 <div class="${sideBySide ? 'pair' : 'stack'}">
 ${fig(top, 'Top: parts side')}
 ${fig(bottom, 'Bottom: solder side, seen from below (mirrored)')}
@@ -112,14 +118,19 @@ function breakdownLine(c: WireCard, roundTo: number): string {
   parts.push(`leads ${mmText(b.leadsMm)}`, `spare ${mmText(b.spareMm)}`)
   if (b.slackMm > 0) parts.push(`slack ${mmText(b.slackMm)}`)
   const sum = b.pathMm + b.bendsMm + b.leadsMm + b.spareMm + b.slackMm
-  return `${parts.join(' + ')} = ${mmText(sum)}, rounded up to ${roundTo} mm: ${c.cutMm} mm`
+  return `${parts.join(' + ')} = ${mmText(sum)}, rounded up to ${mmExact(roundTo)}: ${mmExact(c.cutMm)}`
+}
+
+/** The wire to use, in words, so it survives black-and-white printing. */
+function material(c: WireCard): string {
+  return c.kind === 'trail' ? 'bare tinned copper' : `insulated wire, ${c.color ?? 'any colour'}`
 }
 
 function card(c: WireCard, board: BoardFile, printable: number, id: (k: string) => string): string {
   const color = c.kind === 'trail' ? COPPER : safeColor(c.color, INSULATED_FALLBACK)
   const net = c.net === null
     ? 'no net'
-    : `${esc(c.net)}${c.netClass ? ` <span class="muted">(${esc(c.netClass)})</span>` : ''}`
+    : `${esc(netLabel(c.net))}${c.netClass ? ` <span class="muted">(${esc(c.netClass)})</span>` : ''}`
   const showStrip = c.strip.length > 0 || c.kind !== 'trail'
   // In print, cards sit in two columns; a card whose 1:1 drawing is wider than a column spans both.
   const column = (printable - COLUMN_GAP_MM) / 2 - CARD_INSET_MM
@@ -138,13 +149,15 @@ ${scaleBar()}
 <span class="card-id">${esc(c.id)}</span>
 <span class="kind">${KIND_LABEL[c.kind]}</span>
 <span class="net"><span class="swatch" style="background:${color}"></span>${net}</span>
+<span class="material">${esc(material(c))}</span>
 <span>${SIDE_LABEL[c.side]}</span>
 <span class="mono">${esc(c.start)} → ${esc(c.end)}</span>
 </div>
-<p class="cut">Cut ${c.cutMm} mm</p>
+<p class="cut">Cut ${mmExact(c.cutMm)}</p>
 <p class="breakdown mono">${esc(breakdownLine(c, board.bench.roundToMm))}</p>
 ${c.note ? `<p class="note">${esc(c.note)}</p>` : ''}
 ${showStrip ? `<div class="strip">${stripBarSvg(c, stripW)}</div>` : ''}
+${c.kind !== 'trail' && c.cutMm > 0 ? `<p class="hint">${esc(SPARE_TAIL_LABEL)}</p>` : ''}
 ${drawing}
 <p class="ticks">${tick(id(`card:${c.id}`), 'cut / stripped / bent')}</p>
 </section>`
@@ -153,16 +166,16 @@ ${drawing}
 function cards(m: BenchModel, board: BoardFile, printable: number, id: (k: string) => string): string {
   return `<section id="cards" class="page">
 <h2>Wire cards</h2>
-<p class="hint">Bend drawings are 1:1: lay the wire on them. Strip bars are not to scale; their marks are measured from the start end.</p>
+<p class="hint">Lay the cut wire on the drawing from the dashed start; bend at each marked corner. Bend drawings are 1:1. Strip bars are not to scale; their marks are measured from the start end.</p>
 ${m.cards.length ? `<div class="columns">\n${m.cards.map(c => card(c, board, printable, id)).join('\n')}\n</div>` : '<p>No trails or wires.</p>'}
 </section>`
 }
 
-function legFolds(m: BenchModel, id: (k: string) => string): string {
+function legFolds(m: BenchModel, pitchMm: number, id: (k: string) => string): string {
   const rows = m.legFolds.map(f => `<div class="fold">
 ${tick(id(`fold:${f.lead}`))}
 <div><p><strong>${esc(f.lead)}</strong> <span class="mono">${esc(f.from)} → ${esc(f.to)}</span></p><p>${esc(f.note)}</p></div>
-<div class="sketch">${legFoldSvg(f)}</div>
+<div class="sketch">${legFoldSvg(f, pitchMm)}</div>
 </div>`)
   return `<section id="legfolds" class="page">
 <h2>Leg-fold bridges</h2>
@@ -184,11 +197,17 @@ function meterList(title: string, rows: MeterRow[], prefix: string, id: (k: stri
   return `<h3>${esc(title)}</h3>\n<div${columns ? ' class="columns"' : ''}>${table(['Done', 'Probe A', 'Probe B', 'Expect', 'Why'], body, 'meter')}</div>`
 }
 
+function shorted(k: number): string {
+  if (k === 0) return ''
+  const what = k === 1 ? '1 net left out of this list: it is shorted' : `${k} nets left out of this list: they are shorted`
+  return `\n<p class="note-shorted"><strong>${what} (see the errors at the top).</strong></p>`
+}
+
 function meter(m: BenchModel, id: (k: string) => string): string {
   return `<section id="meter" class="page">
 <h2>Meter tests</h2>
 <p class="hint">Continuity mode, board unpowered.</p>
-${meterList('Before power: must beep', m.mustBeep, 'beep', id, true)}
+${meterList('Before power: must beep', m.mustBeep, 'beep', id, true)}${shorted(m.shortedNets)}
 ${meterList('Before power: must not beep', m.mustNotBeep, 'nobeep', id, false)}
 </section>`
 }
@@ -219,6 +238,9 @@ button { font: inherit; padding: 6px 12px; border: 1px solid var(--line); border
 .drawing, .scale, .strip, .sketch { overflow-x: auto; max-width: 100%; }
 .drawing svg, .scale svg, .sketch svg { display: block; max-width: none; }
 .strip svg { display: block; max-width: 100%; height: auto; }
+.drawing.fitted { overflow: hidden; }
+.drawing.fitted svg { display: block; max-width: 100%; height: auto; }
+.fitted-note { margin: 4px 0 8px; }
 .drawing, .sketch, .strip, .scale { background: #ffffff; border-radius: 4px; }
 .scale { display: inline-block; margin: 4px 0; }
 .pair { display: flex; gap: ${OVERVIEW_GAP_MM}mm; align-items: flex-start; }
@@ -268,7 +290,8 @@ footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); 
   body { max-width: none; padding: 0; font-size: 10pt; color: #000; background: #fff; }
   .screen-only { display: none; }
   .page { break-before: page; page-break-before: always; }
-  .drawing, .scale, .strip, .sketch { overflow: visible; }
+  /* belt and braces: nothing may push the page wider, or the browser shrinks every page */
+  .drawing, .scale, .strip, .sketch, section, figure { overflow: hidden; }
   .errors { border-width: 2pt; }
   .tick input { width: 4mm; height: 4mm; border: 0.3mm solid #000; background: #fff; box-shadow: none; }
   tr, h2, h3, h4, figure { break-inside: avoid; page-break-inside: avoid; }
@@ -366,7 +389,7 @@ ${header(m, date)}
 ${overview(board, printable)}
 ${placement(m, id)}
 ${cards(m, board, printable, id)}
-${legFolds(m, id)}
+${legFolds(m, board.board.pitchMm, id)}
 ${meter(m, id)}
 <footer><p class="advisory"><strong>${esc(ADVISORY)}</strong></p></footer>
 </body>

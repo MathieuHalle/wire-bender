@@ -113,11 +113,11 @@ const boardFileSchema = z.strictObject({
   legFolds: z.array(z.strictObject({ lead: z.string(), to: hole })),
   solderBridges: z.array(z.strictObject({ side, a: hole, b: hole })),
   bench: z.strictObject({
-    endLeadMm: z.number().default(benchDefaults.endLeadMm),
-    bendAllowanceMm: z.number().default(benchDefaults.bendAllowanceMm),
-    spareMm: z.number().default(benchDefaults.spareMm),
-    flyingSlackMm: z.number().default(benchDefaults.flyingSlackMm),
-    roundToMm: z.number().default(benchDefaults.roundToMm),
+    endLeadMm: z.number().nonnegative().default(benchDefaults.endLeadMm),
+    bendAllowanceMm: z.number().nonnegative().default(benchDefaults.bendAllowanceMm),
+    spareMm: z.number().nonnegative().default(benchDefaults.spareMm),
+    flyingSlackMm: z.number().nonnegative().default(benchDefaults.flyingSlackMm),
+    roundToMm: z.number().positive().default(benchDefaults.roundToMm),
     paper: z.enum(['letter', 'a4']).default(benchDefaults.paper)
   }).default(benchDefaults)
 })

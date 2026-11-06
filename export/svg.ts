@@ -33,6 +33,11 @@ function n(x: number): string {
   return String(v === 0 ? 0 : v)
 }
 
+/** A length already rounded by the model (the cut), printed without float noise. */
+export function mmExact(x: number): string {
+  return `${n(x)} mm`
+}
+
 /** Lengths shown to the owner: rounded to 0.5 mm. */
 export function mmText(x: number): string {
   return `${n(Math.round(x * 2) / 2)} mm`
@@ -436,6 +441,18 @@ interface RowCtx {
   lastRow: boolean
   rowIndex: number
   rowCount: number
+  /** Dashed 1:1 lead stubs, mm: `start` on the first row, `end` (lead + spare + rounding) on the last. */
+  leads: { start: number, end: number }
+}
+
+export const START_LEAD_LABEL = 'lead: bend down into the hole'
+export const END_LEAD_LABEL = 'lead + spare: trim after soldering'
+export const SPARE_TAIL_LABEL = 'longer tail = spare, trim after soldering'
+/** The lead labels on two lines, so they stay narrow beside a short stub. */
+const LABEL_LINES: Record<string, string[]> = {
+  [START_LEAD_LABEL]: ['lead: bend down', 'into the hole'],
+  [END_LEAD_LABEL]: ['lead + spare:', 'trim after soldering'],
+  [SPARE_TAIL_LABEL]: ['longer tail = spare,', 'trim after soldering']
 }
 
 /** Lay out one row of a bend drawing in drawing mm (unshifted). */
@@ -447,7 +464,7 @@ function rowScene(pieces: Piece[], ctx: RowCtx, bendOf: (i: number) => RowBend |
     x: pts.reduce((a, q) => a + q.x, 0) / pts.length,
     y: pts.reduce((a, q) => a + q.y, 0) / pts.length
   }
-  const pitch = 2.54
+  const pitch = card.pitchMm
 
   // holes along the wire, under it
   for (const p of pieces) {
@@ -457,12 +474,36 @@ function rowScene(pieces: Piece[], ctx: RowCtx, bendOf: (i: number) => RowBend |
       s.circle({ x: p.a.x + u.x * k * pitch, y: p.a.y + u.y * k * pitch }, 0.95, `fill="none" stroke="${HOLE}" stroke-width="0.15"`)
   }
   // the wire
-  for (const p of pieces) wireStroke(s, p.a, p.b, p.bare ? COPPER : color)
+  pieces.forEach((p, i) => wireStroke(s, p.a, p.b, p.bare ? COPPER : color, 0.8, ` data-piece="${i}"`))
 
   // Labels are placed one by one on the first free spot near their anchor (wire, end
   // circles and earlier labels are obstacles), preferring the outside of the shape.
   const placer = new Placer()
   for (const p of pieces) placer.segment(p.a, p.b, 0.9)
+
+  // The leads at 1:1, dashed, straight on from the end holes: the cut end of the wire lines up
+  // with the far end of the start stub; the end stub holds the end lead, spare and rounding.
+  const first = pieces[0]!
+  const last = pieces[pieces.length - 1]!
+  const u0 = unit(first.a, first.b)
+  const u1 = unit(last.a, last.b)
+  const stubs: { at: Pt, dir: Pt, len: number, role: 'start' | 'end', label: string }[] = []
+  if (ctx.firstRow && ctx.leads.start > 0)
+    stubs.push({ at: first.a, dir: { x: -u0.x, y: -u0.y }, len: ctx.leads.start, role: 'start', label: START_LEAD_LABEL })
+  if (ctx.lastRow && ctx.leads.end > 0)
+    stubs.push({ at: last.b, dir: u1, len: ctx.leads.end, role: 'end', label: card.kind === 'trail' ? SPARE_TAIL_LABEL : END_LEAD_LABEL })
+  for (const st of stubs) {
+    const far = { x: st.at.x + st.dir.x * st.len, y: st.at.y + st.dir.y * st.len }
+    s.line(st.at, far, `stroke="#2b2f2d" stroke-width="1.1" stroke-dasharray="1.2 0.8" stroke-linecap="butt"`)
+    s.line(st.at, far, `data-lead="${st.role}" stroke="${COPPER}" stroke-width="0.8" stroke-dasharray="1.2 0.8" stroke-linecap="butt"`)
+    // the cut end: a short tick across the stub
+    const nrm = { x: -st.dir.y, y: st.dir.x }
+    const t1 = { x: far.x + nrm.x * 1.4, y: far.y + nrm.y * 1.4 }
+    const t2 = { x: far.x - nrm.x * 1.4, y: far.y - nrm.y * 1.4 }
+    s.line(t1, t2, `stroke="${INK}" stroke-width="0.3"`)
+    placer.segment(st.at, far, 0.9)
+    placer.segment(t1, t2, 0.3)
+  }
   const outward = (q: Pt): Pt => {
     const d = { x: q.x - centroid.x, y: q.y - centroid.y }
     const l = Math.hypot(d.x, d.y)
@@ -475,10 +516,6 @@ function rowScene(pieces: Piece[], ctx: RowCtx, bendOf: (i: number) => RowBend |
   })
 
   // ends first: the wire's start and end holes, or the split points between rows
-  const first = pieces[0]!
-  const last = pieces[pieces.length - 1]!
-  const u0 = unit(first.a, first.b)
-  const u1 = unit(last.a, last.b)
   const ends: { at: Pt, away: Pt, str: string, role: string | null }[] = [
     { at: first.a, away: { x: -u0.x, y: -u0.y }, role: ctx.firstRow ? 'start' : null,
       str: ctx.firstRow ? `start ${card.start}` : `◂ continued from row ${ctx.rowIndex} at ${holeName(first.ha)}` },
@@ -496,6 +533,19 @@ function rowScene(pieces: Piece[], ctx: RowCtx, bendOf: (i: number) => RowBend |
     }
   }
   for (const e of ends) placer.place(e.at, prefer(e.away), [1.8, 3.5, 5.5], textBlock(e.str, 2.6, `${e.role ? 'font-weight="700" ' : ''}${HALO}`), s)
+  // lead labels beside their stub, outside the shape when there is room
+  for (const st of stubs) {
+    const mid = { x: st.at.x + st.dir.x * st.len / 2, y: st.at.y + st.dir.y * st.len / 2 }
+    let nrm = { x: -st.dir.y, y: st.dir.x }
+    const o = outward(mid)
+    if (nrm.x * o.x + nrm.y * o.y < 0) nrm = { x: -nrm.x, y: -nrm.y }
+    const ls = LABEL_LINES[st.label] ?? [st.label]
+    const size = 2.4
+    placer.place(mid, [nrm, { x: -nrm.x, y: -nrm.y }, ...prefer(st.dir)], [1.3, 2.8, 4.5, 6.5], {
+      w: Math.max(...ls.map(l => textW(l, size))), h: ls.length * size * 1.15,
+      draw: (x, y) => ls.forEach((l, k) => s.text({ x, y: y + size * 0.8 + k * size * 1.15 }, l, size, 'start', `font-style="italic" ${HALO}`))
+    }, s)
+  }
 
   // bends: numbered, angle and direction, on the outside of the corner
   for (let i = 0; i < pieces.length; i++) {
@@ -554,9 +604,12 @@ export function bendSvgs(card: WireCard, maxWidthMm = 180): string[] {
   const color = safeColor(card.color, INSULATED_FALLBACK)
   const mirror = card.side === 'bottom' ? -1 : 1
   const draw = (h: Hole): Pt => {
-    const m = holeMm(h)
+    const m = holeMm(h, card.pitchMm)
     return { x: mirror * m.x, y: m.y }
   }
+  // Drawn wire = cut minus the bend allowances: start lead + path + end lead, spare and rounding.
+  const startLead = card.breakdown.leadsMm / 2
+  const leads = { start: startLead, end: card.cutMm - card.breakdown.bendsMm - card.breakdown.pathMm - startLead }
 
   // Bends by segment boundary: the card's bends in order, at boundaries where the direction turns.
   const segs = card.segments.map(sg => ({ ha: parseHole(sg.from), hb: parseHole(sg.to), bare: sg.bare }))
@@ -572,8 +625,10 @@ export function bendSvgs(card: WireCard, maxWidthMm = 180): string[] {
 
   // Greedy rows; pieces remember whether they start at a bend.
   type P = Piece & { bend?: RowBend }
-  const fits = (row: P[], rowIndex: number) => {
-    const sc = rowScene(row, { card, color, firstRow: rowIndex === 0, lastRow: false, rowIndex, rowCount: 2 }, i => row[i]!.bend)
+  const lastSeg = segs.length - 1
+  /** `final`: the row ends at the wire's end, so it carries the end lead. */
+  const fits = (row: P[], rowIndex: number, final: boolean) => {
+    const sc = rowScene(row, { card, color, firstRow: rowIndex === 0, lastRow: final, rowIndex, rowCount: 2, leads }, i => row[i]!.bend)
     const b = sc.bounds()
     return b.x1 - b.x0 + 2 <= maxWidthMm && b.y1 - b.y0 + 2 <= MAX_ROW_HEIGHT_MM
   }
@@ -584,7 +639,7 @@ export function bendSvgs(card: WireCard, maxWidthMm = 180): string[] {
     let bend = bendBefore.get(i)
     for (;;) {
       const whole: P = { a: draw(ha), b: draw(sg.hb), ha, hb: sg.hb, bare: sg.bare, ...(bend ? { bend } : {}) }
-      if (fits([...cur, whole], rows.length)) {
+      if (fits([...cur, whole], rows.length, i === lastSeg)) {
         cur.push(whole)
         return
       }
@@ -598,10 +653,15 @@ export function bendSvgs(card: WireCard, maxWidthMm = 180): string[] {
       let k = 1
       while (k + 1 < run.length - 1) {
         const hb = run[k + 1]!
-        if (!fits([{ ...whole, b: draw(hb), hb }], rows.length)) break
+        if (!fits([{ ...whole, b: draw(hb), hb }], rows.length, false)) break
         k++
       }
       const hb = run[k]!
+      if (k === run.length - 1) {
+        // one hole step that does not fit even alone: draw it as it is rather than loop
+        cur.push(whole)
+        return
+      }
       rows.push([{ ...whole, b: draw(hb), hb }])
       // the next row carries straight on: no bend at the cut
       ha = hb
@@ -612,7 +672,7 @@ export function bendSvgs(card: WireCard, maxWidthMm = 180): string[] {
 
   return rows.map((row, r) => {
     const sc = rowScene(row, {
-      card, color, firstRow: r === 0, lastRow: r === rows.length - 1, rowIndex: r, rowCount: rows.length
+      card, color, firstRow: r === 0, lastRow: r === rows.length - 1, rowIndex: r, rowCount: rows.length, leads
     }, i => row[i]!.bend)
     const tag = rows.length > 1 ? `, row ${r + 1} of ${rows.length}` : ''
     return sc.fit(1, `${card.id} bend drawing at 1:1${tag}, ${sideLabel(card.side)}`)
@@ -692,7 +752,7 @@ const FOLD_SCALE = 3
  * A 3 x 2 pad sketch (3x scale), solder side, mirrored like the bottom view: the lead
  * leaves its hole and lies flat on the target pad, soldered at both.
  */
-export function legFoldSvg(row: LegFoldRow): string {
+export function legFoldSvg(row: LegFoldRow, pitchMm: number): string {
   const s = new Scene()
   const from = parseHole(row.from)
   const to = parseHole(row.to)
@@ -710,7 +770,7 @@ export function legFoldSvg(row: LegFoldRow): string {
   const across = (v: number) => (v > 1 ? [v - 1, v] : [v, v + 1]) as [number, number]
   const [c0, c1] = horizontal ? along(from.col, to.col) : across(from.col)
   const [r0, r1] = horizontal ? across(from.row) : along(from.row, to.row)
-  const P = 2.54 * FOLD_SCALE
+  const P = pitchMm * FOLD_SCALE
   const pt = (h: Hole): Pt => ({ x: -(h.col - c0) * P, y: (h.row - r0) * P }) // mirrored: solder side
 
   const names: { c: Pt, name: string }[] = []

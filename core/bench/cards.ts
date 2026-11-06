@@ -14,6 +14,8 @@ export interface WireCard {
   net: string | null
   netClass: string | null
   color: string | null
+  /** The board's hole pitch, mm: drawings are laid out on it. */
+  pitchMm: number
   start: HoleName
   end: HoleName
   /** Straight runs, collinear points merged; lengths exact (not rounded). Empty for flying wires. */
@@ -33,6 +35,11 @@ export interface WireCard {
 }
 
 const EPS = 1e-9
+
+/** How an empty net name is shown to the owner. */
+export const UNNAMED_NET = '(unnamed net)'
+/** A net name for display: the placeholder when it is empty. */
+export const netLabel = (net: string): string => net === '' ? UNNAMED_NET : net
 
 /** Natural id order: same prefix compares the numeric suffix (T2 < T10), else plain string order. */
 export function compareIds(a: string, b: string): number {
@@ -112,7 +119,8 @@ function finish(
   }
   const total = breakdown.pathMm + breakdown.bendsMm + breakdown.leadsMm + breakdown.spareMm + breakdown.slackMm
   const r = bench.roundToMm
-  const cutMm = r > 0 ? Math.ceil(total / r - EPS) * r : total
+  // Rounded up to the step, then to 1e-6 mm so a fractional step leaves no float noise.
+  const cutMm = Math.round((r > 0 ? Math.ceil(total / r - EPS) * r : total) * 1e6) / 1e6
 
   const stretches: { lengthMm: number, bare: boolean }[] = []
   for (const s of [{ lengthMm: bench.endLeadMm, bare: true }, ...middle, { lengthMm: bench.endLeadMm, bare: true }]) {
@@ -133,6 +141,22 @@ function finish(
   return { breakdown, cutMm, strip, stretches }
 }
 
+/** A card with nothing to cut (half-drawn or zero-length): cut 0 and a note saying why. */
+function skipped(base: Pick<WireCard, 'id' | 'kind' | 'side' | 'net' | 'netClass' | 'color' | 'pitchMm'>, at: HoleName, note: string): WireCard {
+  return {
+    ...base,
+    start: at,
+    end: at,
+    segments: [],
+    bends: [],
+    breakdown: { pathMm: 0, bendsMm: 0, leadsMm: 0, spareMm: 0, slackMm: 0 },
+    cutMm: 0,
+    strip: [],
+    stretches: [],
+    note
+  }
+}
+
 export function wireCards(board: BoardFile): WireCard[] {
   const conn = buildConnectivity(board)
   const pitch = board.board.pitchMm
@@ -149,11 +173,15 @@ export function wireCards(board: BoardFile): WireCard[] {
   }
 
   const polyline = (
-    base: Pick<WireCard, 'id' | 'kind' | 'side' | 'net' | 'netClass' | 'color'>,
+    base: Pick<WireCard, 'id' | 'kind' | 'side' | 'net' | 'netClass' | 'color' | 'pitchMm'>,
     pts: Hole[],
     isBare: (i: number) => boolean
   ): WireCard => {
     const rs = runs(pts, isBare)
+    if (rs.length === 0) {
+      const what = base.kind === 'trail' ? 'trail' : 'laid wire'
+      return skipped(base, holeName(pts[0]!), `zero-length ${what} (all points at ${holeName(pts[0]!)}), skipped`)
+    }
     const segments = rs.map(r => ({ from: holeName(r.from), to: holeName(r.to), lengthMm: distMm(r.from, r.to, pitch), bare: r.bare }))
     const { bends, afterRun } = bendsOf(rs, base.side)
     const pathMm = segments.reduce((a, s) => a + s.lengthMm, 0)
@@ -166,28 +194,17 @@ export function wireCards(board: BoardFile): WireCard[] {
   }
 
   const trails = [...board.trails].sort((a, b) => compareIds(a.id, b.id)).map((t): WireCard => {
-    const base = { id: t.id, kind: 'trail' as const, side: t.side, ...netInfo(groupNet('trail', t.id)) }
+    const base = { id: t.id, kind: 'trail' as const, side: t.side, pitchMm: pitch, ...netInfo(groupNet('trail', t.id)) }
     if (t.points.length < 2) {
       const n = t.points.length
-      return {
-        ...base,
-        start: t.points[0] ?? '',
-        end: t.points[0] ?? '',
-        segments: [],
-        bends: [],
-        breakdown: { pathMm: 0, bendsMm: 0, leadsMm: 0, spareMm: 0, slackMm: 0 },
-        cutMm: 0,
-        strip: [],
-        stretches: [],
-        note: `half-drawn trail (${n} point${n === 1 ? '' : 's'}), skipped`
-      }
+      return skipped(base, t.points[0] ?? '', `half-drawn trail (${n} point${n === 1 ? '' : 's'}), skipped`)
     }
     return polyline(base, t.points.map(parseHole), () => true)
   })
 
   const wires = [...board.wires].sort((a, b) => compareIds(a.id, b.id)).map((w): WireCard => {
     const info = netInfo(groupNet('wire', w.id))
-    const base = { id: w.id, kind: w.kind, side: w.side, ...info, color: w.color ?? info.color }
+    const base = { id: w.id, kind: w.kind, side: w.side, pitchMm: pitch, ...info, color: w.color ?? info.color }
     const pts = w.points.map(parseHole)
     if (w.kind === 'laid') return polyline(base, pts, i => w.bareSegments.includes(i))
     const a = pts[0]!

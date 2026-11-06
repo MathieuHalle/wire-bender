@@ -4,9 +4,7 @@ import { boardPath } from '../utils/boardFile'
 export default defineEventHandler(async (event) => {
   const r = await benchResponse(boardPath())
   setResponseStatus(event, r.status)
-  setResponseHeader(event, 'content-type', r.contentType)
-  // The sheet follows the file: never serve a stale copy.
-  setResponseHeader(event, 'cache-control', 'no-store')
-  if (r.filename) setResponseHeader(event, 'content-disposition', `inline; filename="${r.filename}"`)
+  // content-type, no-store, nosniff and (on 200) content-disposition: see benchResponse
+  setResponseHeaders(event, r.headers)
   return r.body
 })

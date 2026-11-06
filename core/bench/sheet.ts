@@ -1,11 +1,11 @@
 // Bench sheet model: what to place and in which order, which legs to fold, and the
 // beep / no-beep meter lists. Pure data; the export renders it.
 import { holeName, tryParseHole, type Hole } from '../holes'
-import { bodyHeightMm, placePart, type PlacedPart } from '../footprints'
+import { bodyHeightMm, FOOTPRINT_PITCH_MM, placePart, type PlacedPart } from '../footprints'
 import { buildConnectivity } from '../connectivity'
 import { runCheck, type CheckResult, type Finding } from '../check'
 import type { BoardFile, HoleName } from '../schema'
-import { compareIds, wireCards, type WireCard } from './cards'
+import { compareIds, netLabel, wireCards, type WireCard } from './cards'
 
 export interface PlacementRow {
   step: number
@@ -29,6 +29,8 @@ export interface BenchModel {
   legFolds: LegFoldRow[]
   mustBeep: MeterRow[]
   mustNotBeep: MeterRow[]
+  /** Nets left out of must-beep because their copper is shorted to another net. */
+  shortedNets: number
 }
 
 const SUPPLY_GROUP = 'Shorts the supply'
@@ -36,13 +38,14 @@ const MCU_GROUP = 'Kills the MCU'
 
 const rowName = (row: number) => holeName({ col: 1, row }).replace(/\d+$/, '')
 
-/** Which way a tab or flat side faces: from the pin centroid toward the body centre. */
-function facing(pp: PlacedPart): string {
+/**
+ * Which way a tab or flat side faces: from the pin centroid toward the body centre.
+ * `pitch` is the one the body rect was placed at (pin holes in mm are (col - 1) * pitch).
+ */
+function facing(pp: PlacedPart, pitch: number): string {
   const cx = pp.pins.reduce((a, p) => a + p.hole.col, 0) / pp.pins.length
   const cy = pp.pins.reduce((a, p) => a + p.hole.row, 0) / pp.pins.length
   const r = pp.bodyRectMm
-  // Pin holes in mm are (col - 1) * pitch; the body rect is already in board mm.
-  const pitch = 2.54
   const dx = r.x + r.w / 2 - (cx - 1) * pitch
   const dy = r.y + r.h / 2 - (cy - 1) * pitch
   const cols = pp.pins.map(p => p.hole.col)
@@ -55,7 +58,7 @@ function facing(pp: PlacedPart): string {
   return col < 1 ? 'toward the left edge' : `toward column ${col}`
 }
 
-function orientation(pp: PlacedPart): string {
+function orientation(pp: PlacedPart, pitch: number): string {
   const pin = (name: string) => pp.pins.find(p => p.name === name)
   switch (pp.fp.mark) {
     case 'pin1': {
@@ -63,8 +66,8 @@ function orientation(pp: PlacedPart): string {
       return `pin 1 at ${holeName(p.hole)}`
     }
     case 'stripe-b': return `stripe (cathode) at ${holeName(pin('b')!.hole)}`
-    case 'tab': return `metal tab ${facing(pp)}`
-    case 'flat': return `flat side ${facing(pp)}`
+    case 'tab': return `metal tab ${facing(pp, pitch)}`
+    case 'flat': return `flat side ${facing(pp, pitch)}`
     default: return 'either way'
   }
 }
@@ -87,7 +90,8 @@ export function benchModel(board: BoardFile): BenchModel {
       ...(pp.part.value !== undefined ? { value: pp.part.value } : {}),
       holes: pp.pins.map(p => `${p.name}:${holeName(p.hole)}`).join(' '),
       heightMm: h,
-      orientation: orientation(pp),
+      // placePart lays bodies out on the footprint grid, so facing compares on that grid.
+      orientation: orientation(pp, FOOTPRINT_PITCH_MM),
       mounting: pp.part.standing && pp.fp.twoLead ? 'standing' : pp.fp.twoLead ? 'lying' : 'upright'
     }))
 
@@ -112,13 +116,19 @@ export function benchModel(board: BoardFile): BenchModel {
   for (const l of leads.values())
     if (l.net !== null) netLeads.set(l.net, [...(netLeads.get(l.net) ?? []), l])
   const mustBeep: MeterRow[] = []
+  let shortedNets = 0
   for (const net of [...netLeads.keys()].sort()) {
     const ls = netLeads.get(net)!.sort(byHole)
     if (ls.length < 2) continue
     const gi = conn.groupOfLead.get(ls[0]!.id)
-    if (ls.some(l => (conn.groups[conn.groupOfLead.get(l.id)!]?.nets.length ?? 0) > 1) || gi === undefined) continue
+    if (gi === undefined) continue
+    if (ls.some(l => (conn.groups[conn.groupOfLead.get(l.id)!]?.nets.length ?? 0) > 1)) {
+      shortedNets++
+      continue
+    }
+    const label = netLabel(net)
     for (let i = 0; i + 1 < ls.length; i++)
-      mustBeep.push({ a: probe(ls[i]!.id), b: probe(ls[i + 1]!.id), expect: 'beep', why: `${net} continuous`, group: net })
+      mustBeep.push({ a: probe(ls[i]!.id), b: probe(ls[i + 1]!.id), expect: 'beep', why: `${label} continuous`, group: label })
   }
 
   // ---- must not beep ---------------------------------------------------------------
@@ -164,6 +174,7 @@ export function benchModel(board: BoardFile): BenchModel {
     cards: wireCards(board),
     legFolds,
     mustBeep,
-    mustNotBeep
+    mustNotBeep,
+    shortedNets
   }
 }

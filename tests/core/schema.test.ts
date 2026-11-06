@@ -147,4 +147,18 @@ describe('parseBoard', () => {
     j.board.type = 'two-sided'
     expect(parseBoard(j).ok).toBe(true)
   })
+
+  it('rejects negative bench lengths and a non-positive roundToMm', () => {
+    for (const [k, v] of [['endLeadMm', -1], ['spareMm', -0.5], ['bendAllowanceMm', -1], ['flyingSlackMm', -2], ['roundToMm', 0], ['roundToMm', -5]] as const) {
+      const j = minimal()
+      j.bench![k] = v
+      const r = parseBoard(j)
+      expect(r.ok, `${k}=${v}`).toBe(false)
+      if (!r.ok) expect(r.errors.some(e => e.startsWith(`bench.${k}`)), r.errors.join('\n')).toBe(true)
+    }
+    // zero is fine for the lengths
+    const j = minimal()
+    j.bench = { endLeadMm: 0, bendAllowanceMm: 0, spareMm: 0, flyingSlackMm: 0, roundToMm: 0.5 }
+    expect(parseBoard(j).ok).toBe(true)
+  })
 })
