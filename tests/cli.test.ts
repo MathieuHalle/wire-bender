@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const board2 = join(root, 'data/channel-board-2.wirebender.json')
+const fixture = join(root, 'tests/fixtures/channel-board-2.json')
 const ADVISORY = 'Advisory only. Check the board with a meter before powering it.'
 
 function cli(...args: string[]) {
@@ -64,5 +65,44 @@ describe('wirebender check', () => {
 
   it('a missing file -> exit 2', () => {
     expect(cli('check', join(root, 'no-such-board.json')).code).toBe(2)
+  })
+})
+
+describe('wirebender export', () => {
+  it('export writes the file and prints its path', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wb-export-'))
+    const out = join(dir, 'sheet.html')
+    const before = readFileSync(fixture, 'utf8')
+    const r = cli('export', fixture, '-o', out)
+    expect(r.code, r.out + r.err).toBe(0)
+    expect(r.out.trim()).toBe(out)
+    const html = readFileSync(out, 'utf8')
+    expect(html.startsWith('<!doctype html>')).toBe(true)
+    expect(html).toContain('Channel board 2')
+    expect(readFileSync(fixture, 'utf8')).toBe(before) // the board file is never changed
+  })
+
+  it('export without -o writes <basename>.bench.html next to the board file', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wb-export-'))
+    const file = join(dir, 'board.wirebender.json')
+    copyFileSync(fixture, file)
+    const r = cli('export', file)
+    expect(r.code, r.out + r.err).toBe(0)
+    const out = join(dir, 'board.wirebender.bench.html')
+    expect(r.out.trim()).toBe(out)
+    expect(existsSync(out)).toBe(true)
+  })
+
+  it('export on an invalid file exits 2', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wb-export-'))
+    const board = JSON.parse(readFileSync(fixture, 'utf8'))
+    board.parts[0].at = 'Z99'
+    const file = join(dir, 'bad.json')
+    writeFileSync(file, JSON.stringify(board))
+    const r = cli('export', file, '-o', join(dir, 'bad.html'))
+    expect(r.code).toBe(2)
+    expect(r.out).toContain('outside the')
+    expect(existsSync(join(dir, 'bad.html'))).toBe(false)
+    expect(cli('export', join(dir, 'missing.json')).code).toBe(2)
   })
 })

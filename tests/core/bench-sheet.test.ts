@@ -120,6 +120,18 @@ describe('benchModel meter lists', () => {
     expect(rows).toHaveLength(2) // A1/B1 once (class pair and adjacent), then A4/B4
   })
 
+  it('a bare hole probe reads "hole C1", a lead keeps its ref and hole', () => {
+    const b = mk({
+      netClasses: { HV: {}, GND: {} },
+      nets: { V12: { class: 'HV' }, G: { class: 'GND' } },
+      rules: { keepAway: [], adjacency: [{ classes: ['HV', 'GND'], level: 'supply' }] },
+      parts: [axial('R1', 'A1', 'A4', 'V12'), axial('R2', 'D1', 'D4', 'G')],
+      trails: [trail('T1', ['A1', 'C1'])]
+    })
+    const rows = benchModel(b).mustNotBeep
+    expect(rows).toContainEqual(expect.objectContaining({ a: 'hole C1', b: 'R2.a (D1)' }))
+  })
+
   it('collects errors and stats from the check', () => {
     const m = benchModel(three)
     expect(m.check.errors.every(f => f.severity === 'error')).toBe(true)

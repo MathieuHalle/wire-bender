@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
     "test": "vitest run",
-    "check": "tsx --tsconfig tsconfig.cli.json cli/wirebender.ts check"
+    "check": "tsx --tsconfig tsconfig.cli.json cli/wirebender.ts check",
+    "wirebender": "tsx --tsconfig tsconfig.cli.json cli/wirebender.ts"
   },
   "dependencies": {
     "@iconify-json/lucide": "^1.2.147",

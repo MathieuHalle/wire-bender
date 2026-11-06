@@ -147,7 +147,7 @@ export function benchModel(board: BoardFile): BenchModel {
   const leadAt = (h: HoleName): string => {
     const hole = tryParseHole(h)
     const lead = hole && [...leads.values()].filter(l => l.hole.col === hole.col && l.hole.row === hole.row).map(l => l.id).sort()[0]
-    return lead ? `${lead} (${h})` : h
+    return lead ? `${lead} (${h})` : `hole ${h}`
   }
   for (const f of check.findings) {
     if (f.rule !== 'adjacent' || (f.level !== 'supply' && f.level !== 'mcu') || f.holes.length < 2) continue
