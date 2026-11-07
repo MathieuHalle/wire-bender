@@ -40,6 +40,16 @@ export default defineNuxtConfig({
     }
   },
 
+  // `pnpm dev` listens on the network (--host) and Vite serves project files under
+  // /_nuxt/ before the access check runs: never the data folder or a database.
+  vite: {
+    server: {
+      fs: {
+        deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.data/**', '**/*.sqlite', '**/*.sqlite-*', '**/backups/**']
+      }
+    }
+  },
+
   // export/ is not imported by the app; include it so `nuxt typecheck` covers it.
   typescript: {
     tsConfig: {

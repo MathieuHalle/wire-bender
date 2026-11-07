@@ -147,6 +147,10 @@ const frames = computed(() => {
   return (['top', 'bottom'] as const).map(s => ({ id: s, title: sideTitle(s), rect: at[s] }))
 })
 
+/** The "Pair a device" and "Paired devices" dialogs. */
+const pairing = ref(false)
+const devicesOpen = ref(false)
+
 const STATUS = {
   live: { label: 'live', color: 'success' },
   connecting: { label: 'connecting…', color: 'info' },
@@ -214,8 +218,24 @@ const sideTitle = (s: Side) => (s === 'top'
         :view="view"
         @mode="pickMode"
       />
+      <div class="ml-auto flex gap-1">
+        <UButton
+          size="xs"
+          variant="ghost"
+          icon="i-lucide-tablet-smartphone"
+          label="Pair a device"
+          @click="pairing = true"
+        />
+        <UButton
+          size="xs"
+          variant="ghost"
+          icon="i-lucide-monitor-smartphone"
+          label="Paired devices"
+          @click="devicesOpen = true"
+        />
+      </div>
       <UTooltip text="Open the printable bench sheet in a new tab">
-        <span class="ml-auto inline-flex">
+        <span class="inline-flex">
           <UButton
             size="xs"
             variant="outline"
@@ -226,6 +246,8 @@ const sideTitle = (s: Side) => (s === 'top'
           />
         </span>
       </UTooltip>
+      <PairDialog v-model:open="pairing" />
+      <DevicesDialog v-model:open="devicesOpen" />
     </header>
 
     <UAlert

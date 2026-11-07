@@ -2,13 +2,14 @@ import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import { useDb } from '../../../db'
+import { onUnpair, trust, type TrustSource } from '../../../utils/access'
 import { openRoom, type Received, type Room } from '../../../utils/rooms'
 import { wsBoardId } from '../../../utils/wsBoardId'
 
 /** The parts of a crossws peer this handler uses. */
 interface WsPeer {
   readonly id: string
-  readonly request: { url: string }
+  readonly request: { url: string } & TrustSource
   send: (data: Uint8Array) => unknown
   close: (code?: number, reason?: string) => void
 }
@@ -17,14 +18,15 @@ interface WsPeer {
 const MESSAGE_SYNC = 0
 const MESSAGE_AWARENESS = 1
 
-/** Close codes: a rejected or malformed message, an unknown or malformed board id, and a server error. */
+/** Close codes: a rejected or malformed message, an untrusted peer, an unknown or malformed board id, and a server error. */
 const CLOSE_REJECTED = 4400
+const CLOSE_UNTRUSTED = 4401
 const CLOSE_NO_BOARD = 4404
 const CLOSE_SERVER_ERROR = 1011
 
-/** Who a peer's edits are recorded as. Task 7 replaces this with the access check. */
-function authorFor(_peer: WsPeer): string {
-  return 'Local'
+/** The access check, run again on open: the upgrade was checked, but the device may have been unpaired since. */
+function trustOf(peer: WsPeer) {
+  return trust(peer.request)
 }
 
 /** WebSocket close reasons are at most 123 bytes. */
@@ -40,7 +42,16 @@ function message(write: (e: encoding.Encoder) => void): Uint8Array {
   return encoding.toUint8Array(e)
 }
 
-const joined = new Map<string, { room: Room, author: string }>()
+const joined = new Map<string, { room: Room, author: string, deviceId?: string, peer: WsPeer }>()
+
+// An unpaired device's live sockets close at once.
+onUnpair((deviceId) => {
+  for (const live of [...joined.values()]) {
+    if (live.deviceId !== deviceId) continue
+    leave(live.peer)
+    live.peer.close(CLOSE_UNTRUSTED, 'device unpaired')
+  }
+})
 
 function leave(peer: WsPeer): void {
   const live = joined.get(peer.id)
@@ -61,8 +72,13 @@ function join(peer: WsPeer): void {
     peer.close(CLOSE_NO_BOARD, 'no such board')
     return
   }
-  const author = authorFor(peer)
-  joined.set(peer.id, { room, author })
+  const t = trustOf(peer)
+  if (!t.ok) {
+    peer.close(CLOSE_UNTRUSTED, 'not paired')
+    return
+  }
+  const author = t.author
+  joined.set(peer.id, { room, author, deviceId: t.device?.id, peer })
   room.join(peer.id, author, {
     update: u => peer.send(message((e) => {
       encoding.writeVarUint(e, MESSAGE_SYNC)
@@ -101,6 +117,11 @@ function handle(peer: WsPeer, room: Room, author: string, data: Uint8Array): Rec
 }
 
 export default defineWebSocketHandler({
+  // Only the machine itself and paired devices may connect (the access middleware does not see upgrades).
+  upgrade(request) {
+    if (!trust(request as TrustSource).ok) return new Response('This device is not paired.', { status: 401 })
+  },
+
   open(peer) {
     try {
       join(peer)

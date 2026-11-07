@@ -41,6 +41,9 @@ importers:
       three:
         specifier: 0.187.0
         version: 0.187.0
+      uqr:
+        specifier: ^0.1.3
+        version: 0.1.3
       vue:
         specifier: 3.5.45
         version: 3.5.45(typescript@6.0.3)

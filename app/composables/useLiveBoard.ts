@@ -37,9 +37,12 @@ export interface LiveDeps {
   notify(message: string): void
   /** The device in the presence list: the paired device's name, or `This computer` on loopback. */
   deviceName?: string
+  /** Called when the server says this device is no longer paired (close 4401). */
+  unpaired?: () => void
 }
 
 const CLOSE_REJECTED = 4400
+const CLOSE_UNTRUSTED = 4401
 const CLOSE_NO_BOARD = 4404
 const MAX_BACKOFF_MS = 2500
 
@@ -138,6 +141,10 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
         missing.value = true
         return
       }
+      if (event?.code === CLOSE_UNTRUSTED) {
+        deps.unpaired?.()
+        return
+      }
       if (event?.code === CLOSE_REJECTED) deps.notify(event.reason || 'The server rejected an edit.')
       failures++
       retry = setTimeout(open, Math.min(100 * 2 ** failures, MAX_BACKOFF_MS))
@@ -162,6 +169,12 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
       const reason = (e as { data?: { reason?: unknown } }).data?.reason
       deps.notify(typeof reason === 'string' ? reason : `${step} failed: ${(e as Error).message}`)
     }
+  }
+
+  /** Names this device in the presence list (`Local · <name>`), now and on every reconnect. */
+  function setDevice(name: string) {
+    user.name = `Local · ${name}`
+    provider?.awareness.setLocalStateField('user', user)
   }
 
   /** Connects, and reconnects to the new board whenever `id` changes. */
@@ -197,6 +210,7 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
     apply,
     undo: () => call('undo'),
     redo: () => call('redo'),
+    setDevice,
     start,
     stop
   }
@@ -214,9 +228,13 @@ export function useLiveBoard(id: Ref<string>): LiveBoard {
       return new WebsocketProvider(url, boardId, new Y.Doc(), { disableBc: true }) as unknown as LiveProvider
     },
     post: url => $fetch(url, { method: 'POST' }),
-    notify: m => toast.add({ title: m, color: 'warning', icon: 'i-lucide-ban' })
+    notify: m => toast.add({ title: m, color: 'warning', icon: 'i-lucide-ban' }),
+    unpaired: () => window.location.assign('/pair')
   })
-  onMounted(live.start)
+  onMounted(() => {
+    live.start()
+    $fetch<{ name: string }>('/api/devices/me').then(me => live.setDevice(me.name), () => {})
+  })
   onBeforeUnmount(live.stop)
   return live
 }

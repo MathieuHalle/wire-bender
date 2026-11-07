@@ -14,3 +14,10 @@ export async function bodyText(event: H3Event): Promise<string> {
 }
 
 export const boardId = (event: H3Event): string => getRouterParam(event, 'id') ?? ''
+
+/** Who an API write is by: set by the access middleware on every trusted request. */
+export function authorOf(event: H3Event): string {
+  const author = event.context.author
+  if (typeof author !== 'string') throw createError({ statusCode: 401, statusMessage: 'not trusted' })
+  return author
+}

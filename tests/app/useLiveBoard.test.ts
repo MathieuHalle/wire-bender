@@ -212,4 +212,38 @@ describe('useLiveBoard', () => {
     applyAwarenessUpdate(last().awareness, encodeAwarenessUpdate(other, [other.clientID]), 'remote')
     expect(live.peers.value).toEqual([{ name: 'Local · Tablet', color: '#123456' }])
   })
+
+  it('setDevice names this device in presence, now and after a reconnect', () => {
+    const { live, last, providers } = setup()
+    last().goLive(serverDoc(start))
+    live.setDevice('Bench tablet')
+    const name = () => (last().awareness.getLocalState() as { user: { name: string } }).user.name
+    expect(name()).toBe('Local · Bench tablet')
+    last().close()
+    vi.advanceTimersByTime(3000)
+    expect(providers).toHaveLength(2)
+    expect(name()).toBe('Local · Bench tablet')
+  })
+
+  it('close 4401 (unpaired) calls unpaired and stops reconnecting', () => {
+    const providers: FakeProvider[] = []
+    let unpaired = 0
+    const live = createLiveBoard(ref('b1'), {
+      connect: (id) => {
+        const p = new FakeProvider(id)
+        providers.push(p)
+        return p
+      },
+      post: async () => {},
+      notify: () => {},
+      unpaired: () => unpaired++
+    })
+    live.start()
+    providers[0]!.goLive(serverDoc(start))
+    providers[0]!.close(4401, 'device unpaired')
+    vi.advanceTimersByTime(10_000)
+    expect(unpaired).toBe(1)
+    expect(providers).toHaveLength(1)
+    expect(live.status.value).toBe('offline')
+  })
 })

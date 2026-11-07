@@ -11,7 +11,7 @@ import { openRoom, type Room } from './rooms'
 /** The largest request body, in bytes, that the API accepts. */
 export const MAX_BOARD_BYTES = 2_000_000
 
-/** API writes are by the one local user in step 1. */
+/** The author when a caller passes none (tests); routes pass the request's, from the access check. */
 const AUTHOR = 'Local'
 const HOW = 'api'
 
@@ -60,7 +60,7 @@ function emptyBoard(json: Record<string, unknown>): unknown {
 }
 
 /** `POST /api/boards`: `{ board }` imports, `{ name, cols, rows, type }` creates an empty board. */
-export function createOrImport(db: Db, text: string): ApiResult {
+export function createOrImport(db: Db, text: string, author = AUTHOR): ApiResult {
   const p = parseBody(text)
   if (!p.ok) return p.result
   const { json } = p
@@ -68,7 +68,7 @@ export function createOrImport(db: Db, text: string): ApiResult {
   if (!importing && (typeof json.name !== 'string' || json.name.trim() === '')) return invalid('name: must be a non-empty string')
   const parsed = parseBoard(importing ? json.board : emptyBoard(json))
   if (!parsed.ok) return invalid(...parsed.errors)
-  return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', AUTHOR).id })
+  return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', author).id })
 }
 
 export function listBoardsResponse(db: Db): ApiResult {
@@ -90,7 +90,7 @@ function withRoom(db: Db, id: string, fn: (room: Room) => ApiResult): ApiResult 
 }
 
 /** `PUT /api/boards/:id`: `{ board, baseRevision? }`. */
-export function putBoard(db: Db, id: string, text: string): ApiResult {
+export function putBoard(db: Db, id: string, text: string, author = AUTHOR): ApiResult {
   const p = parseBody(text)
   if (!p.ok) return p.result
   const { board, baseRevision } = p.json
@@ -100,19 +100,19 @@ export function putBoard(db: Db, id: string, text: string): ApiResult {
   return withRoom(db, id, (room) => {
     const head = getBoard(db, id)!.head
     if (baseRevision !== undefined && baseRevision !== head) return { status: 409, body: { current: head } }
-    return ok({ revision: room.serverWrite(parsed.board, { author: AUTHOR, how: HOW }) })
+    return ok({ revision: room.serverWrite(parsed.board, { author, how: HOW }) })
   })
 }
 
 /** `PATCH /api/boards/:id`: `{ name }`, a board change like any other. */
-export function renameBoard(db: Db, id: string, text: string): ApiResult {
+export function renameBoard(db: Db, id: string, text: string, author = AUTHOR): ApiResult {
   const p = parseBody(text)
   if (!p.ok) return p.result
   const name = typeof p.json.name === 'string' ? p.json.name.trim() : ''
   if (name === '') return invalid('name: must be a non-empty string')
   return withRoom(db, id, (room) => {
     const current = getBoard(db, id)!.board
-    return ok({ revision: room.serverWrite({ ...current, name }, { author: AUTHOR, how: HOW }) })
+    return ok({ revision: room.serverWrite({ ...current, name }, { author, how: HOW }) })
   })
 }
 
@@ -150,8 +150,8 @@ function change(db: Db, id: string, step: (room: Room) => number | null, reason:
   })
 }
 
-export const undoBoard = (db: Db, id: string): ApiResult => change(db, id, r => r.undo(AUTHOR), 'nothing to undo')
-export const redoBoard = (db: Db, id: string): ApiResult => change(db, id, r => r.redo(AUTHOR), 'nothing to redo')
+export const undoBoard = (db: Db, id: string, author = AUTHOR): ApiResult => change(db, id, r => r.undo(author), 'nothing to undo')
+export const redoBoard = (db: Db, id: string, author = AUTHOR): ApiResult => change(db, id, r => r.redo(author), 'nothing to redo')
 
 export function listRevisionsResponse(db: Db, id: string): ApiResult {
   return getBoard(db, id) ? ok(listRevisions(db, id)) : notFound()
@@ -167,9 +167,9 @@ export function getRevisionResponse(db: Db, id: string, segment: string): ApiRes
   return foundOr404(n === null ? null : getRevision(db, id, n)?.board ?? null)
 }
 
-export function restoreRevision(db: Db, id: string, segment: string): ApiResult {
+export function restoreRevision(db: Db, id: string, segment: string, author = AUTHOR): ApiResult {
   const n = revisionNumber(segment)
   const rev = n === null ? null : getRevision(db, id, n)
   if (n === null || !rev) return notFound()
-  return withRoom(db, id, room => ok({ revision: room.serverWrite(rev.board as BoardFile, { author: AUTHOR, how: 'restore', target: n }) }))
+  return withRoom(db, id, room => ok({ revision: room.serverWrite(rev.board as BoardFile, { author, how: 'restore', target: n }) }))
 }
