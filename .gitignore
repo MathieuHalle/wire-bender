@@ -13,3 +13,4 @@ Screenshot*.png
 .env.*
 !.env.example
 *.log
+.claude/worktrees/
