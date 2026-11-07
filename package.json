@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
     "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
     "check": "tsx --tsconfig tsconfig.cli.json cli/wirebender.ts check",
     "wirebender": "tsx --tsconfig tsconfig.cli.json cli/wirebender.ts"
   },
@@ -19,7 +20,9 @@
     "@nuxt/ui": "^4.12.0",
     "@tresjs/cientos": "5.10.1",
     "@tresjs/core": "5.10.1",
+    "better-sqlite3": "13.0.3",
     "chokidar": "^6.0.0",
+    "drizzle-orm": "0.45.4",
     "nuxt": "^4.6.3",
     "tailwindcss": "^4.3.3",
     "three": "0.187.0",
@@ -30,8 +33,10 @@
   },
   "devDependencies": {
     "@nuxt/eslint": "^1.17.0",
+    "@types/better-sqlite3": "9.6.0",
     "@types/node": "^26.6.6",
     "@types/three": "0.187.0",
+    "drizzle-kit": "0.31.11",
     "eslint": "^10.13.0",
     "eslint-plugin-better-tailwindcss": "^4.10.0",
     "tsx": "^4.23.15",
