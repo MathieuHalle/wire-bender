@@ -58,7 +58,7 @@ describe('create and import', () => {
       expect(r.status).toBe(422)
       expect((r.body as { errors: string[] }).errors.length).toBeGreaterThan(0)
     }
-    expect(listBoards(db)).toEqual([])
+    expect(listBoards(db, 'local', 'mine')).toEqual([])
   })
 
   it('bad import creates nothing', () => {
@@ -67,7 +67,7 @@ describe('create and import', () => {
     expect(schema.status).toBe(422)
     expect((schema.body as { errors: string[] }).errors.length).toBeGreaterThan(0)
     expect(api.createOrImport(db, 'x'.repeat(MAX_BOARD_BYTES + 1)).status).toBe(413)
-    expect(listBoards(db)).toEqual([])
+    expect(listBoards(db, 'local', 'mine')).toEqual([])
   })
 })
 

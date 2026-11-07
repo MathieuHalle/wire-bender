@@ -68,11 +68,11 @@ export function createOrImport(db: Db, text: string, author = AUTHOR): ApiResult
   if (!importing && (typeof json.name !== 'string' || json.name.trim() === '')) return invalid('name: must be a non-empty string')
   const parsed = parseBoard(importing ? json.board : emptyBoard(json))
   if (!parsed.ok) return invalid(...parsed.errors)
-  return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', author).id })
+  return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', author, 'local').id })
 }
 
 export function listBoardsResponse(db: Db): ApiResult {
-  return ok(listBoards(db))
+  return ok(listBoards(db, 'local', 'mine'))
 }
 
 export function getBoardResponse(db: Db, id: string): ApiResult {

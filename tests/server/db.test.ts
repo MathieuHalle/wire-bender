@@ -138,3 +138,38 @@ describe('openDb', () => {
     expect(existsSync(path.join(data, 'wirebender.lock'))).toBe(false)
   })
 })
+
+describe('migration to accounts', () => {
+  it('migration keeps step 1 boards and gives them to the local user', () => {
+    const data = path.join(dir, 'data')
+    mkdirSync(data, { recursive: true })
+    // Step 1 database: only the first migration, applied with drizzle so the journal is real.
+    const first = path.join(dir, 'first')
+    mkdirSync(path.join(first, 'meta'), { recursive: true })
+    const journal = JSON.parse(readFileSync(path.join(REAL_MIGRATIONS, 'meta/_journal.json'), 'utf8'))
+    const zero = journal.entries[0]
+    writeFileSync(path.join(first, 'meta/_journal.json'), JSON.stringify({ ...journal, entries: [zero] }))
+    cpSync(path.join(REAL_MIGRATIONS, `${zero.tag}.sql`), path.join(first, `${zero.tag}.sql`))
+    const old = openDb(data, first)
+    const ins = old.$client.prepare('INSERT INTO boards (id, name, created_at, updated_at, current, head) VALUES (?, ?, 1, 2, \'{}\', 2)')
+    ins.run('b1', 'One')
+    ins.run('b2', 'Two')
+    const rev = old.$client.prepare('INSERT INTO revisions (board_id, n, created_at, author, how, summary, board) VALUES (?, ?, 1, \'Local\', \'edit\', \'s\', \'{}\')')
+    for (const [b, n] of [['b1', 1], ['b1', 2], ['b2', 1], ['b2', 2]] as const) rev.run(b, n)
+    old.$client.close()
+
+    const db = openDb(data)
+    const rows = db.$client.prepare('SELECT id, owner_id, link_id, visibility, trashed_at FROM boards ORDER BY id').all() as { id: string, owner_id: string, link_id: string, visibility: string, trashed_at: number | null }[]
+    expect(rows.map(r => [r.id, r.owner_id, r.visibility, r.trashed_at])).toEqual([['b1', 'local', 'view', null], ['b2', 'local', 'view', null]])
+    for (const r of rows) expect(r.link_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    expect(rows[0]!.link_id).not.toBe(rows[1]!.link_id)
+    expect(db.$client.prepare('SELECT count(*) AS n FROM revisions').get()).toEqual({ n: 4 })
+    expect(db.$client.prepare('SELECT id, name, is_admin, is_premium, suspended_at, deleted_at FROM users').all())
+      .toEqual([{ id: 'local', name: 'Local', is_admin: 1, is_premium: 1, suspended_at: null, deleted_at: null }])
+    const info = db.$client.prepare('PRAGMA table_info(boards)').all() as { name: string, notnull: number }[]
+    expect(info.find(c => c.name === 'link_id')!.notnull).toBe(1)
+    expect(() => db.$client.prepare('INSERT INTO boards (id, name, created_at, updated_at, current, head, link_id) VALUES (\'x\', \'x\', 1, 1, \'{}\', 1, ?)').run(rows[0]!.link_id)).toThrow(/UNIQUE/)
+    expect(tableNames(db)).toEqual(expect.arrayContaining(['users', 'identities', 'setup', 'link_visits']))
+    db.$client.close()
+  })
+})

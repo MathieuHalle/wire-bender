@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
 import type { BoardFile } from '~core/schema'
 import { summarize } from '#shared/summary'
 import { sameItems } from '#shared/yboard'
@@ -14,7 +14,7 @@ function withRevision(board: BoardFile, revision: number): BoardFile {
   return { ...board, revision }
 }
 
-function boardRow(db: Db, id: string) {
+export function getBoardRow(db: Db, id: string) {
   return db.select().from(boards).where(eq(boards.id, id)).get()
 }
 
@@ -24,19 +24,19 @@ function revisionBoard(db: Db, id: string, n: number): BoardFile | null {
 }
 
 /** Insert a new board with revision 1. */
-export function createBoard(db: Db, board: BoardFile, how: 'create' | 'import', author: string): { id: string, head: 1 } {
+export function createBoard(db: Db, board: BoardFile, how: 'create' | 'import', author: string, ownerId = 'local', authorId?: string): { id: string, head: 1 } {
   const id = randomUUID()
   const now = Date.now()
   const stored = JSON.stringify(withRevision(board, 1))
   db.transaction((tx) => {
-    tx.insert(boards).values({ id, name: board.name, createdAt: now, updatedAt: now, current: stored, head: 1 }).run()
-    tx.insert(revisions).values({ boardId: id, n: 1, createdAt: now, author, how, target: null, summary: summarize(null, board), board: stored }).run()
+    tx.insert(boards).values({ id, name: board.name, createdAt: now, updatedAt: now, current: stored, head: 1, ownerId, linkId: randomUUID() }).run()
+    tx.insert(revisions).values({ boardId: id, n: 1, createdAt: now, author, how, target: null, summary: summarize(null, board), board: stored, authorId: authorId ?? null }).run()
   })
   return { id, head: 1 }
 }
 
 export function getBoard(db: Db, id: string): { id: string, name: string, head: number, board: BoardFile } | null {
-  const row = boardRow(db, id)
+  const row = getBoardRow(db, id)
   if (!row) return null
   return { id: row.id, name: row.name, head: row.head, board: withRevision(JSON.parse(row.current) as BoardFile, row.head) }
 }
@@ -47,7 +47,7 @@ export function saveCurrent(db: Db, id: string, board: BoardFile): void {
 }
 
 /** Append revision `head + 1` and make it the board's current state, in one transaction. */
-export function commitRevision(db: Db, id: string, r: { board: BoardFile, author: string, how: string, target?: number }): number {
+export function commitRevision(db: Db, id: string, r: { board: BoardFile, author: string, how: string, target?: number, authorId?: string }): number {
   return db.transaction((tx) => {
     const row = tx.select().from(boards).where(eq(boards.id, id)).get()
     if (!row) throw new Error(`no board ${id}`)
@@ -57,7 +57,7 @@ export function commitRevision(db: Db, id: string, r: { board: BoardFile, author
     const previous = revisionBoard(tx as unknown as Db, id, row.head)
     tx.insert(revisions).values({
       boardId: id, n, createdAt: now, author: r.author, how: r.how as RevisionHow, target: r.target ?? null,
-      summary: summarize(previous, r.board), board: stored
+      summary: summarize(previous, r.board), board: stored, authorId: r.authorId ?? null
     }).run()
     tx.update(boards).set({ current: stored, head: n, name: r.board.name, updatedAt: now }).where(eq(boards.id, id)).run()
     return n
@@ -71,10 +71,16 @@ export function boardBefore(db: Db, id: string, n: number): BoardFile {
   return board
 }
 
-export function listBoards(db: Db): BoardInfo[] {
+export function getBoardByLink(db: Db, linkId: string) {
+  return db.select().from(boards).where(eq(boards.linkId, linkId)).get()
+}
+
+/** `ownerId`'s boards, newest change first: `mine` leaves out the trashed ones, `trash` lists only those. */
+export function listBoards(db: Db, ownerId: string, which: 'mine' | 'trash'): BoardInfo[] {
   return db.select({ id: boards.id, name: boards.name, head: boards.head, createdAt: boards.createdAt, updatedAt: boards.updatedAt, author: revisions.author })
     .from(boards)
     .innerJoin(revisions, and(eq(revisions.boardId, boards.id), eq(revisions.n, boards.head)))
+    .where(and(eq(boards.ownerId, ownerId), which === 'mine' ? isNull(boards.trashedAt) : isNotNull(boards.trashedAt)))
     .orderBy(desc(boards.updatedAt)).all()
 }
 
@@ -96,7 +102,7 @@ export function getRevision(db: Db, id: string, n: number): (RevisionInfo & { bo
 
 /** If `current` differs from the head revision's board, commit it as a `recovered` revision. */
 export function recover(db: Db, id: string): number | null {
-  const row = boardRow(db, id)
+  const row = getBoardRow(db, id)
   if (!row) return null
   const head = revisionBoard(db, id, row.head)
   const current = withRevision(JSON.parse(row.current) as BoardFile, row.head)

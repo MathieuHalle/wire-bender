@@ -77,7 +77,7 @@ const t7 = (b: BoardFile) => b.trails.find(t => t.id === 'T7')!.points
 beforeEach(() => {
   dir = mkdtempSync(path.join(os.tmpdir(), 'wirebender-rooms-'))
   db = openDb(dir)
-  id = createBoard(db, fixture(), 'create', 'Local').id
+  id = createBoard(db, fixture(), 'create', 'Local', 'local').id
 })
 afterEach(() => {
   for (const c of clients.splice(0)) leave(c)
