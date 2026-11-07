@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { and, desc, eq } from 'drizzle-orm'
 import type { BoardFile } from '~core/schema'
 import { summarize } from '#shared/summary'
+import { stable } from '#shared/yboard'
 import type { Db } from '../db'
 import { boards, revisions, type RevisionHow } from '../db/schema'
 
@@ -90,16 +91,12 @@ export function getRevision(db: Db, id: string, n: number): (RevisionInfo & { bo
   }
 }
 
-export function renameBoard(db: Db, id: string, name: string): void {
-  db.update(boards).set({ name, updatedAt: Date.now() }).where(eq(boards.id, id)).run()
-}
-
 /** If `current` differs from the head revision's board, commit it as a `recovered` revision. */
 export function recover(db: Db, id: string): number | null {
   const row = boardRow(db, id)
   if (!row) return null
   const head = revisionBoard(db, id, row.head)
   const current = withRevision(JSON.parse(row.current) as BoardFile, row.head)
-  if (head && JSON.stringify(head) === JSON.stringify(current)) return null
+  if (head && stable(head) === stable(current)) return null
   return commitRevision(db, id, { board: current, author: 'Recovered', how: 'recovered' })
 }
