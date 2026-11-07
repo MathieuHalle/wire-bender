@@ -10,6 +10,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '~core': fileURLToPath(new URL('./core', import.meta.url)),
+      '#shared': fileURLToPath(new URL('./shared', import.meta.url)),
       'vue': path.dirname(fromNuxt.resolve('vue/package.json'))
     }
   },
