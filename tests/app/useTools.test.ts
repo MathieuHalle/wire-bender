@@ -1,4 +1,4 @@
-// The tool state machine of useTools, against a fake useBoard (apply/undo/redo/notify).
+// The tool state machine of useTools, against a fake board store (apply/undo/redo/notify).
 import { beforeEach, describe, expect, test } from 'vitest'
 import { shallowRef } from 'vue'
 import { parseHole } from '~core/holes'

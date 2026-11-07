@@ -6,7 +6,8 @@ import { stable } from '#shared/yboard'
 import type { Db } from '../db'
 import { boards, revisions, type RevisionHow } from '../db/schema'
 
-export interface BoardInfo { id: string, name: string, head: number, createdAt: number, updatedAt: number }
+/** A board in the list; `author` made its head revision. */
+export interface BoardInfo { id: string, name: string, head: number, createdAt: number, updatedAt: number, author: string }
 export interface RevisionInfo { n: number, createdAt: number, author: string, how: RevisionHow, target: number | null, summary: string }
 
 function withRevision(board: BoardFile, revision: number): BoardFile {
@@ -71,8 +72,10 @@ export function boardBefore(db: Db, id: string, n: number): BoardFile {
 }
 
 export function listBoards(db: Db): BoardInfo[] {
-  return db.select({ id: boards.id, name: boards.name, head: boards.head, createdAt: boards.createdAt, updatedAt: boards.updatedAt })
-    .from(boards).orderBy(desc(boards.updatedAt)).all()
+  return db.select({ id: boards.id, name: boards.name, head: boards.head, createdAt: boards.createdAt, updatedAt: boards.updatedAt, author: revisions.author })
+    .from(boards)
+    .innerJoin(revisions, and(eq(revisions.boardId, boards.id), eq(revisions.n, boards.head)))
+    .orderBy(desc(boards.updatedAt)).all()
 }
 
 /** Newest first, without the board JSON. */

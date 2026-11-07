@@ -8,8 +8,10 @@ import { lockedAttrs } from '~/utils/boardView'
 
 const props = defineProps<{
   board: BoardFile
-  /** The 3D view is showing: no edits, so "Add joint" is off. */
+  /** No edits (the 3D view, or a board not live), so "Add joint" is off. */
   locked?: boolean
+  /** Why it is off; the 3D view's reason by default. */
+  lockedTitle?: string
   /** The check of `board`, when the page has already run it (it also counts the errors for the tab). */
   check?: CheckResult
 }>()
@@ -128,7 +130,7 @@ watch(check, (c) => {
               variant="soft"
               icon="i-lucide-circle-dot"
               label="Add joint"
-              v-bind="lockedAttrs(locked)"
+              v-bind="lockedAttrs(locked, undefined, lockedTitle)"
               @click="locked || emit('add-joint', f)"
             />
           </li>

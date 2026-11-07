@@ -26,9 +26,6 @@ importers:
       better-sqlite3:
         specifier: 13.0.3
         version: 13.0.3
-      chokidar:
-        specifier: ^6.0.0
-        version: 6.0.0
       drizzle-orm:
         specifier: 0.45.4
         version: 0.45.4(@types/better-sqlite3@9.6.0)(better-sqlite3@13.0.3)
@@ -53,6 +50,9 @@ importers:
       y-protocols:
         specifier: 1.0.7
         version: 1.0.7(yjs@13.6.33)
+      y-websocket:
+        specifier: 3.1.0
+        version: 3.1.0(yjs@13.6.33)
       yjs:
         specifier: 13.6.33
         version: 13.6.33
@@ -5468,6 +5468,12 @@ packages:
     engines: {node: '>=16.0.0', npm: '>=8.0.0'}
     peerDependencies:
       yjs: ^13.0.0
+
+  y-websocket@3.1.0:
+    resolution: {integrity: sha512-ZNzwH84Ysxv7zjpFNZHjTJvrBZgcAqMljTe+6zrWciAML9LQ18aVylyPNH9faxCXqEOV8I0JY4TGtrIHFX+Xwg==}
+    engines: {node: '>=16.0.0', npm: '>=8.0.0'}
+    peerDependencies:
+      yjs: ^13.5.6
 
   y18n@5.0.8:
     resolution: {integrity: sha512-0pfFzegeDWJHJIAmTLRP2DwHjdF5s7jo9tuztdQxAhINCdvS+3nGINqPd00AphqJR/0LhANUS6/+7SCb98YOfA==}
@@ -11181,6 +11187,12 @@ snapshots:
   y-protocols@1.0.7(yjs@13.6.33):
     dependencies:
       lib0: 0.2.119
+      yjs: 13.6.33
+
+  y-websocket@3.1.0(yjs@13.6.33):
+    dependencies:
+      lib0: 0.2.119
+      y-protocols: 1.0.7(yjs@13.6.33)
       yjs: 13.6.33
 
   y18n@5.0.8: {}

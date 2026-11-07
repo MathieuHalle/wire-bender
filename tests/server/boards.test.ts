@@ -35,6 +35,8 @@ describe('boards', () => {
     expect(got.name).toBe(fixture().name)
     expect(getBoard(db, 'nope')).toBeNull()
     expect(listBoards(db).map(b => b.id)).toEqual([id])
+    commitRevision(db, id, { board: renamed(fixture(), 'b'), author: 'Claude', how: 'api' })
+    expect(listBoards(db).map(b => [b.id, b.name, b.head, b.author])).toEqual([[id, 'b', 2, 'Claude']])
   })
 
   it('commitRevision only inserts', () => {
