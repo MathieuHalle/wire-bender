@@ -1,45 +1,41 @@
-import { benchHtml, tickKey } from '../../export/benchHtml'
-import { readBoard } from './boardFile'
+import { benchHtml } from '../../export/benchHtml'
+import type { BoardFile } from '~core/schema'
 
 export interface BenchResponse {
-  status: 200 | 422
+  status: 200
   contentType: string
   body: string
-  /** Only on 200: the sanitized `<name>.bench.html` for Content-Disposition. */
-  filename?: string
+  /** The sanitized `<name>.bench.html` for Content-Disposition. */
+  filename: string
   /** Every response header to set, content type included. */
   headers: Record<string, string>
 }
 
-function headersFor(contentType: string, filename?: string): Record<string, string> {
-  return {
-    'content-type': contentType,
-    // The sheet follows the file: never serve a stale copy.
-    'cache-control': 'no-store',
-    'x-content-type-options': 'nosniff',
-    ...(filename ? { 'content-disposition': `inline; filename="${filename}"` } : {})
-  }
+/** The name with only ASCII letters, digits and `-_.` (others become `-`), safe in a header. */
+export function fileStem(name: string): string {
+  return name.replace(/[^A-Za-z0-9._-]/g, '-') || 'board'
 }
 
-/** `<name>.bench.html` with only ASCII letters, digits and `-_.` (others become `-`), safe in a header. */
+/** `<name>.bench.html`, safe in a header. */
 export function benchFilename(name: string): string {
-  return `${name.replace(/[^A-Za-z0-9._-]/g, '-') || 'board'}.bench.html`
+  return `${fileStem(name)}.bench.html`
 }
 
-/** The bench sheet for the board file at `file`, or its parse errors as plain text. */
-export async function benchResponse(file: string, date?: string): Promise<BenchResponse> {
-  const r = await readBoard(file)
-  if (!r.ok) {
-    const contentType = 'text/plain; charset=utf-8'
-    return { status: 422, contentType, body: `${r.errors.join('\n')}\n`, headers: headersFor(contentType) }
-  }
+/** The bench sheet for `board`; `hash` keys the phone ticks so they reset when the board changes. */
+export function benchResponse(board: BoardFile, hash: string, date?: string): BenchResponse {
   const contentType = 'text/html; charset=utf-8'
-  const filename = benchFilename(r.board.name)
+  const filename = benchFilename(board.name)
   return {
     status: 200,
     contentType,
-    body: benchHtml(r.board, { hash: tickKey(r.hash), date }),
+    body: benchHtml(board, { hash, date }),
     filename,
-    headers: headersFor(contentType, filename)
+    headers: {
+      'content-type': contentType,
+      // The sheet follows the board: never serve a stale copy.
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+      'content-disposition': `inline; filename="${filename}"`
+    }
   }
 }
