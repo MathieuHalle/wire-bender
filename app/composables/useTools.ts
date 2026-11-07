@@ -6,18 +6,19 @@ import type { BoardFile, Side } from '~core/schema'
 import { parseHole, type Hole } from '~core/holes'
 import { eraseSegment, pencilClick, toggleJoint, type Drawing, type EditResult } from '~core/edit'
 import type { Tool } from '~/utils/boardView'
-import { useBoard } from './useBoard'
+import type { LiveBoard } from './useLiveBoard'
 
 export interface ToolDeps {
   board: Readonly<Ref<BoardFile | null>>
-  apply(next: BoardFile): void
-  undo(): void
-  redo(): void
+  /** Writes an edit; the live board refuses it (false) while read-only. */
+  apply(next: BoardFile): unknown
+  undo(): unknown
+  redo(): unknown
   /** Shows a rejection reason (a toast in the app). */
   notify(reason: string): void
   /** Clock in ms (tests pass a fake). */
   now?: () => number
-  /** True while editing is off (the 3D view): no edits, no edit-tool keys, no undo (H for Navigate still works). */
+  /** True while editing is off (the 3D view, or a board not live): no edits, no edit-tool keys, no undo (H for Navigate still works). */
   locked?: () => boolean
 }
 
@@ -140,9 +141,9 @@ export function createTools(deps: ToolDeps) {
   return { tool, drawing, message, onHoleClick, onSegmentClick, addJoint, endDrawing, onKeydown }
 }
 
-/** The tools for the page, on the shared board; keys are listened to while mounted. */
-export function useTools(opts: { locked?: () => boolean } = {}) {
-  const { board, apply, undo, redo } = useBoard()
+/** The tools for the page, on its live board; keys are listened to while mounted. */
+export function useTools(live: Pick<LiveBoard, 'board' | 'apply' | 'undo' | 'redo'>, opts: { locked?: () => boolean } = {}) {
+  const { board, apply, undo, redo } = live
   const toast = useToast()
   const tools = createTools({
     board,

@@ -1,0 +1,241 @@
+// Local mode access (spec §3): the machine itself is trusted by its socket address, a
+// paired device by its `wb_device` cookie. Nothing else is: no request header (Host,
+// X-Forwarded-For and the like) ever makes a request local.
+//
+// Pairing codes and wrong-code counters live in memory; a restart drops them.
+import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto'
+import { hostname, networkInterfaces } from 'node:os'
+import { eq } from 'drizzle-orm'
+import { useDb, type Db } from '../db'
+import { devices } from '../db/schema'
+import { remoteOf, type NodeReqLike } from './peerAddress'
+
+export const MODE_ERROR = 'public mode arrives in step 2; set WIREBENDER_MODE=local'
+
+/** Stops the server unless it runs in local mode (the only mode in step 1). */
+export function checkMode(env: Record<string, string | undefined>): void {
+  if (env.WIREBENDER_MODE !== 'local') throw new Error(MODE_ERROR)
+}
+
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
+
+export function isLoopback(remoteAddress: string | undefined): boolean {
+  return remoteAddress !== undefined && LOOPBACK.has(remoteAddress)
+}
+
+export const THIS_COMPUTER = 'This computer'
+export const COOKIE = 'wb_device'
+const COOKIE_MAX_AGE_S = 365 * 24 * 3600
+/** lastSeen is written at most this often per device. */
+const SEEN_EVERY_MS = 60_000
+
+export type Trust = { ok: true, author: string, device?: { id: string, name: string } } | { ok: false }
+
+/** Anything a request can be read from: an h3 event, a crossws upgrade request or a crossws peer. */
+type FromEvent = { node: { req: NodeReqLike } }
+type FromUpgrade = { _req?: NodeReqLike }
+type FromPeer = { request?: { _req?: NodeReqLike } }
+export type TrustSource = FromEvent | FromUpgrade | FromPeer
+
+/**
+ * The Node request behind a source. crossws (0.3, Node adapter) keeps it as `_req` on its
+ * request proxy; if a future version stops doing so, nothing is trusted (fail closed).
+ */
+function nodeReq(source: TrustSource): NodeReqLike | undefined {
+  if ('node' in source) return source.node.req
+  if ('_req' in source && source._req) return source._req
+  if ('request' in source) return source.request?._req
+  return undefined
+}
+
+function cookieValue(header: string | string[] | undefined, name: string): string | undefined {
+  const all = Array.isArray(header) ? header.join('; ') : header
+  if (!all) return undefined
+  for (const part of all.split(';')) {
+    const eqAt = part.indexOf('=')
+    if (eqAt > 0 && part.slice(0, eqAt).trim() === name) return part.slice(eqAt + 1).trim()
+  }
+  return undefined
+}
+
+const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex')
+
+/** The paired device a token belongs to, with its lastSeen bumped; null if none. */
+function deviceFor(db: Db, token: string | undefined, now: number): { id: string, name: string } | null {
+  if (!token || !/^[\w-]{43}$/.test(token)) return null
+  const row = db.select().from(devices).where(eq(devices.tokenHash, hashToken(token))).get()
+  if (!row) return null
+  if (now - row.lastSeen >= SEEN_EVERY_MS) db.update(devices).set({ lastSeen: now }).where(eq(devices.id, row.id)).run()
+  return { id: row.id, name: row.name }
+}
+
+/** Who a request is: the machine itself (loopback socket), a paired device (cookie), or no one. */
+export function trust(source: TrustSource, db: Db = useDb()): Trust {
+  const req = nodeReq(source)
+  if (!req) return { ok: false }
+  if (isLoopback(remoteOf(req).address)) return { ok: true, author: `Local · ${THIS_COMPUTER}` }
+  const device = deviceFor(db, cookieValue(req.headers.cookie, COOKIE), Date.now())
+  return device ? { ok: true, author: `Local · ${device.name}`, device } : { ok: false }
+}
+
+/** The server port a request came in on (for the pairing URL). */
+export function portOf(source: TrustSource): number | undefined {
+  const req = nodeReq(source)
+  return req ? remoteOf(req).port : undefined
+}
+
+/** `Host` as hostname (lowercase, IPv6 without brackets) and port; null if malformed. */
+function parseHost(host: string): { name: string, port: number | undefined } | null {
+  const m = /^\[([0-9a-f:.]+)\](?::(\d{1,5}))?$/i.exec(host) ?? /^([^:[\]\s/@]+)(?::(\d{1,5}))?$/.exec(host)
+  if (!m) return null
+  return { name: m[1]!.toLowerCase(), port: m[2] === undefined ? undefined : Number(m[2]) }
+}
+
+/** The names this machine may be reached by: localhost, its hostname (and `.local`), its own addresses. */
+function ownNames(): Set<string> {
+  const names = new Set(['localhost', '127.0.0.1', '::1'])
+  const host = hostname().toLowerCase()
+  if (host) {
+    names.add(host)
+    names.add(host.endsWith('.local') ? host.slice(0, -'.local'.length) : `${host}.local`)
+  }
+  for (const list of Object.values(networkInterfaces())) {
+    for (const i of list ?? []) names.add(i.address.toLowerCase())
+  }
+  return names
+}
+
+/**
+ * 403 for a request that names another site, else null. These checks only ever deny;
+ * trust is decided by `trust()` alone. They stop DNS rebinding (a page on evil.example
+ * whose name now points at this machine: its Host is evil.example) and cross-site writes
+ * (a page elsewhere posting to, or opening a live socket on, this server: its Origin is
+ * another site). A missing Origin is allowed: curl, the CLI and AI clients send none.
+ */
+export function refusal(source: TrustSource): 403 | null {
+  const req = nodeReq(source)
+  if (!req) return 403
+  const hostHeader = req.headers.host
+  const host = typeof hostHeader === 'string' ? parseHost(hostHeader) : null
+  if (!host || !ownNames().has(host.name)) return 403
+  if (host.port !== undefined && host.port !== remoteOf(req).port) return 403
+
+  const method = (req.method ?? 'GET').toUpperCase()
+  const writes = req.headers.upgrade !== undefined || (method !== 'GET' && method !== 'HEAD')
+  const origin = req.headers.origin
+  if (writes && origin !== undefined) {
+    let originHost: string
+    try {
+      originHost = new URL(String(origin)).host.toLowerCase()
+    } catch {
+      return 403
+    }
+    if (originHost === '' || originHost !== String(hostHeader).toLowerCase()) return 403
+  }
+  return null
+}
+
+export type Gate = 'pass' | 'deny' | 'redirect'
+
+/** Paths an unpaired device may load: the pairing page and the app's own assets. */
+const OPEN_PREFIXES = ['/_nuxt/', '/api/_nuxt_icon/']
+const OPEN_FILES = new Set(['/pair', '/icon.svg', '/favicon.ico'])
+
+/** What to do with a request: trusted passes; untrusted gets 401 from the API, /pair for pages. */
+export function gate(method: string, path: string, trusted: boolean): Gate {
+  if (trusted) return 'pass'
+  const pathname = path.split('?')[0]!
+  // Anything odd is refused outright: no allow-listed prefix may lead elsewhere.
+  const plain = /^(\/[\w.~-]+)+\/?$|^\/$/.test(pathname) && !pathname.split('/').some(s => s === '..' || s === '.')
+  if (plain && method === 'POST' && pathname === '/api/pair') return 'pass'
+  const get = method === 'GET' || method === 'HEAD'
+  if (plain && get && (OPEN_FILES.has(pathname) || OPEN_PREFIXES.some(p => pathname.startsWith(p)))) return 'pass'
+  if (!plain || !get || pathname === '/api' || pathname.startsWith('/api/') || pathname.startsWith('/_')) return 'deny'
+  return 'redirect'
+}
+
+// Pairing.
+
+export const PAIR_TTL_MS = 10 * 60_000
+const MAX_WRONG_PER_ADDRESS = 5
+/** Wrong codes from all addresses together that use up the current code. */
+const MAX_WRONG_PER_CODE = 20
+const MAX_NAME = 40
+
+let current: { code: string, expiresAt: number, wrong: number } | null = null
+const wrongBy = new Map<string, { count: number, since: number }>()
+
+/** Tests only: forget the pending code and the wrong-code counters. */
+export function resetPairing(): void {
+  current = null
+  wrongBy.clear()
+}
+
+/** The machine's first non-internal IPv4 address, if it has one. */
+function lanAddress(): string | undefined {
+  for (const list of Object.values(networkInterfaces())) {
+    for (const i of list ?? []) if (i.family === 'IPv4' && !i.internal) return i.address
+  }
+  return undefined
+}
+
+/** A new single-use code (replacing any pending one). Call only for a trusted request. */
+export function startPairing(port?: number): { code: string, expiresAt: number, url: string } {
+  const code = String(randomInt(0, 1_000_000)).padStart(6, '0')
+  const expiresAt = Date.now() + PAIR_TTL_MS
+  current = { code, expiresAt, wrong: 0 }
+  const host = lanAddress() ?? 'localhost'
+  return { code, expiresAt, url: `http://${host}${port ? `:${port}` : ''}/pair` }
+}
+
+export type PairResult = { ok: true, cookie: string, name: string } | { ok: false, status: 400 | 429 }
+
+/** Pairs a device with the pending code; the cookie is its `Set-Cookie` value. */
+export function completePairing(code: unknown, name: unknown, remote: string | undefined, db: Db = useDb()): PairResult {
+  const now = Date.now()
+  const key = remote ?? 'unknown'
+  const seen = wrongBy.get(key)
+  if (seen && now - seen.since > PAIR_TTL_MS) wrongBy.delete(key)
+  if ((wrongBy.get(key)?.count ?? 0) >= MAX_WRONG_PER_ADDRESS) return { ok: false, status: 429 }
+
+  // Control and format characters (zero-width, bidi overrides) are dropped; "This computer" is the machine's own name.
+  const deviceName = typeof name === 'string' ? name.replace(/[\p{Cc}\p{Cf}]/gu, '').trim() : ''
+  if (deviceName === '' || deviceName.length > MAX_NAME || deviceName.toLowerCase() === THIS_COMPUTER.toLowerCase()) return { ok: false, status: 400 }
+
+  if (current && now > current.expiresAt) current = null
+  if (!current || typeof code !== 'string' || code !== current.code) {
+    const w = wrongBy.get(key) ?? { count: 0, since: now }
+    w.count++
+    wrongBy.set(key, w)
+    if (current && ++current.wrong >= MAX_WRONG_PER_CODE) current = null
+    return { ok: false, status: 400 }
+  }
+  current = null
+
+  const token = randomBytes(32).toString('base64url')
+  db.insert(devices).values({ id: randomUUID(), name: deviceName, tokenHash: hashToken(token), createdAt: now, lastSeen: now }).run()
+  return { ok: true, name: deviceName, cookie: `${COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${COOKIE_MAX_AGE_S}` }
+}
+
+export interface DeviceRow { id: string, name: string, createdAt: number, lastSeen: number }
+
+export function listDevices(db: Db = useDb()): DeviceRow[] {
+  return db.select({ id: devices.id, name: devices.name, createdAt: devices.createdAt, lastSeen: devices.lastSeen })
+    .from(devices).all().sort((a, b) => b.lastSeen - a.lastSeen)
+}
+
+const revoked = new Set<(id: string) => void>()
+
+/** Called with a device's id when it is unpaired (live sockets close). */
+export function onUnpair(fn: (id: string) => void): () => void {
+  revoked.add(fn)
+  return () => revoked.delete(fn)
+}
+
+/** Unpairs a device: its cookie is no longer trusted. False if there was no such device. */
+export function unpair(db: Db, id: string): boolean {
+  const r = db.delete(devices).where(eq(devices.id, id)).run()
+  if (r.changes === 0) return false
+  for (const fn of revoked) fn(id)
+  return true
+}

@@ -131,10 +131,12 @@ export function sideFrames(sizes: Record<Side, { w: number, h: number }>): Recor
 
 /** Why a control is off in the 3D view, which has no edit tools. */
 export const LOCKED_TITLE = 'The 3D view is for looking: switch back to edit'
+/** Why editing is off while the board is not live. */
+export const PAUSED_TITLE = 'Reconnecting… editing is paused'
 
-/** A control that is off in 3D: disabled there with LOCKED_TITLE, else its own title. */
-export function lockedAttrs(locked: boolean, title?: string): { disabled: boolean, title: string | undefined } {
-  return { disabled: locked, title: locked ? LOCKED_TITLE : title }
+/** A control that is off in 3D (or while not live): disabled there with the lock's title, else its own title. */
+export function lockedAttrs(locked: boolean, title?: string, lockedTitle = LOCKED_TITLE): { disabled: boolean, title: string | undefined } {
+  return { disabled: locked, title: locked ? lockedTitle : title }
 }
 
 /** What a page key does: switch the view, step the zoom (0: fit both sides), or toggle the side panel. */

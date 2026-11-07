@@ -24,7 +24,7 @@ describe('side panel state', () => {
   it('defaults to open on Findings with every layer on', () => {
     expect(PANEL_KEY).toBe('wirebender:sidepanel')
     expect(defaultPanel()).toEqual({ open: true, tab: 'findings', layers: { components: true, wires: true, trails: true } })
-    expect(PANEL_TABS.map(t => t.id)).toEqual(['findings', 'edit'])
+    expect(PANEL_TABS.map(t => t.id)).toEqual(['findings', 'edit', 'history'])
   })
 
   it('round-trips through storage', () => {
@@ -33,6 +33,13 @@ describe('side panel state', () => {
     expect(savePanel(state, () => s)).toBe(true)
     expect(JSON.parse(s.map.get(PANEL_KEY)!)).toEqual(state)
     expect(loadPanel(() => s)).toEqual(state)
+  })
+
+  it('keeps the history tab through storage', () => {
+    const s = memStorage()
+    const state: PanelState = { ...defaultPanel(), tab: 'history' }
+    savePanel(state, () => s)
+    expect(loadPanel(() => s).tab).toBe('history')
   })
 
   it('falls back to the defaults when nothing is stored', () => {

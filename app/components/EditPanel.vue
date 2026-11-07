@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The side panel's Edit tab: the tools, undo/redo, and the view layers. The editing tools
-// are off in 3D (look only), Navigate (pan, no edits) stays on; the layers work in both
+// are off in 3D (look only) and while the board is not live, Navigate (pan, no edits) stays on; the layers work in both
 // views and never touch the file.
 import { LOCKED_TITLE, type Tool } from '~/utils/boardView'
 import { blindHint, type Layers } from '~/utils/layers'
@@ -8,8 +8,10 @@ import { blindHint, type Layers } from '~/utils/layers'
 const props = defineProps<{
   canUndo: boolean
   canRedo: boolean
-  /** The 3D view is showing: no edits. */
+  /** No edits: the 3D view, or a board not live. */
   locked?: boolean
+  /** Why editing is off; the 3D view's reason by default. */
+  lockedTitle?: string
 }>()
 const emit = defineEmits<{ undo: [], redo: [] }>()
 
@@ -34,6 +36,7 @@ function setLayer(id: keyof Layers, on: boolean) {
   layers.value = { ...layers.value, [id]: on }
 }
 
+const lockTitle = computed(() => props.lockedTitle ?? LOCKED_TITLE)
 const blind = computed(() => (props.locked ? null : blindHint(tool.value, layers.value)))
 </script>
 
@@ -47,7 +50,7 @@ const blind = computed(() => (props.locked ? null : blindHint(tool.value, layers
         class="grid grid-cols-2 gap-1"
         role="toolbar"
         aria-label="Tools"
-        :title="locked ? LOCKED_TITLE : undefined"
+        :title="locked ? lockTitle : undefined"
       >
         <UButton
           v-for="t in TOOLS"
@@ -56,7 +59,7 @@ const blind = computed(() => (props.locked ? null : blindHint(tool.value, layers
           :icon="t.icon"
           :variant="tool === t.id ? 'solid' : 'outline'"
           :label="`${t.label} (${t.key})`"
-          :title="locked && t.id !== 'navigate' ? LOCKED_TITLE : `${t.label} (${t.key})`"
+          :title="locked && t.id !== 'navigate' ? lockTitle : `${t.label} (${t.key})`"
           :aria-pressed="tool === t.id"
           :disabled="locked && t.id !== 'navigate'"
           @click="(locked && t.id !== 'navigate') || (tool = t.id)"
@@ -68,7 +71,7 @@ const blind = computed(() => (props.locked ? null : blindHint(tool.value, layers
           variant="ghost"
           icon="i-lucide-undo-2"
           label="Undo"
-          :title="locked ? LOCKED_TITLE : 'Undo (Ctrl/Cmd+Z)'"
+          :title="locked ? lockTitle : 'Undo (Ctrl/Cmd+Z)'"
           :disabled="locked || !canUndo"
           @click="emit('undo')"
         />
@@ -77,7 +80,7 @@ const blind = computed(() => (props.locked ? null : blindHint(tool.value, layers
           variant="ghost"
           icon="i-lucide-redo-2"
           label="Redo"
-          :title="locked ? LOCKED_TITLE : 'Redo (Shift+Ctrl/Cmd+Z)'"
+          :title="locked ? lockTitle : 'Redo (Shift+Ctrl/Cmd+Z)'"
           :disabled="locked || !canRedo"
           @click="emit('redo')"
         />
