@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import * as Y from 'yjs'
 import { describe, expect, it } from 'vitest'
 import { parseBoard, type BoardFile } from '~core/schema'
-import { boardToDoc, docToBoard, writeBoard } from '#shared/yboard'
+import { boardToDoc, docToBoard, sameItems, writeBoard } from '#shared/yboard'
 
 function board2(): BoardFile {
   const raw = JSON.parse(readFileSync(fileURLToPath(new URL('../fixtures/channel-board-2.json', import.meta.url)), 'utf8'))
@@ -127,5 +127,15 @@ describe('Board <-> Yjs', () => {
     const tc = load(c).trails.find(t => t.id === id)
     expect(ta).toEqual(tc)
     expect([ea.trails[0], ec.trails[0]]).toContainEqual(ta)
+  })
+
+  it('sameItems ignores array order and the revision, not values', () => {
+    const b = board2()
+    const shuffled = { ...clone(b), revision: 9, trails: [...b.trails].reverse(), parts: [...b.parts].reverse(), nets: Object.fromEntries(Object.entries(b.nets).reverse()) }
+    expect(sameItems(b, shuffled)).toBe(true)
+    expect(sameItems(b, { ...clone(b), name: 'other' })).toBe(false)
+    expect(sameItems(b, { ...clone(b), trails: b.trails.slice(1) })).toBe(false)
+    expect(sameItems(b, { ...clone(b), trails: b.trails.map((t, i) => i === 0 ? { ...t, points: [...t.points].reverse() } : t) })).toBe(false)
+    expect(sameItems(b, { ...clone(b), nets: { ...b.nets, EXTRA: {} } })).toBe(false)
   })
 })

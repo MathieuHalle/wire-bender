@@ -1,8 +1,8 @@
-import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import { useDb } from '../../../db'
 import { onUnpair, refusal, trust, type TrustSource } from '../../../utils/access'
+import { MESSAGE_AWARENESS, MESSAGE_SYNC, handleMessage, message } from '../../../utils/liveMessage'
 import { openRoom, type Received, type Room } from '../../../utils/rooms'
 import { wsBoardId } from '../../../utils/wsBoardId'
 
@@ -13,10 +13,6 @@ interface WsPeer {
   send: (data: Uint8Array) => unknown
   close: (code?: number, reason?: string) => void
 }
-
-/** y-websocket message types. */
-const MESSAGE_SYNC = 0
-const MESSAGE_AWARENESS = 1
 
 /** Close codes: a rejected or malformed message, an untrusted peer, an unknown or malformed board id, and a server error. */
 const CLOSE_REJECTED = 4400
@@ -34,12 +30,6 @@ function closeReason(reason: string): string {
   const bytes = new TextEncoder().encode(reason)
   if (bytes.length <= 123) return reason
   return new TextDecoder().decode(bytes.slice(0, 120)).replace(/�$/, '') + '...'
-}
-
-function message(write: (e: encoding.Encoder) => void): Uint8Array {
-  const e = encoding.createEncoder()
-  write(e)
-  return encoding.toUint8Array(e)
 }
 
 const joined = new Map<string, { room: Room, author: string, deviceId?: string, peer: WsPeer }>()
@@ -96,27 +86,6 @@ function join(peer: WsPeer): void {
   }))
 }
 
-/** One y-websocket message from a peer: sync step 1 is answered, step 2 and updates are validated, awareness is relayed. */
-function handle(peer: WsPeer, room: Room, author: string, data: Uint8Array): Received {
-  const d = decoding.createDecoder(data)
-  const type = decoding.readVarUint(d)
-  if (type === MESSAGE_AWARENESS) return room.receiveAwareness(peer.id, decoding.readVarUint8Array(d))
-  if (type !== MESSAGE_SYNC) return { ok: true }
-  const step = decoding.readVarUint(d)
-  if (step === syncProtocol.messageYjsSyncStep1) {
-    const stateVector = decoding.readVarUint8Array(d)
-    peer.send(message((e) => {
-      encoding.writeVarUint(e, MESSAGE_SYNC)
-      syncProtocol.writeSyncStep2(e, room.doc, stateVector)
-    }))
-    return { ok: true }
-  }
-  if (step === syncProtocol.messageYjsSyncStep2 || step === syncProtocol.messageYjsUpdate) {
-    return room.receive(peer.id, author, decoding.readVarUint8Array(d))
-  }
-  return { ok: false, reason: `unknown sync message ${step}` }
-}
-
 export default defineWebSocketHandler({
   // The access middleware does not see upgrades: the same checks run here. A socket from
   // another site (rebinding Host, foreign Origin) is refused, then only the machine itself
@@ -141,7 +110,7 @@ export default defineWebSocketHandler({
     if (!live) return
     let result: Received
     try {
-      result = handle(peer, live.room, live.author, msg.uint8Array())
+      result = handleMessage(peer, live.room, live.author, msg.uint8Array())
     } catch (e) {
       result = { ok: false, reason: `malformed message: ${(e as Error).message}` }
     }

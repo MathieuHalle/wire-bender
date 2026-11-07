@@ -43,6 +43,73 @@ export function sectionItems(b: BoardFile, name: SectionName): [string, unknown]
   return (b[name] as Item[]).map(item => [keyOf(item), item])
 }
 
+/** Each item's `stable` JSON by key: section items by id, record entries by name. */
+function keyed(entries: [string, unknown][]): Map<string, string> {
+  return new Map(entries.map(([k, v]) => [k, stable(v)]))
+}
+
+function sameMaps(a: Map<string, string>, b: Map<string, string>): boolean {
+  if (a.size !== b.size) return false
+  for (const [k, v] of a) if (b.get(k) !== v) return false
+  return true
+}
+
+/**
+ * The same items, whatever their order: sections compared by id, records by key, singles
+ * by value. The revision and the order of list sections are ignored (a restore or a
+ * re-added item can change the order without changing the board).
+ */
+export function sameItems(a: BoardFile, b: BoardFile): boolean {
+  for (const name of SECTION_NAMES) {
+    if (a[name].length !== b[name].length || !sameMaps(keyed(sectionItems(a, name)), keyed(sectionItems(b, name)))) return false
+  }
+  for (const name of RECORDS) if (!sameMaps(keyed(Object.entries(a[name])), keyed(Object.entries(b[name])))) return false
+  return SINGLES.every(name => stable(a[name]) === stable(b[name]))
+}
+
+/** The key of one item for `withItems`: `<section>:<id>`, `<record>:<key>` or `singles:<name>`. */
+export const itemKey = (root: string, key: string) => `${root}:${key}`
+
+/**
+ * `head` with the items named by `keys` taken from `current` (removed where `current` has
+ * none). Items new in `current` go at the end, in `current`'s order. The result is not
+ * parsed: the caller runs it through parseBoard.
+ */
+export function withItems(head: BoardFile, current: BoardFile, keys: Iterable<string>): BoardFile {
+  const byRoot = new Map<string, Set<string>>()
+  for (const k of keys) {
+    const at = k.indexOf(':')
+    const root = k.slice(0, at)
+    if (!byRoot.has(root)) byRoot.set(root, new Set())
+    byRoot.get(root)!.add(k.slice(at + 1))
+  }
+  const out = plain(head) as unknown as Record<string, unknown>
+  for (const name of SECTION_NAMES) {
+    const touched = byRoot.get(name)
+    if (!touched) continue
+    const now = new Map(sectionItems(current, name))
+    const was = sectionItems(head, name)
+    const list = was.flatMap(([k, v]) => !touched.has(k) ? [v] : now.has(k) ? [now.get(k)] : [])
+    const known = new Set(was.map(([k]) => k))
+    for (const [k, v] of now) if (touched.has(k) && !known.has(k)) list.push(v)
+    out[name] = plain(list)
+  }
+  for (const name of RECORDS) {
+    const touched = byRoot.get(name)
+    if (!touched) continue
+    const now = current[name] as Record<string, unknown>
+    const kept = Object.entries(out[name] as Record<string, unknown>).filter(([k]) => !touched.has(k))
+    const taken = [...touched].filter(k => Object.hasOwn(now, k)).map(k => [k, plain(now[k])] as const)
+    out[name] = Object.fromEntries([...kept, ...taken])
+  }
+  const singles = byRoot.get('singles')
+  for (const name of SINGLES) {
+    if (!singles?.has(name)) continue
+    out[name] = current[name] === undefined ? undefined : plain(current[name])
+  }
+  return out as unknown as BoardFile
+}
+
 /** Writes everything into a fresh doc. */
 export function boardToDoc(doc: Y.Doc, board: BoardFile): void {
   doc.transact(() => {

@@ -171,12 +171,27 @@ export function resetPairing(): void {
   wrongBy.clear()
 }
 
-/** The machine's first non-internal IPv4 address, if it has one. */
-function lanAddress(): string | undefined {
-  for (const list of Object.values(networkInterfaces())) {
-    for (const i of list ?? []) if (i.family === 'IPv4' && !i.internal) return i.address
-  }
-  return undefined
+/** Interface names that are usually the machine's own LAN (Ethernet or Wi-Fi). */
+const LAN_NAMES = /^(en|eth|wlan|wl)/
+/** Tunnels, VPNs, bridges and VMs: another device on the LAN cannot reach these. */
+const NOT_LAN_NAMES = /^(utun|bridge|docker|vboxnet|tailscale)/
+
+/** In 100.64.0.0/10 (carrier-grade NAT, used by Tailscale and other VPNs). */
+function isCgnat(address: string): boolean {
+  const [a, b] = address.split('.').map(Number)
+  return a === 100 && b !== undefined && b >= 64 && b <= 127
+}
+
+/**
+ * The address a phone on the same network should use for this machine: an IPv4 address on
+ * an Ethernet or Wi-Fi interface first, then any other one that is not a tunnel, VPN,
+ * bridge or VM, then (the old rule) the first non-internal IPv4 address.
+ */
+export function lanAddress(interfaces: ReturnType<typeof networkInterfaces> = networkInterfaces()): string | undefined {
+  const all = Object.entries(interfaces).flatMap(([name, list]) =>
+    (list ?? []).filter(i => i.family === 'IPv4' && !i.internal).map(i => ({ name, address: i.address })))
+  const usable = all.filter(i => !NOT_LAN_NAMES.test(i.name) && !isCgnat(i.address))
+  return (usable.find(i => LAN_NAMES.test(i.name)) ?? usable[0] ?? all[0])?.address
 }
 
 /** A new single-use code (replacing any pending one). Call only for a trusted request. */

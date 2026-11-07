@@ -2,6 +2,8 @@
 import * as Y from 'yjs'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from 'y-protocols/awareness'
 import { ObservableV2 } from 'lib0/observable'
+import * as decoding from 'lib0/decoding'
+import * as encoding from 'lib0/encoding'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
 import type { BoardFile } from '~core/schema'
@@ -16,6 +18,10 @@ class FakeProvider extends ObservableV2<any> implements LiveProvider {
   wsconnected = false
   synced = false
   destroyed = false
+  /** What the store sent on the socket. */
+  readonly sent: Uint8Array[] = []
+  ws: { send: (data: Uint8Array) => void } | null = { send: d => this.sent.push(d) }
+  messageHandlers: ((encoder: encoding.Encoder, decoder: decoding.Decoder, provider: never, emitSynced: boolean, type: number) => void)[] = []
 
   constructor(readonly id: string) {
     super()
@@ -36,6 +42,25 @@ class FakeProvider extends ObservableV2<any> implements LiveProvider {
     this.synced = false
     this.emit('connection-close', [{ code, reason }, this])
     this.emit('status', [{ status: 'disconnected' }])
+  }
+
+  /** The commands sent so far, decoded. */
+  commands(): { op: string, id: number }[] {
+    return this.sent.map((d) => {
+      const dec = decoding.createDecoder(d)
+      expect(decoding.readVarUint(dec)).toBe(3)
+      return JSON.parse(decoding.readVarString(dec))
+    })
+  }
+
+  /** The server answers a command, as y-websocket would deliver it. */
+  answer(reply: { id: number, ok: boolean, reason?: string }) {
+    const e = encoding.createEncoder()
+    encoding.writeVarUint(e, 3)
+    encoding.writeVarString(e, JSON.stringify(reply))
+    const dec = decoding.createDecoder(encoding.toUint8Array(e))
+    const type = decoding.readVarUint(dec)
+    this.messageHandlers[type]!(encoding.createEncoder(), dec, this as never, true, type)
   }
 
   override destroy() {
@@ -63,20 +88,16 @@ function push(server: Y.Doc, client: Y.Doc, change: () => void) {
 function setup() {
   const providers: FakeProvider[] = []
   const notes: string[] = []
-  const posts: string[] = []
   const live = createLiveBoard(ref('b1'), {
     connect: (id) => {
       const p = new FakeProvider(id)
       providers.push(p)
       return p
     },
-    post: async (url) => {
-      posts.push(url)
-    },
     notify: m => notes.push(m)
   })
   live.start()
-  return { live, providers, notes, posts, last: () => providers.at(-1)! }
+  return { live, providers, notes, last: () => providers.at(-1)! }
 }
 
 const start = mk({ trails: [trail('T1', ['A1', 'A2'])] })
@@ -177,36 +198,36 @@ describe('useLiveBoard', () => {
     expect(live.status.value).toBe('offline')
   })
 
-  it('undo and redo POST to the board, and say why when there is nothing to do', async () => {
-    const providers: FakeProvider[] = []
-    const notes: string[] = []
-    const posts: string[] = []
-    const live = createLiveBoard(ref('b1'), {
-      connect: (id) => {
-        const p = new FakeProvider(id)
-        providers.push(p)
-        return p
-      },
-      post: async (url) => {
-        posts.push(url)
-        if (url.endsWith('/redo')) throw Object.assign(new Error('409'), { data: { reason: 'nothing to redo' } })
-      },
-      notify: m => notes.push(m)
-    })
-    live.start()
-    providers[0]!.goLive(serverDoc(start))
-    await live.undo()
-    await live.redo()
-    expect(posts).toEqual(['/api/boards/b1/undo', '/api/boards/b1/redo'])
+  it('undo and redo are commands on the socket, and say why when there is nothing to do', async () => {
+    const { live, notes, last } = setup()
+    last().goLive(serverDoc(start))
+    const undone = live.undo()
+    const redone = live.redo()
+    const [u, r] = last().commands()
+    expect([u!.op, r!.op]).toEqual(['undo', 'redo'])
+    expect(u!.id).not.toBe(r!.id)
+    last().answer({ id: u!.id, ok: true })
+    last().answer({ id: r!.id, ok: false, reason: 'nothing to redo' })
+    await undone
+    await redone
     expect(notes).toEqual(['nothing to redo'])
   })
 
-  it('undo and redo do nothing, and do not POST, while read-only', async () => {
-    const { live, posts } = setup()
+  it('a command still waiting when the socket closes is reported', async () => {
+    const { live, notes, last } = setup()
+    last().goLive(serverDoc(start))
+    const undone = live.undo()
+    last().close()
+    await undone
+    expect(notes).toEqual(['undo did not reach the server; try again'])
+  })
+
+  it('undo and redo do nothing, and send nothing, while read-only', async () => {
+    const { live, last } = setup()
     expect(live.readOnly.value).toBe(true)
     await live.undo()
     await live.redo()
-    expect(posts).toEqual([])
+    expect(last().sent).toEqual([])
   })
 
   it('a new id resets the board, the revision and the undo state', async () => {
@@ -218,7 +239,6 @@ describe('useLiveBoard', () => {
         providers.push(p)
         return p
       },
-      post: async () => {},
       notify: () => {}
     })
     live.start()
@@ -267,7 +287,6 @@ describe('useLiveBoard', () => {
         providers.push(p)
         return p
       },
-      post: async () => {},
       notify: () => {},
       unpaired: () => unpaired++
     })

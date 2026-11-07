@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openDb, type Db } from '../../server/db'
 import {
-  checkMode, completePairing, gate, isLoopback, listDevices, MODE_ERROR, PAIR_TTL_MS, refusal, resetPairing, startPairing, trust, unpair
+  checkMode, completePairing, gate, isLoopback, lanAddress, listDevices, MODE_ERROR, PAIR_TTL_MS, refusal, resetPairing, startPairing, trust, unpair
 } from '../../server/utils/access'
 import { PEER_HEADER, remoteOf, stampPeer, stampSecret, type NodeReqLike } from '../../server/utils/peerAddress'
 
@@ -295,5 +295,20 @@ describe('refusal: Host and Origin checks only deny', () => {
 
   it('a cross-origin GET is allowed (it reads nothing it could not already)', () => {
     expect(refusal(event('127.0.0.1', { host: 'localhost:3002', origin: 'http://evil.example' }))).toBeNull()
+  })
+})
+
+describe('lanAddress', () => {
+  const v4 = (address: string, internal = false) => ({ address, family: 'IPv4' as const, internal, netmask: '255.255.255.0', mac: '00:00:00:00:00:00', cidr: null })
+
+  it('lanAddress skips utun and 100.64/10', () => {
+    expect(lanAddress({ lo0: [v4('127.0.0.1', true)], utun4: [v4('10.8.0.2')], tailscale0: [v4('100.101.1.1')], bridge100: [v4('192.168.64.1')], en0: [v4('192.168.1.5')] })).toBe('192.168.1.5')
+    // A CGNAT address on a preferred name is skipped; another interface is used.
+    expect(lanAddress({ en5: [v4('100.64.3.4')], docker0: [v4('172.17.0.1')], vboxnet0: [v4('192.168.56.1')], wlan0: [v4('192.168.0.9')] })).toBe('192.168.0.9')
+    expect(lanAddress({ utun2: [v4('10.0.0.7')], foo0: [v4('10.1.2.3')] })).toBe('10.1.2.3')
+    // Nothing better: the old rule (the first non-internal IPv4).
+    expect(lanAddress({ lo0: [v4('127.0.0.1', true)], utun0: [v4('10.0.0.7')] })).toBe('10.0.0.7')
+    expect(lanAddress({ lo0: [v4('127.0.0.1', true)] })).toBeUndefined()
+    expect(lanAddress({ eth0: [v4('100.127.255.1')], wl0: [v4('100.128.0.1')] })).toBe('100.128.0.1')
   })
 })

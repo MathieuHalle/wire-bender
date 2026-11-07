@@ -9,8 +9,13 @@
 //   the reason, then reconnects fresh like any other close.
 // - `apply` writes only the items that differ (writeBoard). Remote changes re-read the
 //   board from the doc; the "server" map (written by the server only) gives the revision
-//   and the shared undo stack, which `undo` and `redo` drive through the API.
+//   and the shared undo stack.
+// - `undo` and `redo` are commands on the socket (message type 3), so the server runs them
+//   after this tab's edits sent before them. A command still unanswered when the socket
+//   closes is reported, not resent.
 import * as Y from 'yjs'
+import * as decoding from 'lib0/decoding'
+import * as encoding from 'lib0/encoding'
 import type { Awareness } from 'y-protocols/awareness'
 import { WebsocketProvider } from 'y-websocket'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Ref } from 'vue'
@@ -26,6 +31,10 @@ export interface LiveProvider {
   readonly awareness: Awareness
   readonly wsconnected: boolean
   readonly synced: boolean
+  /** The open socket, if any. */
+  readonly ws: { send(data: Uint8Array): void } | null
+  /** y-websocket's readers by message type; the store adds the command answer's. */
+  messageHandlers: ((encoder: encoding.Encoder, decoder: decoding.Decoder, ...rest: never[]) => void)[]
   on(name: 'status' | 'sync' | 'connection-close', fn: (...args: never[]) => void): void
   destroy(): void
 }
@@ -33,8 +42,6 @@ export interface LiveProvider {
 export interface LiveDeps {
   /** A new provider, on a new doc, connecting to board `id`. */
   connect(id: string): LiveProvider
-  /** POST to the API; rejects with `{ data: { reason } }` on a 409. */
-  post(url: string): Promise<unknown>
   /** Shows a message (a toast in the app). */
   notify(message: string): void
   /** The device in the presence list: the paired device's name, or `This computer` on loopback. */
@@ -46,6 +53,8 @@ export interface LiveDeps {
 const CLOSE_REJECTED = 4400
 const CLOSE_UNTRUSTED = 4401
 const CLOSE_NO_BOARD = 4404
+/** Undo and redo, and their answers `{ id, ok, reason? }`. */
+const MESSAGE_COMMAND = 3
 const MAX_BACKOFF_MS = 2500
 
 /** Presence colours; one is picked per tab. */
@@ -71,6 +80,9 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
   let retry: ReturnType<typeof setTimeout> | null = null
   let failures = 0
   let stopWatch: (() => void) | null = null
+  let nextCommand = 1
+  /** Commands sent on the current socket and not answered yet. */
+  const waiting = new Map<number, { op: 'undo' | 'redo', done: () => void }>()
 
   function readServer(doc: Y.Doc) {
     const map = doc.getMap('server')
@@ -109,6 +121,25 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
     p.doc.destroy()
     peers.value = []
     synced.value = false
+    for (const { op, done } of waiting.values()) {
+      deps.notify(`${op} did not reach the server; try again`)
+      done()
+    }
+    waiting.clear()
+  }
+
+  function answered(decoder: decoding.Decoder) {
+    let reply: { id?: unknown, ok?: unknown, reason?: unknown }
+    try {
+      reply = JSON.parse(decoding.readVarString(decoder))
+    } catch {
+      return
+    }
+    const w = typeof reply.id === 'number' ? waiting.get(reply.id) : undefined
+    if (!w) return
+    waiting.delete(reply.id as number)
+    if (reply.ok !== true) deps.notify(typeof reply.reason === 'string' ? reply.reason : `${w.op} failed`)
+    w.done()
   }
 
   function open() {
@@ -118,6 +149,9 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
     provider = p
     status.value = 'connecting'
     p.awareness.setLocalStateField('user', user)
+    p.messageHandlers[MESSAGE_COMMAND] = (_encoder, decoder) => {
+      if (provider === p) answered(decoder)
+    }
     p.awareness.on('change', () => readPeers(p))
     p.doc.on('afterTransaction', (tr: Y.Transaction) => {
       if (provider !== p || tr.origin === LOCAL) return
@@ -164,14 +198,24 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
     return true
   }
 
-  async function call(step: 'undo' | 'redo') {
-    if (readOnly.value) return
-    try {
-      await deps.post(`/api/boards/${encodeURIComponent(id.value)}/${step}`)
-    } catch (e) {
-      const reason = (e as { data?: { reason?: unknown } }).data?.reason
-      deps.notify(typeof reason === 'string' ? reason : `${step} failed: ${(e as Error).message}`)
-    }
+  /** Sends an undo or redo command; resolves once the server answers (or the socket closes). */
+  function call(op: 'undo' | 'redo'): Promise<void> {
+    const ws = provider?.ws
+    if (readOnly.value || !ws) return Promise.resolve()
+    const n = nextCommand++
+    const e = encoding.createEncoder()
+    encoding.writeVarUint(e, MESSAGE_COMMAND)
+    encoding.writeVarString(e, JSON.stringify({ op, id: n }))
+    return new Promise((resolve) => {
+      waiting.set(n, { op, done: resolve })
+      try {
+        ws.send(encoding.toUint8Array(e))
+      } catch {
+        waiting.delete(n)
+        deps.notify(`${op} did not reach the server; try again`)
+        resolve()
+      }
+    })
   }
 
   /** Names this device in the presence list (`Local · <name>`), now and on every reconnect. */
@@ -233,7 +277,6 @@ export function useLiveBoard(id: Ref<string>): LiveBoard {
       // No BroadcastChannel: every tab syncs through the server, which validates each edit.
       return new WebsocketProvider(url, boardId, new Y.Doc(), { disableBc: true }) as unknown as LiveProvider
     },
-    post: url => $fetch(url, { method: 'POST' }),
     notify: m => toast.add({ title: m, color: 'warning', icon: 'i-lucide-ban' }),
     unpaired: () => window.location.assign('/pair')
   })

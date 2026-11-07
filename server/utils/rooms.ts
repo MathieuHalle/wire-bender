@@ -1,8 +1,8 @@
 import * as Y from 'yjs'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
-import type { BoardFile } from '~core/schema'
+import { parseBoard, type BoardFile } from '~core/schema'
 import { undoState } from '#shared/undoState'
-import { RECORDS, SECTION_NAMES, boardToDoc, docToBoard, stable, unknownSingles, writeBoard } from '#shared/yboard'
+import { RECORDS, SECTION_NAMES, boardToDoc, docToBoard, itemKey, sameItems, unknownSingles, withItems, writeBoard } from '#shared/yboard'
 import type { Db } from '../db'
 import { boardBefore, commitRevision, getBoard, getRevision, listRevisions, recover, saveCurrent } from './boards'
 
@@ -32,15 +32,55 @@ function safely(send: () => void): void {
   }
 }
 
-/** The name of the top-level type that holds `type`. */
-function rootName(doc: Y.Doc, type: Y.AbstractType<unknown>): string | undefined {
+/** The name of the top-level type that holds `type`, and the key under it (null for the type itself). */
+function rootOf(doc: Y.Doc, type: Y.AbstractType<unknown>, sub: string | null): { name: string, key: string | null } {
   let t = type
-  while (t._item) t = t._item.parent as Y.AbstractType<unknown>
-  for (const [name, shared] of doc.share) if (shared === t) return name
-  return undefined
+  let key = sub
+  while (t._item) {
+    key = t._item.parentSub
+    t = t._item.parent as Y.AbstractType<unknown>
+  }
+  for (const [name, shared] of doc.share) if (shared === t) return { name, key }
+  return { name: '?', key }
 }
 
-const sameBoard = (a: BoardFile, b: BoardFile) => stable({ ...a, revision: 0 }) === stable({ ...b, revision: 0 })
+const SECTION_SET = new Set<string>(SECTION_NAMES)
+const mapItems = (map: Y.Map<unknown>) => (map as unknown as { _map: Map<string, Y.Item> })._map
+const sameId = (a: Y.ID | null, b: Y.ID) => a !== null && a.client === b.client && a.clock === b.clock
+
+/**
+ * The first key the update creates over a live value it never saw (two people drew the same
+ * id at once), or null. A Y.Map set links its item to the item it replaced, as the writer
+ * saw it: an edit of a value the writer saw links to that item and deletes it in the same
+ * update; a create links to nothing, or to a deleted item, and deletes nothing. Editing a
+ * value someone else changed meanwhile stays "later wins" (spec §6).
+ */
+function createCollision(server: Y.Doc, copy: Y.Doc, before: Map<number, number>, update: Uint8Array, keys: Iterable<string>): string | null {
+  const isNew = (id: Y.ID) => id.clock >= (before.get(id.client) ?? 0)
+  let deletes: ReturnType<typeof Y.decodeUpdate>['ds'] | null = null
+  for (const k of keys) {
+    const at = k.indexOf(':')
+    const name = k.slice(0, at)
+    if (!SECTION_SET.has(name)) continue
+    const key = k.slice(at + 1)
+    const live = mapItems(server.getMap(name)).get(key)
+    if (!live || live.deleted) continue
+    // The update's items for the key: the winner, or ones that lost to a concurrent write
+    // (those stay in the key's chain, deleted). Each first write links to what it replaced.
+    for (let item = mapItems(copy.getMap(name)).get(key) ?? null; item; item = item.left as Y.Item | null) {
+      if (!isNew(item.id) || (item.origin && isNew(item.origin))) continue
+      const origin = item.origin
+      if (origin && sameId(origin, live.id)) continue
+      deletes ??= Y.decodeUpdate(update).ds
+      if (origin && Y.isDeleted(deletes, origin)) continue
+      return key
+    }
+  }
+  return null
+}
+
+/** One author's open revision group: its idle timer and the items its accepted updates touched. */
+interface Group { timer: ReturnType<typeof setTimeout>, keys: Set<string> }
 const rooms = new Map<string, Room>()
 
 /** The live room for a board, opened (after `recover`) if none is open. `null` when there is no such board. */
@@ -62,7 +102,7 @@ export class Room {
   private board: BoardFile
   private head: number
   private readonly peers = new Map<string, { author: string, link: PeerLink, clients: Set<number> }>()
-  private readonly groups = new Map<string, ReturnType<typeof setTimeout>>()
+  private readonly groups = new Map<string, Group>()
   private closed = false
 
   constructor(private readonly db: Db, readonly id: string, board: BoardFile, head: number) {
@@ -110,7 +150,7 @@ export class Room {
     if (!changed) return { ok: true }
     this.board = checked.board
     saveCurrent(this.db, this.id, this.board)
-    this.restartGroup(author)
+    this.restartGroup(author, checked.keys)
     return { ok: true }
   }
 
@@ -170,13 +210,21 @@ export class Room {
     this.dropIfEmpty()
   }
 
-  private check(update: Uint8Array): { ok: true, board: BoardFile } | { ok: false, reason: string } {
+  private check(update: Uint8Array): { ok: true, board: BoardFile, keys: Set<string> } | { ok: false, reason: string } {
     const copy = new Y.Doc()
     try {
       Y.applyUpdate(copy, Y.encodeStateAsUpdate(this.doc))
+      const before = Y.decodeStateVector(Y.encodeStateVector(copy))
       const touched = new Set<string>()
+      const keys = new Set<string>()
       copy.on('afterTransaction', (tr: Y.Transaction) => {
-        for (const t of tr.changed.keys()) touched.add(rootName(copy, t as Y.AbstractType<unknown>) ?? '?')
+        for (const [t, subs] of tr.changed) {
+          for (const sub of subs.size > 0 ? subs : [null]) {
+            const { name, key } = rootOf(copy, t as Y.AbstractType<unknown>, sub)
+            touched.add(name)
+            if (key !== null) keys.add(itemKey(name, key))
+          }
+        }
       })
       Y.applyUpdate(copy, update)
       if (touched.has(SERVER)) return { ok: false, reason: 'the server map is written only by the server' }
@@ -185,9 +233,11 @@ export class Room {
       if (copy.store.pendingStructs || copy.store.pendingDs) return { ok: false, reason: 'the update depends on changes the server does not have' }
       const extra = unknownSingles(copy)
       if (extra.length > 0) return { ok: false, reason: `the update writes ${extra.map(n => `singles."${n}"`).join(', ')}, which is not part of a board` }
+      const collision = createCollision(this.doc, copy, before, update, keys)
+      if (collision !== null) return { ok: false, reason: `${collision} was just created by someone else; draw it again` }
       const parsed = docToBoard(copy, this.head)
       if (!parsed.ok) return { ok: false, reason: parsed.errors.join('; ') }
-      return { ok: true, board: parsed.board }
+      return { ok: true, board: parsed.board, keys }
     } catch (e) {
       return { ok: false, reason: `malformed update: ${(e as Error).message}` }
     } finally {
@@ -214,21 +264,51 @@ export class Room {
     }, SERVER)
   }
 
-  private restartGroup(author: string): void {
-    clearTimeout(this.groups.get(author))
-    this.groups.set(author, setTimeout(() => this.closeGroup(author), GROUP_IDLE_MS))
+  private restartGroup(author: string, keys: Set<string>): void {
+    const group = this.groups.get(author)
+    clearTimeout(group?.timer)
+    const timer = setTimeout(() => this.closeGroup(author), GROUP_IDLE_MS)
+    if (group) {
+      group.timer = timer
+      for (const k of keys) group.keys.add(k)
+    } else {
+      this.groups.set(author, { timer, keys: new Set(keys) })
+    }
   }
 
-  /** Commit an author's live edits as one `edit` revision, unless the board is the same as the head revision's. */
+  /**
+   * Commit an author's live edits as one `edit` revision: the head board with the items that
+   * author touched set to their current values, so another author's open edits stay out.
+   * Nothing is committed when that board is the head's. If it does not parse (the author's
+   * edits need someone else's), every open group is committed together, as the current board.
+   */
   private closeGroup(author: string): void {
-    const timer = this.groups.get(author)
-    if (timer === undefined) return
-    clearTimeout(timer)
+    const group = this.groups.get(author)
+    if (!group) return
+    clearTimeout(group.timer)
     this.groups.delete(author)
     const head = getRevision(this.db, this.id, this.head)
-    if (head && sameBoard(head.board, this.board)) return
-    this.head = commitRevision(this.db, this.id, { board: this.board, author, how: 'edit' })
+    if (!head) return this.commitEdit(this.board, author)
+    const composed = parseBoard(withItems(head.board, this.board, group.keys))
+    if (composed.ok) {
+      if (sameItems(head.board, composed.board)) return
+      return this.commitEdit(composed.board, author)
+    }
+    const authors = [author]
+    for (const [other, g] of this.groups) {
+      clearTimeout(g.timer)
+      authors.push(other)
+    }
+    this.groups.clear()
+    if (sameItems(head.board, this.board)) return
+    this.commitEdit(this.board, authors.join(', '))
+  }
+
+  private commitEdit(board: BoardFile, author: string): void {
+    this.head = commitRevision(this.db, this.id, { board, author, how: 'edit' })
     this.board = { ...this.board, revision: this.head }
+    // The commit stored `board` as current; the live board may hold other authors' open edits.
+    if (!sameItems(board, this.board)) saveCurrent(this.db, this.id, this.board)
     this.writeServerMap()
   }
 
