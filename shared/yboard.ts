@@ -84,7 +84,7 @@ export function writeBoard(doc: Y.Doc, before: BoardFile, after: BoardFile, orig
       for (const [key, v] of sectionItems(after, name)) {
         keep.add(key)
         const existing = map.get(key)
-        if (existing && old.get(key) === stable(v)) continue
+        if (old.get(key) === stable(v)) continue
         map.set(key, { pos: existing ? existing.pos : ++max, v: plain(v) })
       }
       for (const key of old.keys()) if (!keep.has(key)) map.delete(key)

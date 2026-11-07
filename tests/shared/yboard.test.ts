@@ -65,6 +65,28 @@ describe('Board <-> Yjs', () => {
     expect(load(doc)).toEqual(after)
   })
 
+  it('does not resurrect an item a peer deleted when the local edit is elsewhere', () => {
+    const b = board2()
+    const a = new Y.Doc()
+    boardToDoc(a, b)
+    const c = new Y.Doc()
+    Y.applyUpdate(c, Y.encodeStateAsUpdate(a))
+    const k = b.trails[1]!.id
+    const ec = clone(b)
+    ec.trails = ec.trails.filter(t => t.id !== k)
+    writeBoard(c, b, ec)
+    // The delete reaches A before A's own edit, which still sees K in its before/after.
+    Y.applyUpdate(a, Y.encodeStateAsUpdate(c))
+    const ea = clone(b)
+    ea.trails[0]!.points = ['A9', 'B9']
+    writeBoard(a, b, ea)
+    sync(a, c)
+    for (const d of [a, c]) {
+      expect(d.getMap('trails').has(k)).toBe(false)
+      expect(load(d).trails.some(t => t.id === k)).toBe(false)
+    }
+  })
+
   it('two docs editing different trails both land', () => {
     const b = board2()
     const a = new Y.Doc()
