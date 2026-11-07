@@ -98,8 +98,12 @@ export function putBoard(db: Db, id: string, text: string, author = AUTHOR): Api
   const parsed = parseBoard(board)
   if (!parsed.ok) return invalid(...parsed.errors)
   return withRoom(db, id, (room) => {
-    const head = getBoard(db, id)!.head
-    if (baseRevision !== undefined && baseRevision !== head) return { status: 409, body: { current: head } }
+    // Commit live edits still grouping first: they are part of the board the base is checked against.
+    const head = room.flush()
+    if (baseRevision !== undefined && baseRevision !== head) {
+      room.dropIfEmpty()
+      return { status: 409, body: { current: head } }
+    }
     return ok({ revision: room.serverWrite(parsed.board, { author, how: HOW }) })
   })
 }

@@ -1,12 +1,15 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as Y from 'yjs'
 import { parseBoard, type BoardFile } from '../../core/schema'
 import { openDb, type Db } from '../../server/db'
 import * as api from '../../server/utils/api'
 import { MAX_BOARD_BYTES } from '../../server/utils/api'
-import { listBoards, listRevisions } from '../../server/utils/boards'
+import { getBoard, listBoards, listRevisions } from '../../server/utils/boards'
+import { openRoom } from '../../server/utils/rooms'
+import { docToBoard, writeBoard } from '../../shared/yboard'
 
 let dir: string
 let db: Db
@@ -76,6 +79,42 @@ describe('put', () => {
     expect(r.body).toEqual({ current: 1 })
     expect(listRevisions(db, id)).toHaveLength(1)
     expect((api.getBoardResponse(db, id).body as { name: string }).name).toBe('Channel board 2')
+  })
+
+  it('with a stale baseRevision on a room with no peers drops the room', () => {
+    const id = importFixture()
+    const room = openRoom(db, id)!
+    expect(api.putBoard(db, id, JSON.stringify({ board: fixture, baseRevision: 0 })).status).toBe(409)
+    expect(openRoom(db, id)).not.toBe(room)
+    openRoom(db, id)!.leave('nobody')
+  })
+
+  it('PUT with base = head during an open group is 409, and the tablet edit survives', () => {
+    vi.useFakeTimers()
+    try {
+      const id = importFixture()
+      const claudeView = getBoard(db, id)!
+      const room = openRoom(db, id)!
+      const doc = new Y.Doc()
+      Y.applyUpdate(doc, Y.encodeStateAsUpdate(room.doc), 'remote')
+      room.join('tablet', 'Tablet', { update: u => Y.applyUpdate(doc, u, 'remote'), awareness: () => {} })
+      doc.on('update', (u: Uint8Array, origin: unknown) => {
+        if (origin !== 'remote') expect(room.receive('tablet', 'Tablet', u)).toEqual({ ok: true })
+      })
+      const before = docToBoard(doc, 0)
+      if (!before.ok) throw new Error(before.errors.join())
+      writeBoard(doc, before.board, { ...before.board, name: 'tablet rename' })
+
+      const r = api.putBoard(db, id, JSON.stringify({ board: claudeView.board, baseRevision: claudeView.head }), 'Claude')
+      expect(r).toEqual({ status: 409, body: { current: 2 } })
+      expect(getBoard(db, id)!.board.name).toBe('tablet rename')
+      expect(listRevisions(db, id).map(x => [x.n, x.how, x.author])).toEqual([[2, 'edit', 'Tablet'], [1, 'import', 'Local']])
+      expect(api.putBoard(db, id, JSON.stringify({ board: { ...claudeView.board, name: 'Claude' }, baseRevision: 2 }), 'Claude').status).toBe(200)
+      room.leave('tablet')
+      doc.destroy()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('without baseRevision writes a revision how api', () => {

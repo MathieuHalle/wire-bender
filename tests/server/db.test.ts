@@ -1,6 +1,7 @@
-import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { threadId } from 'node:worker_threads'
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openDb } from '../../server/db'
@@ -85,5 +86,55 @@ describe('openDb', () => {
     const db = openDb(data)
     expect(tableNames(db)).not.toContain('half')
     db.$client.close()
+  })
+
+  it('a second open of the same folder is refused, naming it, until the first closes', () => {
+    const data = path.join(dir, 'data')
+    const first = openDb(data)
+    expect(readFileSync(path.join(data, 'wirebender.lock'), 'utf8')).toBe(`${process.pid}:${threadId}\n`)
+    expect(() => openDb(data)).toThrow(data)
+    first.$client.close()
+    expect(existsSync(path.join(data, 'wirebender.lock'))).toBe(false)
+    const second = openDb(data)
+    expect(tableNames(second)).toContain('boards')
+    second.$client.close()
+  })
+
+  it('a stale lock (its process is gone) is taken over', () => {
+    const data = path.join(dir, 'data')
+    mkdirSync(data, { recursive: true })
+    writeFileSync(path.join(data, 'wirebender.lock'), '999999999:0\n')
+    const db = openDb(data)
+    expect(readFileSync(path.join(data, 'wirebender.lock'), 'utf8')).toBe(`${process.pid}:${threadId}\n`)
+    db.$client.close()
+  })
+
+  it('another live process holding the lock is refused; another thread of this one (a dev reload) takes over', () => {
+    const data = path.join(dir, 'data')
+    mkdirSync(data, { recursive: true })
+    const lock = path.join(data, 'wirebender.lock')
+    writeFileSync(lock, `${process.ppid}:0\n`)
+    expect(() => openDb(data)).toThrow(/another WireBender server/)
+    expect(readFileSync(lock, 'utf8')).toBe(`${process.ppid}:0\n`)
+    writeFileSync(lock, `${process.pid}:${threadId + 1000}\n`)
+    const db = openDb(data)
+    expect(readFileSync(lock, 'utf8')).toBe(`${process.pid}:${threadId}\n`)
+    db.$client.close()
+  })
+
+  it('closing does not remove a lock someone else has taken over', () => {
+    const data = path.join(dir, 'data')
+    const db = openDb(data)
+    const lock = path.join(data, 'wirebender.lock')
+    writeFileSync(lock, `${process.pid}:${threadId + 1000}\n`)
+    db.$client.close()
+    expect(readFileSync(lock, 'utf8')).toBe(`${process.pid}:${threadId + 1000}\n`)
+  })
+
+  it('a failed open releases the lock', () => {
+    const data = path.join(dir, 'data')
+    openDb(data).$client.close()
+    expect(() => openDb(data, migrationsWith('9999_bad', 'NOT SQL;'))).toThrow()
+    expect(existsSync(path.join(data, 'wirebender.lock'))).toBe(false)
   })
 })

@@ -4,7 +4,8 @@
 // cannot see the client's address. This module stamps every request and WebSocket upgrade
 // that reaches the dev listener with the listener socket's address, signed with a secret
 // made here and passed to the worker in its environment (server/utils/peerAddress.ts).
-// A stamp sent by the client is always overwritten. Production reads the socket directly.
+// A stamp sent by the client is always overwritten. In dev the worker trusts only this
+// stamp, never its own socket (which is the proxy's). Production reads the socket directly.
 import { randomBytes } from 'node:crypto'
 import type { Server } from 'node:http'
 import { defineNuxtModule } from 'nuxt/kit'

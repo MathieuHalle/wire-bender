@@ -59,17 +59,40 @@ export function boardToDoc(doc: Y.Doc, board: BoardFile): void {
   })
 }
 
-/** The board rebuilt from the doc and run through parseBoard. */
+const isObject = (v: unknown): v is Item => typeof v === 'object' && v !== null && !Array.isArray(v)
+
+/** Why a section entry is not `{ pos, v }` stored under its own id, or null when it is. */
+function badEntry(name: SectionName, key: string, e: unknown): string | null {
+  if (!isObject(e) || typeof e.pos !== 'number' || !isObject(e.v)) return `${name}: the entry "${key}" is not { pos, v }`
+  const id = (SECTIONS[name] as (i: Item) => unknown)(e.v)
+  return id === key ? null : `${name}: the entry "${key}" holds the item "${String(id)}"`
+}
+
+/** The board rebuilt from the doc and run through parseBoard. Only the known singles are read. */
 export function docToBoard(doc: Y.Doc, revision: number): ParseResult {
   const raw: Record<string, unknown> = { format: 'wirebender/1', revision }
+  const errors: string[] = []
   for (const name of SECTION_NAMES) {
     const entries = [...doc.getMap<{ pos: number, v: unknown }>(name).entries()]
+    for (const [key, e] of entries) {
+      const bad = badEntry(name, key, e)
+      if (bad) errors.push(bad)
+    }
+    if (errors.length > 0) continue
     entries.sort(([ka, a], [kb, b]) => a.pos - b.pos || (ka < kb ? -1 : ka > kb ? 1 : 0))
     raw[name] = entries.map(([, e]) => e.v)
   }
+  if (errors.length > 0) return { ok: false, errors }
   for (const name of RECORDS) raw[name] = Object.fromEntries(doc.getMap(name).entries())
-  for (const [k, v] of doc.getMap('singles').entries()) raw[k] = v
+  const singles = doc.getMap('singles')
+  for (const name of SINGLES) if (singles.has(name)) raw[name] = singles.get(name)
   return parseBoard(raw)
+}
+
+/** The keys of the singles map that are not one of SINGLES. */
+export function unknownSingles(doc: Y.Doc): string[] {
+  const known = new Set<string>(SINGLES)
+  return [...doc.getMap('singles').keys()].filter(k => !known.has(k))
 }
 
 /** One transaction that writes only the items that differ, and deletes the removed ones. */

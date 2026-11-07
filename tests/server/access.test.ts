@@ -195,8 +195,20 @@ describe('gate', () => {
 describe('peer address through the dev proxy', () => {
   const secret = 'a'.repeat(64)
 
-  it('the socket address wins over any header', () => {
+  it('in production the socket address wins over any header', () => {
     const req: NodeReqLike = { socket: { remoteAddress: '192.168.1.20', localPort: 3002 }, headers: { [PEER_HEADER]: `${secret} 127.0.0.1 3002` } }
+    expect(remoteOf(req, secret, false)).toEqual({ address: '192.168.1.20', port: 3002 })
+  })
+
+  it('dev, socket 127.0.0.1, no stamp → untrusted (a dev worker on TCP sees only the proxy)', () => {
+    const req: NodeReqLike = { socket: { remoteAddress: '127.0.0.1', localPort: 41234 }, headers: {} }
+    expect(remoteOf(req, secret, true)).toEqual({ address: undefined, port: undefined })
+    const forged: NodeReqLike = { socket: { remoteAddress: '127.0.0.1', localPort: 41234 }, headers: { [PEER_HEADER]: `${'b'.repeat(64)} 127.0.0.1 3002` } }
+    expect(remoteOf(forged, secret, true).address).toBeUndefined()
+  })
+
+  it('dev, valid stamp → stamped address, whatever the socket says', () => {
+    const req: NodeReqLike = { socket: { remoteAddress: '127.0.0.1', localPort: 41234 }, headers: { [PEER_HEADER]: `${secret} 192.168.1.20 3002` } }
     expect(remoteOf(req, secret, true)).toEqual({ address: '192.168.1.20', port: 3002 })
   })
 

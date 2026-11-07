@@ -2,7 +2,7 @@ import * as Y from 'yjs'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
 import type { BoardFile } from '~core/schema'
 import { undoState } from '#shared/undoState'
-import { RECORDS, SECTION_NAMES, boardToDoc, docToBoard, stable, writeBoard } from '#shared/yboard'
+import { RECORDS, SECTION_NAMES, boardToDoc, docToBoard, stable, unknownSingles, writeBoard } from '#shared/yboard'
 import type { Db } from '../db'
 import { boardBefore, commitRevision, getBoard, getRevision, listRevisions, recover, saveCurrent } from './boards'
 
@@ -124,6 +124,12 @@ export class Room {
     }
   }
 
+  /** Commit every open live group, so the head revision holds all accepted edits. Returns the head. */
+  flush(): number {
+    this.closeGroups()
+    return this.head
+  }
+
   /** Write a whole board as one revision (API, undo, redo), live to every peer. */
   serverWrite(next: BoardFile, meta: WriteMeta): number {
     this.closeGroups()
@@ -177,6 +183,8 @@ export class Room {
       const foreign = [...touched].filter(name => !CLIENT_TYPES.has(name))
       if (foreign.length > 0) return { ok: false, reason: `the update writes ${foreign.map(n => `"${n}"`).join(', ')}, which is not part of a board` }
       if (copy.store.pendingStructs || copy.store.pendingDs) return { ok: false, reason: 'the update depends on changes the server does not have' }
+      const extra = unknownSingles(copy)
+      if (extra.length > 0) return { ok: false, reason: `the update writes ${extra.map(n => `singles."${n}"`).join(', ')}, which is not part of a board` }
       const parsed = docToBoard(copy, this.head)
       if (!parsed.ok) return { ok: false, reason: parsed.errors.join('; ') }
       return { ok: true, board: parsed.board }
@@ -228,7 +236,8 @@ export class Room {
     for (const author of [...this.groups.keys()]) this.closeGroup(author)
   }
 
-  private dropIfEmpty(): void {
+  /** With no peers left: save, close the open groups and drop the room. */
+  dropIfEmpty(): void {
     if (this.peers.size > 0 || this.closed) return
     this.closeGroups()
     saveCurrent(this.db, this.id, this.board)

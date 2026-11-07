@@ -217,6 +217,31 @@ describe('rooms', () => {
     expect(a.room.doc.share.has('junk')).toBe(false)
   })
 
+  it('a client cannot override a section through the singles map', () => {
+    const a = connect('a')
+    const b = connect('b')
+    const stored = stable(getBoard(db, id)!.board)
+    a.doc.getMap('singles').set('parts', [])
+    expect(a.last).toEqual({ ok: false, reason: expect.stringMatching(/parts/) })
+    expect(stable(getBoard(db, id)!.board)).toBe(stored)
+    expect(b.doc.getMap('singles').has('parts')).toBe(false)
+    expect(a.room.doc.getMap('singles').has('parts')).toBe(false)
+    expect(boardOf(a.room.doc).parts.length).toBe(fixture().parts.length)
+  })
+
+  it('a client cannot store an item under a key that is not its id', () => {
+    const a = connect('a')
+    const b = connect('b')
+    const stored = stable(getBoard(db, id)!.board)
+    const parts = a.doc.getMap<{ pos: number, v: { ref: string } }>('parts')
+    const [key, entry] = [...parts.entries()][0]!
+    parts.set(key, { pos: entry.pos, v: { ...entry.v, ref: 'ZZ9' } })
+    expect(a.last).toEqual({ ok: false, reason: expect.stringMatching(new RegExp(`${key}.*ZZ9|ZZ9.*${key}`)) })
+    expect(stable(getBoard(db, id)!.board)).toBe(stored)
+    expect((b.doc.getMap<{ v: { ref: string } }>('parts').get(key))!.v.ref).toBe(key)
+    expect((a.room.doc.getMap<{ v: { ref: string } }>('parts').get(key))!.v.ref).toBe(key)
+  })
+
   it('leaving closes that author\'s group, and the last leave drops the room', () => {
     vi.useFakeTimers()
     const a = connect('a', 'Alice')

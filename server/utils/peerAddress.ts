@@ -2,8 +2,9 @@
 //
 // In production the request's socket is the client's own TCP connection, and its address
 // is all that is read. Under `nuxt dev`, Nitro runs the server in a worker reached over a
-// unix socket, through a proxy in the dev process; the worker's socket then has no
-// address. So the dev process (modules/peer-address.ts) stamps each request and upgrade
+// unix socket (or, in some setups, a loopback TCP port), through a proxy in the dev process;
+// the worker's socket then has no address, or the proxy's 127.0.0.1. So in dev the socket
+// is never read: the dev process (modules/peer-address.ts) stamps each request and upgrade
 // with the address of *its* socket, signed with a per-run secret that only it and its
 // worker know, replacing whatever the client sent under that name. Nothing a client can
 // set (X-Forwarded-For, Host, this header without the secret) changes the result.
@@ -35,17 +36,21 @@ function sameSecret(a: string, b: string): boolean {
 }
 
 /**
- * The socket's address, or, on a socket with none (the dev worker), the dev process's
- * signed stamp. A stamp is only ever read in a dev build (`import.meta.dev`): a production
- * server never accepts one, whatever its environment holds.
+ * In production (`allowStamp` false), the socket's address. In a dev build
+ * (`import.meta.dev`), only the dev process's signed stamp: the worker's socket is the
+ * proxy's, so with no valid stamp the address is unknown and nothing is trusted. A
+ * production server never accepts a stamp, whatever its environment holds.
  */
 export function remoteOf(req: NodeReqLike, secret: string | undefined = process.env[PEER_SECRET_ENV], allowStamp: boolean = import.meta.dev === true): Remote {
-  const socket = req.socket
-  if (socket?.remoteAddress) return { address: socket.remoteAddress, port: socket.localPort }
+  const unknown = { address: undefined, port: undefined }
+  if (!allowStamp) {
+    const socket = req.socket
+    return socket?.remoteAddress ? { address: socket.remoteAddress, port: socket.localPort } : unknown
+  }
   const stamp = req.headers[PEER_HEADER]
-  if (!allowStamp || !secret || secret.length < 32 || typeof stamp !== 'string') return { address: undefined, port: undefined }
+  if (!secret || secret.length < 32 || typeof stamp !== 'string') return unknown
   const [given, address, port] = stamp.split(' ')
-  if (!given || !address || !sameSecret(given, secret)) return { address: undefined, port: undefined }
+  if (!given || !address || !sameSecret(given, secret)) return unknown
   const n = Number(port)
   return { address, port: Number.isInteger(n) && n > 0 ? n : undefined }
 }
