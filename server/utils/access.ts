@@ -4,7 +4,7 @@
 //
 // Pairing codes and wrong-code counters live in memory; a restart drops them.
 import { createHash, randomBytes, randomInt, randomUUID } from 'node:crypto'
-import { networkInterfaces } from 'node:os'
+import { hostname, networkInterfaces } from 'node:os'
 import { eq } from 'drizzle-orm'
 import { useDb, type Db } from '../db'
 import { devices } from '../db/schema'
@@ -84,6 +84,57 @@ export function portOf(source: TrustSource): number | undefined {
   return req ? remoteOf(req).port : undefined
 }
 
+/** `Host` as hostname (lowercase, IPv6 without brackets) and port; null if malformed. */
+function parseHost(host: string): { name: string, port: number | undefined } | null {
+  const m = /^\[([0-9a-f:.]+)\](?::(\d{1,5}))?$/i.exec(host) ?? /^([^:[\]\s/@]+)(?::(\d{1,5}))?$/.exec(host)
+  if (!m) return null
+  return { name: m[1]!.toLowerCase(), port: m[2] === undefined ? undefined : Number(m[2]) }
+}
+
+/** The names this machine may be reached by: localhost, its hostname (and `.local`), its own addresses. */
+function ownNames(): Set<string> {
+  const names = new Set(['localhost', '127.0.0.1', '::1'])
+  const host = hostname().toLowerCase()
+  if (host) {
+    names.add(host)
+    names.add(host.endsWith('.local') ? host.slice(0, -'.local'.length) : `${host}.local`)
+  }
+  for (const list of Object.values(networkInterfaces())) {
+    for (const i of list ?? []) names.add(i.address.toLowerCase())
+  }
+  return names
+}
+
+/**
+ * 403 for a request that names another site, else null. These checks only ever deny;
+ * trust is decided by `trust()` alone. They stop DNS rebinding (a page on evil.example
+ * whose name now points at this machine: its Host is evil.example) and cross-site writes
+ * (a page elsewhere posting to, or opening a live socket on, this server: its Origin is
+ * another site). A missing Origin is allowed: curl, the CLI and AI clients send none.
+ */
+export function refusal(source: TrustSource): 403 | null {
+  const req = nodeReq(source)
+  if (!req) return 403
+  const hostHeader = req.headers.host
+  const host = typeof hostHeader === 'string' ? parseHost(hostHeader) : null
+  if (!host || !ownNames().has(host.name)) return 403
+  if (host.port !== undefined && host.port !== remoteOf(req).port) return 403
+
+  const method = (req.method ?? 'GET').toUpperCase()
+  const writes = req.headers.upgrade !== undefined || (method !== 'GET' && method !== 'HEAD')
+  const origin = req.headers.origin
+  if (writes && origin !== undefined) {
+    let originHost: string
+    try {
+      originHost = new URL(String(origin)).host.toLowerCase()
+    } catch {
+      return 403
+    }
+    if (originHost === '' || originHost !== String(hostHeader).toLowerCase()) return 403
+  }
+  return null
+}
+
 export type Gate = 'pass' | 'deny' | 'redirect'
 
 /** Paths an unpaired device may load: the pairing page and the app's own assets. */
@@ -147,8 +198,9 @@ export function completePairing(code: unknown, name: unknown, remote: string | u
   if (seen && now - seen.since > PAIR_TTL_MS) wrongBy.delete(key)
   if ((wrongBy.get(key)?.count ?? 0) >= MAX_WRONG_PER_ADDRESS) return { ok: false, status: 429 }
 
-  const deviceName = typeof name === 'string' ? name.replace(/\p{Cc}/gu, '').trim() : ''
-  if (deviceName === '' || deviceName.length > MAX_NAME) return { ok: false, status: 400 }
+  // Control and format characters (zero-width, bidi overrides) are dropped; "This computer" is the machine's own name.
+  const deviceName = typeof name === 'string' ? name.replace(/[\p{Cc}\p{Cf}]/gu, '').trim() : ''
+  if (deviceName === '' || deviceName.length > MAX_NAME || deviceName.toLowerCase() === THIS_COMPUTER.toLowerCase()) return { ok: false, status: 400 }
 
   if (current && now > current.expiresAt) current = null
   if (!current || typeof code !== 'string' || code !== current.code) {

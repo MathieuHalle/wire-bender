@@ -9,7 +9,7 @@ import { randomBytes } from 'node:crypto'
 import type { Server } from 'node:http'
 import { defineNuxtModule } from 'nuxt/kit'
 import { checkMode } from '../server/utils/access'
-import { PEER_SECRET_ENV, stampPeer } from '../server/utils/peerAddress'
+import { PEER_SECRET_ENV, stampPeer, stampSecret } from '../server/utils/peerAddress'
 
 const STAMPED = Symbol.for('wirebender.peer-stamped')
 const SECRET = Symbol.for('wirebender.peer-secret')
@@ -29,9 +29,24 @@ export default defineNuxtModule({
       const s = server as Server & { [STAMPED]?: boolean }
       if (s[STAMPED]) return
       s[STAMPED] = true
+      const once = new Set<string>()
+      const warn = (m: string) => once.has(m) || (once.add(m), console.warn(`[wirebender] ${m}`))
+      const NOT_TCP = 'the dev listener is not on TCP: client addresses are unknown, so no request is trusted (not even this computer).'
+      if (!stampSecret(s.address(), secret)) warn(NOT_TCP)
+      /**
+       * The stamp is only as good as this listener owning the clients' own TCP sockets.
+       * Checked per request: on a unix socket, or a connection with no address, nothing is
+       * stamped and a client's stamp is still dropped, so nothing is trusted.
+       */
+      const stamp = (req: Parameters<typeof stampPeer>[0]) => {
+        const use = stampSecret(s.address(), secret)
+        if (!use) warn(NOT_TCP)
+        else if (!req.socket?.remoteAddress) warn('a dev connection has no client address: it is not trusted.')
+        stampPeer(req, use)
+      }
       // First in line, before Nuxt's own handlers forward the request to the worker.
-      s.prependListener('request', req => stampPeer(req, secret))
-      s.prependListener('upgrade', req => stampPeer(req, secret))
+      s.prependListener('request', stamp)
+      s.prependListener('upgrade', stamp)
     })
   }
 })

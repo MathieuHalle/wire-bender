@@ -2,7 +2,7 @@ import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import { useDb } from '../../../db'
-import { onUnpair, trust, type TrustSource } from '../../../utils/access'
+import { onUnpair, refusal, trust, type TrustSource } from '../../../utils/access'
 import { openRoom, type Received, type Room } from '../../../utils/rooms'
 import { wsBoardId } from '../../../utils/wsBoardId'
 
@@ -66,15 +66,16 @@ function leave(peer: WsPeer): void {
 
 /** Join the peer to its board's room and start the sync; an unknown or malformed id closes it with 4404. */
 function join(peer: WsPeer): void {
+  // Trust first: an untrusted peer learns nothing, not even whether the board exists.
+  const t = trustOf(peer)
+  if (!t.ok) {
+    peer.close(CLOSE_UNTRUSTED, 'not paired')
+    return
+  }
   const id = wsBoardId(peer.request.url)
   const room = id === null ? null : openRoom(useDb(), id)
   if (!room) {
     peer.close(CLOSE_NO_BOARD, 'no such board')
-    return
-  }
-  const t = trustOf(peer)
-  if (!t.ok) {
-    peer.close(CLOSE_UNTRUSTED, 'not paired')
     return
   }
   const author = t.author
@@ -117,8 +118,11 @@ function handle(peer: WsPeer, room: Room, author: string, data: Uint8Array): Rec
 }
 
 export default defineWebSocketHandler({
-  // Only the machine itself and paired devices may connect (the access middleware does not see upgrades).
+  // The access middleware does not see upgrades: the same checks run here. A socket from
+  // another site (rebinding Host, foreign Origin) is refused, then only the machine itself
+  // and paired devices may connect.
   upgrade(request) {
+    if (refusal(request as TrustSource)) return new Response('This request names another site.', { status: 403 })
     if (!trust(request as TrustSource).ok) return new Response('This device is not paired.', { status: 401 })
   },
 

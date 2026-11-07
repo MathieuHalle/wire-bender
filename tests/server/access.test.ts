@@ -4,9 +4,9 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openDb, type Db } from '../../server/db'
 import {
-  checkMode, completePairing, gate, isLoopback, listDevices, MODE_ERROR, PAIR_TTL_MS, resetPairing, startPairing, trust, unpair
+  checkMode, completePairing, gate, isLoopback, listDevices, MODE_ERROR, PAIR_TTL_MS, refusal, resetPairing, startPairing, trust, unpair
 } from '../../server/utils/access'
-import { PEER_HEADER, remoteOf, stampPeer, type NodeReqLike } from '../../server/utils/peerAddress'
+import { PEER_HEADER, remoteOf, stampPeer, stampSecret, type NodeReqLike } from '../../server/utils/peerAddress'
 
 let dir: string
 let db: Db
@@ -22,10 +22,18 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-/** A fake h3 event: only the Node request (socket and headers) is read. */
-function event(remoteAddress: string | undefined, headers: Record<string, string> = {}) {
-  const req: NodeReqLike = { socket: { remoteAddress, localPort: 3002 }, headers }
+/** A fake h3 event: only the Node request (method, socket and headers) is read. */
+function event(remoteAddress: string | undefined, headers: Record<string, string> = {}, method = 'GET') {
+  const req: NodeReqLike = { method, socket: { remoteAddress, localPort: 3002 }, headers }
   return { node: { req } }
+}
+
+/** The machine's first non-internal IPv4 address (the tests need one). */
+function lanIp(): string {
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const i of list ?? []) if (i.family === 'IPv4' && !i.internal) return i.address
+  }
+  throw new Error('no LAN address')
 }
 
 /** The `wb_device` token from a Set-Cookie value. */
@@ -146,7 +154,10 @@ describe('pairing', () => {
 
   it('a bad device name is 400 and does not use the code', () => {
     const { code } = startPairing(3002)
-    for (const name of ['', '   ', 'x'.repeat(41)]) expect(completePairing(code, name, '192.168.1.20', db)).toEqual({ ok: false, status: 400 })
+    for (const name of ['', '   ', 'x'.repeat(41), 'This computer', '  this COMPUTER ', 'This\u200b computer'.replace('\u200b', ''), '\u200b\u202e']) {
+      expect(completePairing(code, name, '192.168.1.20', db), JSON.stringify(name)).toEqual({ ok: false, status: 400 })
+    }
+    expect(completePairing(code, 'This\u200b computer', '192.168.1.20', db)).toEqual({ ok: false, status: 400 })
     expect(completePairing(code, '  iPad  ', '192.168.1.20', db)).toMatchObject({ ok: true })
     expect(listDevices(db)[0]!.name).toBe('iPad')
   })
@@ -186,16 +197,22 @@ describe('peer address through the dev proxy', () => {
 
   it('the socket address wins over any header', () => {
     const req: NodeReqLike = { socket: { remoteAddress: '192.168.1.20', localPort: 3002 }, headers: { [PEER_HEADER]: `${secret} 127.0.0.1 3002` } }
-    expect(remoteOf(req, secret)).toEqual({ address: '192.168.1.20', port: 3002 })
+    expect(remoteOf(req, secret, true)).toEqual({ address: '192.168.1.20', port: 3002 })
+  })
+
+  it('outside dev a stamp is never accepted, even with the secret', () => {
+    const req: NodeReqLike = { socket: {}, headers: { [PEER_HEADER]: `${secret} 127.0.0.1 3002` } }
+    expect(remoteOf(req, secret, false).address).toBeUndefined()
+    expect(remoteOf(req, secret).address).toBeUndefined()
   })
 
   it('without a socket address, only a header stamped with the secret counts', () => {
     const bare = (h: Record<string, string>): NodeReqLike => ({ socket: {}, headers: h })
-    expect(remoteOf(bare({}), secret).address).toBeUndefined()
-    expect(remoteOf(bare({ 'x-forwarded-for': '127.0.0.1' }), secret).address).toBeUndefined()
-    expect(remoteOf(bare({ [PEER_HEADER]: `${'b'.repeat(64)} 127.0.0.1 3002` }), secret).address).toBeUndefined()
-    expect(remoteOf(bare({ [PEER_HEADER]: `${secret} 127.0.0.1 3002` }), undefined).address).toBeUndefined()
-    expect(remoteOf(bare({ [PEER_HEADER]: `${secret} 127.0.0.1 3002` }), secret)).toEqual({ address: '127.0.0.1', port: 3002 })
+    expect(remoteOf(bare({}), secret, true).address).toBeUndefined()
+    expect(remoteOf(bare({ 'x-forwarded-for': '127.0.0.1' }), secret, true).address).toBeUndefined()
+    expect(remoteOf(bare({ [PEER_HEADER]: `${'b'.repeat(64)} 127.0.0.1 3002` }), secret, true).address).toBeUndefined()
+    expect(remoteOf(bare({ [PEER_HEADER]: `${secret} 127.0.0.1 3002` }), undefined, true).address).toBeUndefined()
+    expect(remoteOf(bare({ [PEER_HEADER]: `${secret} 127.0.0.1 3002` }), secret, true)).toEqual({ address: '127.0.0.1', port: 3002 })
   })
 
   it('stamping overwrites what the client sent', () => {
@@ -203,6 +220,68 @@ describe('peer address through the dev proxy', () => {
     stampPeer(req, secret)
     expect(req.headers[PEER_HEADER]).toBe(`${secret} 192.168.1.20 3002`)
     const viaProxy: NodeReqLike = { socket: {}, headers: req.headers }
-    expect(remoteOf(viaProxy, secret).address).toBe('192.168.1.20')
+    expect(remoteOf(viaProxy, secret, true).address).toBe('192.168.1.20')
+  })
+
+  it('refuses to stamp a connection without a socket address: the client\'s stamp is dropped', () => {
+    const req = { socket: {}, headers: { [PEER_HEADER]: `${secret} 127.0.0.1 3002` } as Record<string, string | string[] | undefined> }
+    stampPeer(req, secret)
+    expect(req.headers[PEER_HEADER]).toBeUndefined()
+    expect(remoteOf({ socket: {}, headers: req.headers }, secret, true).address).toBeUndefined()
+  })
+
+  it('a listener that is not on TCP stamps nothing: the client\'s stamp is dropped', () => {
+    expect(stampSecret('/tmp/nuxt.sock', secret)).toBeNull()
+    expect(stampSecret(null, secret)).toBeNull()
+    expect(stampSecret({ address: '::', family: 'IPv6', port: 3002 }, secret)).toBe(secret)
+    const req = { socket: { remoteAddress: '192.168.1.20', localPort: 3002 }, headers: { [PEER_HEADER]: `${secret} 127.0.0.1 3002` } as Record<string, string | string[] | undefined> }
+    stampPeer(req, stampSecret('/tmp/nuxt.sock', secret))
+    expect(req.headers[PEER_HEADER]).toBeUndefined()
+  })
+})
+
+describe('refusal: Host and Origin checks only deny', () => {
+  it('rebinding Host from loopback is 403', () => {
+    expect(refusal(event('127.0.0.1', { host: 'evil.example:3002' }))).toBe(403)
+    expect(refusal(event('127.0.0.1', { host: 'evil.example' }))).toBe(403)
+    expect(refusal(event('127.0.0.1', {}))).toBe(403)
+  })
+
+  it('a known host on another port is 403', () => {
+    expect(refusal(event('127.0.0.1', { host: 'localhost:3999' }))).toBe(403)
+  })
+
+  it('cross-origin POST /api/boards is 403', () => {
+    expect(refusal(event('127.0.0.1', { host: 'localhost:3002', origin: 'http://evil.example' }, 'POST'))).toBe(403)
+    expect(refusal(event('127.0.0.1', { host: 'localhost:3002', origin: 'null' }, 'POST'))).toBe(403)
+    expect(refusal(event('127.0.0.1', { host: 'localhost:3002', origin: 'http://localhost:3003' }, 'DELETE'))).toBe(403)
+  })
+
+  it('cross-origin WebSocket upgrade is refused', () => {
+    const upgrade = { _req: { method: 'GET', socket: { remoteAddress: '127.0.0.1', localPort: 3002 }, headers: { host: 'localhost:3002', upgrade: 'websocket', origin: 'http://evil.example' } } }
+    expect(refusal(upgrade)).toBe(403)
+    const same = { _req: { ...upgrade._req, headers: { ...upgrade._req.headers, origin: 'http://localhost:3002' } } }
+    expect(refusal(same)).toBeNull()
+  })
+
+  it('same-origin LAN-IP Host from a paired device is ok', () => {
+    const cookie = pair()
+    const ip = lanIp()
+    const req = event('192.168.1.20', { host: `${ip}:3002`, origin: `http://${ip}:3002`, cookie: `wb_device=${token(cookie)}` }, 'POST')
+    expect(refusal(req)).toBeNull()
+    expect(trust(req, db).ok).toBe(true)
+  })
+
+  it('loopback with Host localhost and no Origin is ok', () => {
+    expect(refusal(event('127.0.0.1', { host: 'localhost:3002' }))).toBeNull()
+    expect(refusal(event('127.0.0.1', { host: 'localhost:3002' }, 'POST'))).toBeNull()
+    expect(refusal(event('127.0.0.1', { host: '127.0.0.1:3002' }))).toBeNull()
+    expect(refusal(event('::1', { host: '[::1]:3002' }))).toBeNull()
+    expect(refusal(event('127.0.0.1', { host: `${os.hostname()}:3002` }))).toBeNull()
+    expect(refusal(event('127.0.0.1', { host: 'LOCALHOST' }))).toBeNull()
+  })
+
+  it('a cross-origin GET is allowed (it reads nothing it could not already)', () => {
+    expect(refusal(event('127.0.0.1', { host: 'localhost:3002', origin: 'http://evil.example' }))).toBeNull()
   })
 })
