@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { parseHole, tryParseHole, type Hole } from '~core/holes'
-import type { Side } from '~core/schema'
+import type { BoardFile, Side } from '~core/schema'
+import { PREVIEW_TITLE, previewBanner, type RevisionRow } from '~/utils/history'
 import { runCheck, type Finding } from '~core/check'
 import { tagNets, type Tag } from '~core/scene3d'
 import { placePart } from '~core/footprints'
@@ -13,14 +14,56 @@ import { ALL_LAYERS } from '~/utils/layers'
 const route = useRoute()
 const id = computed(() => String(route.params.id))
 const live = useLiveBoard(id)
-const { board, status, readOnly, missing, revision, canUndo, canRedo, peers, undo, redo } = live
+const { status, readOnly, missing, revision, canUndo, canRedo, peers, undo, redo } = live
+
+/**
+ * A past revision on show (History tab): its row, and its board once fetched. While it is
+ * set the canvas, findings and 3D view show it, and editing is locked.
+ */
+const previewRow = ref<RevisionRow | null>(null)
+const previewBoard = shallowRef<BoardFile | null>(null)
+/** Shown on the canvas: the previewed revision once it has arrived, else the live board. */
+const board = computed(() => (previewRow.value ? previewBoard.value : null) ?? live.board.value)
+const previewing = computed(() => previewRow.value !== null)
+const toast = useToast()
+watch(previewRow, async (row) => {
+  previewBoard.value = null
+  if (!row) return
+  try {
+    const b = await $fetch<BoardFile>(`/api/boards/${encodeURIComponent(id.value)}/revisions/${row.n}`)
+    if (previewRow.value?.n === row.n) previewBoard.value = b
+  } catch {
+    if (previewRow.value?.n === row.n) {
+      previewRow.value = null
+      toast.add({ title: `Revision #${row.n} could not be loaded.`, color: 'warning', icon: 'i-lucide-ban' })
+    }
+  }
+})
+watch(id, () => (previewRow.value = null))
+
+const restoring = ref(false)
+async function restore() {
+  const row = previewRow.value
+  if (!row || restoring.value || readOnly.value) return
+  restoring.value = true
+  try {
+    await $fetch(`/api/boards/${encodeURIComponent(id.value)}/revisions/${row.n}/restore`, { method: 'POST' })
+    previewRow.value = null
+  } catch {
+    toast.add({ title: `Restoring #${row.n} failed.`, color: 'warning', icon: 'i-lucide-ban' })
+  } finally {
+    restoring.value = false
+  }
+}
 /**
  * What the canvas was last framed on: both sides, one side (key F flips), or the 3D view
  * (key 3, look only). In 2D a view is a camera move; the user can pan away from it.
  */
 const view = ref<View>('both')
 /** Why editing is off, if it is: a board that is not live, or the 3D view (look only). */
-const lockedTitle = computed(() => (readOnly.value ? PAUSED_TITLE : view.value === '3d' ? LOCKED_TITLE : null))
+const lockedTitle = computed(() => (previewing.value
+  ? PREVIEW_TITLE
+  : readOnly.value ? PAUSED_TITLE : view.value === '3d' ? LOCKED_TITLE : null))
 const { tool, drawing, onHoleClick, onSegmentClick, addJoint, endDrawing } = useTools(live, { locked: () => lockedTitle.value !== null })
 /** The 2D view the 3D one was entered from; key 3 goes back to it. */
 const last2d = ref<Exclude<View, '3d'>>('both')
@@ -269,6 +312,31 @@ const sideTitle = (s: Side) => (s === 'top'
       </template>
     </UAlert>
     <UAlert
+      v-else-if="previewRow"
+      class="mx-4 mt-3 shrink-0"
+      color="info"
+      variant="subtle"
+      icon="i-lucide-history"
+      :title="previewBanner(previewRow)"
+    >
+      <template #actions>
+        <UButton
+          size="xs"
+          label="Restore"
+          :loading="restoring"
+          :disabled="readOnly || !previewBoard"
+          :title="readOnly ? PAUSED_TITLE : undefined"
+          @click="restore"
+        />
+        <UButton
+          size="xs"
+          variant="outline"
+          label="Back to current"
+          @click="previewRow = null"
+        />
+      </template>
+    </UAlert>
+    <UAlert
       v-else-if="board && readOnly"
       class="mx-4 mt-3 shrink-0"
       color="warning"
@@ -408,6 +476,13 @@ const sideTitle = (s: Side) => (s === 'top'
             :locked-title="lockedTitle ?? undefined"
             @undo="undo"
             @redo="redo"
+          />
+        </template>
+        <template #history>
+          <HistoryPanel
+            v-model:selected="previewRow"
+            :board-id="id"
+            :revision="revision"
           />
         </template>
       </SidePanel>

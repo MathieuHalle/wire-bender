@@ -2,7 +2,9 @@
 //
 // - Every (re)connect builds a fresh Y.Doc and provider: a room the server reopened has a
 //   new doc, and an old client doc would carry stale history the server rejects. A copy
-//   that lost its connection is read-only (no edit is queued), so nothing local is lost.
+//   that lost its connection is read-only (no edit is queued); edits sent in the instant a
+//   connection drops can be lost, since the fresh doc on reconnect starts from the server's
+//   (ruling R6).
 // - Close 4404 (no such board) stops reconnecting. Close 4400 (a rejected update) shows
 //   the reason, then reconnects fresh like any other close.
 // - `apply` writes only the items that differ (writeBoard). Remote changes re-read the
@@ -163,6 +165,7 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
   }
 
   async function call(step: 'undo' | 'redo') {
+    if (readOnly.value) return
     try {
       await deps.post(`/api/boards/${encodeURIComponent(id.value)}/${step}`)
     } catch (e) {
@@ -183,6 +186,9 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
     stopWatch = watch(id, () => {
       board.value = null
       missing.value = false
+      revision.value = 0
+      canUndo.value = false
+      canRedo.value = false
       failures = 0
       if (retry) clearTimeout(retry)
       open()

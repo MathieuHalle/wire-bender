@@ -7,7 +7,8 @@ export const PANEL_KEY = 'wirebender:sidepanel'
 /** The tabs, in rail order. Add a tab here (and its slot in the page). */
 export const PANEL_TABS = [
   { id: 'findings', label: 'Findings', icon: 'i-lucide-list-checks' },
-  { id: 'edit', label: 'Edit', icon: 'i-lucide-pencil-ruler' }
+  { id: 'edit', label: 'Edit', icon: 'i-lucide-pencil-ruler' },
+  { id: 'history', label: 'History', icon: 'i-lucide-history' }
 ] as const
 
 export type PanelTab = (typeof PANEL_TABS)[number]['id']
