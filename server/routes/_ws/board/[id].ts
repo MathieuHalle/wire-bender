@@ -3,6 +3,7 @@ import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import { useDb } from '../../../db'
 import { openRoom, type Received, type Room } from '../../../utils/rooms'
+import { wsBoardId } from '../../../utils/wsBoardId'
 
 /** The parts of a crossws peer this handler uses. */
 interface WsPeer {
@@ -16,19 +17,14 @@ interface WsPeer {
 const MESSAGE_SYNC = 0
 const MESSAGE_AWARENESS = 1
 
-/** Close codes: a rejected or malformed message, and an unknown board. */
+/** Close codes: a rejected or malformed message, an unknown or malformed board id, and a server error. */
 const CLOSE_REJECTED = 4400
 const CLOSE_NO_BOARD = 4404
+const CLOSE_SERVER_ERROR = 1011
 
 /** Who a peer's edits are recorded as. Task 7 replaces this with the access check. */
 function authorFor(_peer: WsPeer): string {
   return 'Local'
-}
-
-/** The board id is the last path segment of `/_ws/board/<id>`. */
-function boardId(peer: WsPeer): string {
-  const path = new URL(peer.request.url, 'http://localhost').pathname
-  return decodeURIComponent(path.split('/').filter(Boolean).at(-1) ?? '')
 }
 
 /** WebSocket close reasons are at most 123 bytes. */
@@ -50,7 +46,37 @@ function leave(peer: WsPeer): void {
   const live = joined.get(peer.id)
   if (!live) return
   joined.delete(peer.id)
-  live.room.leave(peer.id)
+  try {
+    live.room.leave(peer.id)
+  } catch (e) {
+    console.error('[ws] could not close a peer\'s edits', e)
+  }
+}
+
+/** Join the peer to its board's room and start the sync; an unknown or malformed id closes it with 4404. */
+function join(peer: WsPeer): void {
+  const id = wsBoardId(peer.request.url)
+  const room = id === null ? null : openRoom(useDb(), id)
+  if (!room) {
+    peer.close(CLOSE_NO_BOARD, 'no such board')
+    return
+  }
+  const author = authorFor(peer)
+  joined.set(peer.id, { room, author })
+  room.join(peer.id, author, {
+    update: u => peer.send(message((e) => {
+      encoding.writeVarUint(e, MESSAGE_SYNC)
+      syncProtocol.writeUpdate(e, u)
+    })),
+    awareness: u => peer.send(message((e) => {
+      encoding.writeVarUint(e, MESSAGE_AWARENESS)
+      encoding.writeVarUint8Array(e, u)
+    }))
+  })
+  peer.send(message((e) => {
+    encoding.writeVarUint(e, MESSAGE_SYNC)
+    syncProtocol.writeSyncStep1(e, room.doc)
+  }))
 }
 
 /** One y-websocket message from a peer: sync step 1 is answered, step 2 and updates are validated, awareness is relayed. */
@@ -76,27 +102,13 @@ function handle(peer: WsPeer, room: Room, author: string, data: Uint8Array): Rec
 
 export default defineWebSocketHandler({
   open(peer) {
-    const room = openRoom(useDb(), boardId(peer))
-    if (!room) {
-      peer.close(CLOSE_NO_BOARD, 'no such board')
-      return
+    try {
+      join(peer)
+    } catch (e) {
+      console.error('[ws] could not open a board', e)
+      leave(peer)
+      peer.close(CLOSE_SERVER_ERROR, 'server error')
     }
-    const author = authorFor(peer)
-    joined.set(peer.id, { room, author })
-    room.join(peer.id, author, {
-      update: u => peer.send(message((e) => {
-        encoding.writeVarUint(e, MESSAGE_SYNC)
-        syncProtocol.writeUpdate(e, u)
-      })),
-      awareness: u => peer.send(message((e) => {
-        encoding.writeVarUint(e, MESSAGE_AWARENESS)
-        encoding.writeVarUint8Array(e, u)
-      }))
-    })
-    peer.send(message((e) => {
-      encoding.writeVarUint(e, MESSAGE_SYNC)
-      syncProtocol.writeSyncStep1(e, room.doc)
-    }))
   },
 
   message(peer, msg) {

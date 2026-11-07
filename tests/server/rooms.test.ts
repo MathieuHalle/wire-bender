@@ -6,9 +6,9 @@ import * as Y from 'yjs'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate } from 'y-protocols/awareness'
 import { parseBoard, type BoardFile } from '../../core/schema'
 import { openDb, type Db } from '../../server/db'
-import { createBoard, getBoard, listRevisions } from '../../server/utils/boards'
+import { createBoard, getBoard, getRevision, listRevisions } from '../../server/utils/boards'
 import { GROUP_IDLE_MS, openRoom, type Room } from '../../server/utils/rooms'
-import { docToBoard, writeBoard } from '../../shared/yboard'
+import { docToBoard, stable, writeBoard } from '../../shared/yboard'
 
 let dir: string
 let db: Db
@@ -117,6 +117,15 @@ describe('rooms', () => {
     expect(a.last!.reason).toMatch(/server/)
     expect(b.doc.getMap('server').get('canUndo')).toBe(false)
     expect(a.room.doc.getMap('server').get('canUndo')).toBe(false)
+
+    const c = connect('c')
+    c.doc.getMap('server').delete('revision')
+    expect(c.last!.ok).toBe(false)
+    const d = connect('d')
+    d.doc.getMap('server').set('nested', new Y.Map())
+    expect(d.last!.ok).toBe(false)
+    expect(b.doc.getMap('server').toJSON()).toEqual({ revision: 1, canUndo: false, canRedo: false })
+    expect(a.room.doc.getMap('server').toJSON()).toEqual({ revision: 1, canUndo: false, canRedo: false })
   })
 
   it('updates group per author until 2 s idle', () => {
@@ -135,6 +144,8 @@ describe('rooms', () => {
     expect(revs.map(r => [r.n, r.how, r.author])).toEqual([[2, 'edit', 'Alice'], [1, 'create', 'Local']])
     expect(b.doc.getMap('server').toJSON()).toEqual({ revision: 2, canUndo: true, canRedo: false })
 
+    // Interleaved: Alice's group closes last-but-one and already holds all of Bob's edits,
+    // so Bob's closing group would duplicate it and commits nothing.
     edit(a, moveT7('L3'))
     vi.advanceTimersByTime(300)
     edit(b, b => ({ ...b, name: 'renamed by Bob' }))
@@ -143,7 +154,67 @@ describe('rooms', () => {
     vi.advanceTimersByTime(300)
     edit(b, b => ({ ...b, name: 'renamed again' }))
     vi.advanceTimersByTime(GROUP_IDLE_MS)
-    expect(listRevisions(db, id).slice(0, 2).map(r => [r.n, r.how, r.author])).toEqual([[4, 'edit', 'Bob'], [3, 'edit', 'Alice']])
+    expect(listRevisions(db, id).slice(0, 2).map(r => [r.n, r.how, r.author])).toEqual([[3, 'edit', 'Alice'], [2, 'edit', 'Alice']])
+    expect(b.doc.getMap('server').get('revision')).toBe(3)
+
+    // Interleaved, with Bob still editing after Alice's group closed: two revisions.
+    edit(a, moveT7('L3'))
+    vi.advanceTimersByTime(1000)
+    edit(b, b => ({ ...b, name: 'renamed a third time' }))
+    vi.advanceTimersByTime(1500)
+    edit(b, b => ({ ...b, name: 'renamed a fourth time' }))
+    vi.advanceTimersByTime(GROUP_IDLE_MS)
+    const last = listRevisions(db, id)
+    expect(last.slice(0, 2).map(r => [r.n, r.how, r.author])).toEqual([[5, 'edit', 'Bob'], [4, 'edit', 'Alice']])
+    const boards = last.map(r => stable({ ...getRevision(db, id, r.n)!.board, revision: 0 }))
+    expect(new Set(boards).size).toBe(boards.length)
+  })
+
+  it('a group whose edits cancel out commits nothing', () => {
+    vi.useFakeTimers()
+    const a = connect('a')
+    const b = connect('b')
+    edit(a, moveT7('L3'))
+    vi.advanceTimersByTime(500)
+    edit(a, moveT7('M3'))
+    vi.advanceTimersByTime(GROUP_IDLE_MS)
+    expect(listRevisions(db, id)).toHaveLength(1)
+    expect(b.doc.getMap('server').toJSON()).toEqual({ revision: 1, canUndo: false, canRedo: false })
+    edit(a, moveT7('L3'))
+    edit(a, moveT7('M3'))
+    leave(a)
+    expect(listRevisions(db, id)).toHaveLength(1)
+  })
+
+  it('a peer whose link throws does not affect the room', () => {
+    const a = connect('a')
+    const room = a.room
+    room.join('broken', 'Local', {
+      update: () => {
+        throw new Error('socket gone')
+      },
+      awareness: () => {
+        throw new Error('socket gone')
+      }
+    })
+    const b = connect('b')
+    edit(a, moveT7('L3'))
+    expect(a.last).toEqual({ ok: true })
+    expect(t7(boardOf(b.doc))).toEqual(['K3', 'L3'])
+    expect(t7(getBoard(db, id)!.board)).toEqual(['K3', 'L3'])
+    a.awareness.setLocalState({ user: { name: 'A' } })
+    expect(room.receiveAwareness('a', encodeAwarenessUpdate(a.awareness, [a.doc.clientID]))).toEqual({ ok: true })
+    expect(b.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'A' } })
+    room.leave('broken')
+  })
+
+  it('a client cannot write outside the board\'s maps', () => {
+    const a = connect('a')
+    const b = connect('b')
+    a.doc.getMap('junk').set('x', 1)
+    expect(a.last).toEqual({ ok: false, reason: expect.stringMatching(/junk/) })
+    expect(b.doc.share.has('junk')).toBe(false)
+    expect(a.room.doc.share.has('junk')).toBe(false)
   })
 
   it('leaving closes that author\'s group, and the last leave drops the room', () => {

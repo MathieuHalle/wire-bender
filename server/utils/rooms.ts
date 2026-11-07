@@ -2,7 +2,7 @@ import * as Y from 'yjs'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
 import type { BoardFile } from '~core/schema'
 import { undoState } from '#shared/undoState'
-import { boardToDoc, docToBoard, writeBoard } from '#shared/yboard'
+import { RECORDS, SECTION_NAMES, boardToDoc, docToBoard, stable, writeBoard } from '#shared/yboard'
 import type { Db } from '../db'
 import { boardBefore, commitRevision, getBoard, getRevision, listRevisions, recover, saveCurrent } from './boards'
 
@@ -20,6 +20,27 @@ export type Received = { ok: true } | { ok: false, reason: string }
 export interface WriteMeta { author: string, how: string, target?: number }
 
 const SERVER = 'server'
+/** The top-level types a client may change. */
+const CLIENT_TYPES = new Set<string>([...SECTION_NAMES, ...RECORDS, 'singles'])
+
+/** Call one peer's link; a failing peer must not affect the room or the others. */
+function safely(send: () => void): void {
+  try {
+    send()
+  } catch {
+    // The socket's own close handler removes the peer.
+  }
+}
+
+/** The name of the top-level type that holds `type`. */
+function rootName(doc: Y.Doc, type: Y.AbstractType<unknown>): string | undefined {
+  let t = type
+  while (t._item) t = t._item.parent as Y.AbstractType<unknown>
+  for (const [name, shared] of doc.share) if (shared === t) return name
+  return undefined
+}
+
+const sameBoard = (a: BoardFile, b: BoardFile) => stable({ ...a, revision: 0 }) === stable({ ...b, revision: 0 })
 const rooms = new Map<string, Room>()
 
 /** The live room for a board, opened (after `recover`) if none is open. `null` when there is no such board. */
@@ -51,7 +72,7 @@ export class Room {
     this.writeServerMap()
     this.awareness.setLocalState(null)
     this.doc.on('update', (update: Uint8Array, origin: unknown) => {
-      for (const [peerId, peer] of this.peers) if (peerId !== origin) peer.link.update(update)
+      for (const [peerId, peer] of this.peers) if (peerId !== origin) safely(() => peer.link.update(update))
     })
     this.awareness.on('update', ({ added, updated, removed }: Record<'added' | 'updated' | 'removed', number[]>, origin: unknown) => {
       const from = typeof origin === 'string' ? this.peers.get(origin) : undefined
@@ -61,7 +82,7 @@ export class Room {
       }
       const changed = [...added, ...updated, ...removed]
       const message = encodeAwarenessUpdate(this.awareness, changed)
-      for (const [peerId, peer] of this.peers) if (peerId !== origin) peer.link.awareness(message)
+      for (const [peerId, peer] of this.peers) if (peerId !== origin) safely(() => peer.link.awareness(message))
     })
   }
 
@@ -69,7 +90,7 @@ export class Room {
   join(peerId: string, author: string, link: PeerLink): void {
     this.peers.set(peerId, { author, link, clients: new Set() })
     const present = [...this.awareness.getStates().keys()]
-    if (present.length > 0) link.awareness(encodeAwarenessUpdate(this.awareness, present))
+    if (present.length > 0) safely(() => link.awareness(encodeAwarenessUpdate(this.awareness, present)))
   }
 
   /** Validate a client's update on a copy of the doc; apply, broadcast and save it only if the board stays valid. */
@@ -147,13 +168,14 @@ export class Room {
     const copy = new Y.Doc()
     try {
       Y.applyUpdate(copy, Y.encodeStateAsUpdate(this.doc))
-      const server: object = copy.getMap(SERVER)
-      let touchesServer = false
+      const touched = new Set<string>()
       copy.on('afterTransaction', (tr: Y.Transaction) => {
-        if ([...tr.changed.keys()].some(t => t === server)) touchesServer = true
+        for (const t of tr.changed.keys()) touched.add(rootName(copy, t as Y.AbstractType<unknown>) ?? '?')
       })
       Y.applyUpdate(copy, update)
-      if (touchesServer) return { ok: false, reason: 'the server map is written only by the server' }
+      if (touched.has(SERVER)) return { ok: false, reason: 'the server map is written only by the server' }
+      const foreign = [...touched].filter(name => !CLIENT_TYPES.has(name))
+      if (foreign.length > 0) return { ok: false, reason: `the update writes ${foreign.map(n => `"${n}"`).join(', ')}, which is not part of a board` }
       if (copy.store.pendingStructs || copy.store.pendingDs) return { ok: false, reason: 'the update depends on changes the server does not have' }
       const parsed = docToBoard(copy, this.head)
       if (!parsed.ok) return { ok: false, reason: parsed.errors.join('; ') }
@@ -189,12 +211,14 @@ export class Room {
     this.groups.set(author, setTimeout(() => this.closeGroup(author), GROUP_IDLE_MS))
   }
 
-  /** Commit an author's live edits as one `edit` revision. */
+  /** Commit an author's live edits as one `edit` revision, unless the board is the same as the head revision's. */
   private closeGroup(author: string): void {
     const timer = this.groups.get(author)
     if (timer === undefined) return
     clearTimeout(timer)
     this.groups.delete(author)
+    const head = getRevision(this.db, this.id, this.head)
+    if (head && sameBoard(head.board, this.board)) return
     this.head = commitRevision(this.db, this.id, { board: this.board, author, how: 'edit' })
     this.board = { ...this.board, revision: this.head }
     this.writeServerMap()
