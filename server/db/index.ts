@@ -72,9 +72,14 @@ export function openDb(dataDir: string, migrationsDir: string = defaultMigration
 
 let instance: Db | undefined
 
+/** The server's data folder: `WIREBENDER_DATA`, or `./.data`. */
+export function dataDir(): string {
+  return process.env.WIREBENDER_DATA ?? './.data'
+}
+
 /** The server's single database, opened on first use from `WIREBENDER_DATA`. */
 export function useDb(): Db {
-  instance ??= openDb(process.env.WIREBENDER_DATA ?? './.data')
+  instance ??= openDb(dataDir())
   return instance
 }
 

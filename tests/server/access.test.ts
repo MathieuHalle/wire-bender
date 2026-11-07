@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openDb, type Db } from '../../server/db'
 import {
-  checkMode, completePairing, gate, isLoopback, lanAddress, listDevices, MODE_ERROR, PAIR_TTL_MS, refusal, resetPairing, startPairing, trust, unpair
+  completePairing, gate, isLoopback, lanAddress, listDevices, PAIR_TTL_MS, refusal, resetPairing, startPairing, trust, unpair
 } from '../../server/utils/access'
 import { PEER_HEADER, remoteOf, stampPeer, stampSecret, type NodeReqLike } from '../../server/utils/peerAddress'
 
@@ -47,16 +47,6 @@ function pair(name = 'iPad', remote = '192.168.1.20'): string {
   if (!r.ok) throw new Error(`pairing failed: ${r.status}`)
   return r.cookie
 }
-
-describe('checkMode', () => {
-  it('local passes; unset, public or foo throws the exact message', () => {
-    expect(() => checkMode({ WIREBENDER_MODE: 'local' })).not.toThrow()
-    for (const env of [{}, { WIREBENDER_MODE: 'public' }, { WIREBENDER_MODE: 'foo' }]) {
-      expect(() => checkMode(env)).toThrow(MODE_ERROR)
-    }
-    expect(MODE_ERROR).toBe('public mode arrives in step 2; set WIREBENDER_MODE=local')
-  })
-})
 
 describe('trust', () => {
   it('loopback is trusted, a LAN address is not', () => {

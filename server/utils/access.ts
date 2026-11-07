@@ -10,13 +10,6 @@ import { useDb, type Db } from '../db'
 import { devices } from '../db/schema'
 import { remoteOf, type NodeReqLike } from './peerAddress'
 
-export const MODE_ERROR = 'public mode arrives in step 2; set WIREBENDER_MODE=local'
-
-/** Stops the server unless it runs in local mode (the only mode in step 1). */
-export function checkMode(env: Record<string, string | undefined>): void {
-  if (env.WIREBENDER_MODE !== 'local') throw new Error(MODE_ERROR)
-}
-
 const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
 
 export function isLoopback(remoteAddress: string | undefined): boolean {
@@ -105,20 +98,48 @@ function ownNames(): Set<string> {
   return names
 }
 
+/** In public mode, `WIREBENDER_URL` (checked at start: the server does not run without it); null in local mode. */
+function publicUrlFromEnv(): string | null {
+  return process.env.WIREBENDER_MODE === 'public' ? process.env.WIREBENDER_URL ?? '' : null
+}
+
+const DEFAULT_PORT: Record<string, number> = { 'http:': 80, 'https:': 443 }
+
+/** Public mode: Host must name `WIREBENDER_URL`'s host and port (a missing port is the scheme's own). */
+function isPublicHost(host: { name: string, port: number | undefined }, publicUrl: string): boolean {
+  let url: URL
+  try {
+    url = new URL(publicUrl)
+  } catch {
+    return false
+  }
+  const name = url.hostname.toLowerCase().replace(/^\[(.*)\]$/, '$1')
+  const port = url.port === '' ? DEFAULT_PORT[url.protocol] : Number(url.port)
+  return port !== undefined && host.name === name && (host.port ?? DEFAULT_PORT[url.protocol]) === port
+}
+
 /**
  * 403 for a request that names another site, else null. These checks only ever deny;
  * trust is decided by `trust()` alone. They stop DNS rebinding (a page on evil.example
  * whose name now points at this machine: its Host is evil.example) and cross-site writes
  * (a page elsewhere posting to, or opening a live socket on, this server: its Origin is
  * another site). A missing Origin is allowed: curl, the CLI and AI clients send none.
+ *
+ * In public mode (`publicUrl` set) the site is `WIREBENDER_URL`'s host, not the machine's
+ * own names: behind a reverse proxy the machine's names and port are not what people use.
  */
-export function refusal(source: TrustSource): 403 | null {
+export function refusal(source: TrustSource, publicUrl: string | null = publicUrlFromEnv()): 403 | null {
   const req = nodeReq(source)
   if (!req) return 403
   const hostHeader = req.headers.host
   const host = typeof hostHeader === 'string' ? parseHost(hostHeader) : null
-  if (!host || !ownNames().has(host.name)) return 403
-  if (host.port !== undefined && host.port !== remoteOf(req).port) return 403
+  if (!host) return 403
+  if (publicUrl !== null) {
+    if (!isPublicHost(host, publicUrl)) return 403
+  } else {
+    if (!ownNames().has(host.name)) return 403
+    if (host.port !== undefined && host.port !== remoteOf(req).port) return 403
+  }
 
   const method = (req.method ?? 'GET').toUpperCase()
   const writes = req.headers.upgrade !== undefined || (method !== 'GET' && method !== 'HEAD')
@@ -146,12 +167,49 @@ export function gate(method: string, path: string, trusted: boolean): Gate {
   if (trusted) return 'pass'
   const pathname = path.split('?')[0]!
   // Anything odd is refused outright: no allow-listed prefix may lead elsewhere.
-  const plain = /^(\/[\w.~-]+)+\/?$|^\/$/.test(pathname) && !pathname.split('/').some(s => s === '..' || s === '.')
+  const plain = plainPath(pathname)
   if (plain && method === 'POST' && pathname === '/api/pair') return 'pass'
   const get = method === 'GET' || method === 'HEAD'
   if (plain && get && (OPEN_FILES.has(pathname) || OPEN_PREFIXES.some(p => pathname.startsWith(p)))) return 'pass'
   if (!plain || !get || pathname === '/api' || pathname.startsWith('/api/') || pathname.startsWith('/_')) return 'deny'
   return 'redirect'
+}
+
+/** A path with no odd segments ('..', '.', empty, unusual characters). */
+function plainPath(pathname: string): boolean {
+  return /^(\/[\w.~-]+)+\/?$|^\/$/.test(pathname) && !pathname.split('/').some(s => s === '..' || s === '.')
+}
+
+export type PublicGate = 'pass' | 'deny' | 'not-found' | 'account'
+
+/** Pairing is local mode's: in public mode these routes do not exist. */
+const PAIRING = /^\/(pair|api\/pair|api\/devices)(\/|$)/
+
+/** What anonymous may read in public mode, besides pages: Task 4 decides per board. */
+function anonymousRead(pathname: string): boolean {
+  return pathname === '/api/me' || pathname === '/api/_auth/session'
+    || pathname.startsWith('/api/boards/') || pathname.startsWith('/auth/')
+    || OPEN_PREFIXES.some(p => pathname.startsWith(p))
+    || !(pathname === '/api' || pathname.startsWith('/api/') || pathname.startsWith('/_'))
+}
+
+/**
+ * Public mode (spec §3): anyone may load pages, `GET /api/me`, sign-in (`/auth/*`) and the
+ * board read routes; everything else needs a signed-in user. A session of a deleted
+ * account waiting for its restore (ruling R1) is sent to /account for every page.
+ * Signing out is always allowed.
+ */
+export function publicGate(method: string, path: string, signedIn: boolean, pendingDeletion = false): PublicGate {
+  const pathname = path.split('?')[0]!
+  if (!plainPath(pathname)) return 'deny'
+  if (PAIRING.test(pathname)) return 'not-found'
+  if (method === 'DELETE' && pathname === '/api/_auth/session') return 'pass'
+  if (signedIn) return 'pass'
+  const get = method === 'GET' || method === 'HEAD'
+  if (!get || !anonymousRead(pathname)) return 'deny'
+  const page = !(pathname === '/api' || pathname.startsWith('/api/') || pathname.startsWith('/_') || pathname.startsWith('/auth/') || OPEN_FILES.has(pathname))
+  if (pendingDeletion && page && pathname !== '/account') return 'account'
+  return 'pass'
 }
 
 // Pairing.

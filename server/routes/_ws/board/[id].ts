@@ -2,6 +2,8 @@ import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import { useDb } from '../../../db'
 import { onUnpair, refusal, trust, type TrustSource } from '../../../utils/access'
+import { checkMode } from '../../../utils/mode'
+import { whoIs, type Who } from '../../../utils/who'
 import { MESSAGE_AWARENESS, MESSAGE_SYNC, handleMessage, message } from '../../../utils/liveMessage'
 import { openRoom, type Received, type Room } from '../../../utils/rooms'
 import { wsBoardId } from '../../../utils/wsBoardId'
@@ -10,6 +12,8 @@ import { wsBoardId } from '../../../utils/wsBoardId'
 interface WsPeer {
   readonly id: string
   readonly request: { url: string } & TrustSource
+  /** crossws: what the upgrade hook put in its request's context. */
+  readonly context?: Record<string, unknown>
   send: (data: Uint8Array) => unknown
   close: (code?: number, reason?: string) => void
 }
@@ -20,9 +24,20 @@ const CLOSE_UNTRUSTED = 4401
 const CLOSE_NO_BOARD = 4404
 const CLOSE_SERVER_ERROR = 1011
 
-/** The access check, run again on open: the upgrade was checked, but the device may have been unpaired since. */
-function trustOf(peer: WsPeer) {
-  return trust(peer.request)
+type PeerAccess = { ok: true, author: string, deviceId?: string } | { ok: false }
+
+/**
+ * The access check on open. Local mode runs it again: the upgrade was checked, but the
+ * device may have been unpaired since. Public mode takes who the upgrade found (a session
+ * can only be read there, asynchronously; Task 4 checks the board's access on open too).
+ */
+function accessOf(peer: WsPeer): PeerAccess {
+  if (checkMode() === 'local') {
+    const t = trust(peer.request)
+    return t.ok ? { ok: true, author: t.author, deviceId: t.device?.id } : { ok: false }
+  }
+  const who = peer.context?.who as Who | undefined
+  return who?.kind === 'user' ? { ok: true, author: who.author } : { ok: false }
 }
 
 /** WebSocket close reasons are at most 123 bytes. */
@@ -57,7 +72,7 @@ function leave(peer: WsPeer): void {
 /** Join the peer to its board's room and start the sync; an unknown or malformed id closes it with 4404. */
 function join(peer: WsPeer): void {
   // Trust first: an untrusted peer learns nothing, not even whether the board exists.
-  const t = trustOf(peer)
+  const t = accessOf(peer)
   if (!t.ok) {
     peer.close(CLOSE_UNTRUSTED, 'not paired')
     return
@@ -69,7 +84,7 @@ function join(peer: WsPeer): void {
     return
   }
   const author = t.author
-  joined.set(peer.id, { room, author, deviceId: t.device?.id, peer })
+  joined.set(peer.id, { room, author, deviceId: t.deviceId, peer })
   room.join(peer.id, author, {
     update: u => peer.send(message((e) => {
       encoding.writeVarUint(e, MESSAGE_SYNC)
@@ -89,10 +104,16 @@ function join(peer: WsPeer): void {
 export default defineWebSocketHandler({
   // The access middleware does not see upgrades: the same checks run here. A socket from
   // another site (rebinding Host, foreign Origin) is refused, then only the machine itself
-  // and paired devices may connect.
-  upgrade(request) {
-    if (refusal(request as TrustSource)) return new Response('This request names another site.', { status: 403 })
-    if (!trust(request as TrustSource).ok) return new Response('This device is not paired.', { status: 401 })
+  // and paired devices (local mode) or a signed-in user (public mode) may connect.
+  async upgrade(request) {
+    const source = request as TrustSource
+    if (refusal(source)) return new Response('This request names another site.', { status: 403 })
+    const local = checkMode() === 'local'
+    const who = await whoIs(source)
+    if (who.kind === 'anonymous') return new Response(local ? 'This device is not paired.' : 'Sign in first.', { status: 401 })
+    // crossws hands this context to the peer on open.
+    const context = (request as { context?: Record<string, unknown> }).context
+    if (context) context.who = who
   },
 
   open(peer) {

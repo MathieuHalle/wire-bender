@@ -4,7 +4,8 @@ import tres from '@tresjs/core/template-compiler-options'
 export default defineNuxtConfig({
   modules: [
     '@nuxt/eslint',
-    '@nuxt/ui'
+    '@nuxt/ui',
+    'nuxt-auth-utils'
   ],
 
   devtools: {
@@ -25,6 +26,12 @@ export default defineNuxtConfig({
   // TresJS elements (<TresMesh>, <primitive>) belong to its own renderer, not to Vue's.
   vue: {
     compilerOptions: tres.template.compilerOptions
+  },
+
+  runtimeConfig: {
+    session: {
+      maxAge: 60 * 60 * 24 * 30
+    }
   },
 
   alias: {
@@ -55,6 +62,12 @@ export default defineNuxtConfig({
     tsConfig: {
       include: ['../export/**/*']
     }
+  },
+
+  // Sign-in (public mode). The app reads who is signed in from GET /api/me, not from the
+  // module's session composable. The session secret is set at start (server/plugins/startup.ts).
+  auth: {
+    loadStrategy: 'none'
   },
 
   eslint: {

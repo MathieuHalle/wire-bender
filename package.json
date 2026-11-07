@@ -5,6 +5,7 @@
   "scripts": {
     "build": "nuxt build",
     "dev": "WIREBENDER_MODE=local nuxt dev --host",
+    "dev:public": "WIREBENDER_MODE=public nuxt dev",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
@@ -24,6 +25,7 @@
     "drizzle-orm": "0.45.4",
     "lib0": "0.2.119",
     "nuxt": "^4.6.3",
+    "nuxt-auth-utils": "0.6.2",
     "tailwindcss": "^4.3.3",
     "three": "0.187.0",
     "uqr": "0.1.3",

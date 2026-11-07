@@ -9,7 +9,7 @@
 import { randomBytes } from 'node:crypto'
 import type { Server } from 'node:http'
 import { defineNuxtModule } from 'nuxt/kit'
-import { checkMode } from '../server/utils/access'
+import { checkMode } from '../server/utils/mode'
 import { PEER_SECRET_ENV, stampPeer, stampSecret } from '../server/utils/peerAddress'
 
 const STAMPED = Symbol.for('wirebender.peer-stamped')
