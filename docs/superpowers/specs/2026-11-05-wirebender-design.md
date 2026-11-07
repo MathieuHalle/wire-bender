@@ -272,7 +272,9 @@ point for the content and look of these sheets.
    before building it; board 2 waits for this.
 2. **Bench export** next: printed 1:1 sheets and the offline HTML file.
 3. **3D view**.
-4. **Hosted static version and an open board format** (added 2026-11-05 by the owner):
+4. **Superseded on 2026-11-06** by `2026-11-06-wirebender-service-design.md` (WireBender
+   as a service: accounts, live editing, API). The original item, kept for the record:
+   **Hosted static version and an open board format** (added 2026-11-05 by the owner):
    - The same app built as a static site (Nuxt static generation) that anyone can open:
      load a board file by drag-and-drop, file picker or link; edit, check and export the
      bench sheet entirely in the browser; save by download (or back to the same file where
