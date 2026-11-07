@@ -4,7 +4,7 @@
 import { ADVISORY } from '../core/advisory'
 import { benchModel, type BenchModel, type MeterRow } from '../core/bench/sheet'
 import { netLabel, type WireCard } from '../core/bench/cards'
-import type { BoardFile } from '../core/schema'
+import type { BoardFile, Side } from '../core/schema'
 import {
   bendSvgs, boardOverviewSvg, COPPER, esc, INSULATED_FALLBACK, legFoldSvg, mmExact, mmText, safeColor, scaleBarSvg,
   SPARE_TAIL_LABEL, stripBarSvg
@@ -19,6 +19,8 @@ const OVERVIEW_GAP_MM = 6
 /** Room on the enlarged page for its heading and note, and for each caption, mm. */
 const ENLARGED_HEAD_MM = 22
 const CAPTION_MM = 8
+/** Printed size of the part refs and trail / wire ids on the enlarged page, mm: small, so the pads stay visible. */
+const ENLARGED_LABEL_MM = 1.5
 /** Printable area of a page, mm, portrait or turned to landscape. */
 export function enlargedArea(paper: keyof typeof PRINTABLE_MM, landscape: boolean): { w: number, h: number } {
   const [w, h] = [PRINTABLE_MM[paper], PRINTABLE_H_MM[paper]]
@@ -94,14 +96,17 @@ function enlarged(board: BoardFile, paper: keyof typeof PRINTABLE_MM): string {
   // The biggest drawing wins; on a tie, portrait (like the other pages) and side by side.
   const best = layouts.reduce((a, b) => (b.k > a.k + 1e-9 ? b : a))
   const k = Math.floor(best.k * 100) / 100
+  // Redrawn with small labels: they only shrink the drawing a little, so it still fits at k.
+  const labelSize = ENLARGED_LABEL_MM / k
+  const small = (side: Side) => boardOverviewSvg(board, side, { title: false, labelSize })
   const fig = (svg: string, caption: string) =>
     `<figure><figcaption>${caption}</figcaption><div class="drawing">${scaleSvg(svg, k)}</div></figure>`
   return `<section id="enlarged" class="page enlarged${best.landscape ? ' landscape' : ''}">
 <h2>Both sides, enlarged</h2>
 <p class="fitted-note"><strong>Enlarged ${Math.round(k * 100)}%, not to scale: measure on the 1:1 overview or the wire cards.</strong></p>
 <div class="${best.pair ? 'pair' : 'stack'}">
-${fig(top, 'Top: parts side')}
-${fig(bottom, 'Bottom: solder side, seen from below (mirrored)')}
+${fig(small('top'), 'Top: parts side')}
+${fig(small('bottom'), 'Bottom: solder side, seen from below (mirrored)')}
 </div>
 </section>`
 }

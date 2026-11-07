@@ -177,6 +177,22 @@ describe('benchHtml', () => {
       expect(enlargedArea('letter', true)).toEqual({ w: 279.4 - 24, h: 215.9 - 24 })
     })
 
+    it('labels on the board print really small, so they do not hide the pads', () => {
+      const sec = sectionOf(html, 'enlarged')
+      const k = Number(/Enlarged (\d+)%/.exec(sec)![1]) / 100
+      // part refs (bold) and trail / wire ids (brown) sit over the holes
+      const labels = [...sec.matchAll(/<text ([^>]*)>/g)].map(m => m[1]!)
+        .filter(a => a.includes('font-weight="600"') || a.includes('fill="#7a3f12"'))
+      expect(labels.length).toBeGreaterThan(30)
+      for (const a of labels) {
+        expect(Number(/font-size="([\d.]+)"/.exec(a)![1]) * k).toBeLessThanOrEqual(1.65)
+        expect(Number(/stroke-width="([\d.]+)"/.exec(a)![1]) * k).toBeLessThanOrEqual(0.45)
+      }
+      // the 1:1 overview keeps its readable labels
+      const ov = sectionOf(html, 'overview')
+      expect(ov).toMatch(/font-size="2.2"[^>]*font-weight="600"|font-weight="600"[^>]*font-size="2.2"/)
+    })
+
     it('a board wider than tall is stacked, one side above the other', () => {
       const b = mk({ board: { cols: 40, rows: 10 }, nets: { N: {} }, parts: [axial('R1', 'A1', 'A4', 'N')] })
       const sec = sectionOf(benchHtml(b, { date: DATE }), 'enlarged')

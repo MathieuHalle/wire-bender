@@ -81,9 +81,12 @@ class Scene {
     this.prims.push({ t: 'poly', pts, a: attrs })
   }
 
-  /** `s` is plain text; it is escaped at render. */
-  text(p: Pt, s: string, size: number, anchor: Anchor = 'start', attrs = '') {
-    this.prims.push({ t: 'text', x: p.x, y: p.y, s, size: Math.max(MIN_FONT, size), anchor, a: attrs })
+  /**
+   * `s` is plain text; it is escaped at render. Text is never smaller than `min` (drawing
+   * mm); only a drawing printed enlarged passes a smaller one, so it still prints legibly.
+   */
+  text(p: Pt, s: string, size: number, anchor: Anchor = 'start', attrs = '', min = MIN_FONT) {
+    this.prims.push({ t: 'text', x: p.x, y: p.y, s, size: Math.max(min, size), anchor, a: attrs })
   }
 
   bounds(): Box {
@@ -232,7 +235,12 @@ function partMarks(s: Scene, pp: PlacedPart, g: ReturnType<typeof sideGeo>) {
  * (solid on top, dashed on the bottom) with refs, that side's trails and wires, wire
  * ends and joints, solder bridges and (bottom) leg-folds. The bottom is mirrored.
  */
-export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: boolean } = {}): string {
+/**
+ * `title: false` leaves out the in-drawing title. `labelSize` (drawing mm) draws the part
+ * refs and trail / wire ids at that size instead of the 1:1 minimum: a drawing printed
+ * enlarged passes a small one so the labels don't hide the pads.
+ */
+export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: boolean, labelSize?: number } = {}): string {
   const s = new Scene()
   const g = sideGeo(board, side)
   const { cols, rows } = board.board
@@ -333,12 +341,16 @@ export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: b
     }
   }
 
-  // labels last, over everything: part refs at body centres, trail/wire ids
+  // labels last, over everything: part refs at body centres, trail/wire ids. The halo
+  // scales with the text (0.6 at the 1:1 size).
+  const tag = opts.labelSize === undefined
+    ? { size: MIN_FONT, halo: HALO }
+    : { size: opts.labelSize, halo: HALO.replace('stroke-width="0.6"', `stroke-width="${n(opts.labelSize * 0.27)}"`) }
   for (const pp of placed) {
     const r = g.rect(pp.bodyRectMm)
-    s.text({ x: r.x + r.w / 2, y: r.y + r.h / 2 + 0.8 }, pp.part.ref, MIN_FONT, 'middle', `font-weight="600" ${HALO}`)
+    s.text({ x: r.x + r.w / 2, y: r.y + r.h / 2 + tag.size * 0.36 }, pp.part.ref, tag.size, 'middle', `font-weight="600" ${tag.halo}`, tag.size)
   }
-  for (const l of ids) s.text({ x: l.at.x, y: l.at.y - 0.9 }, l.id, MIN_FONT, 'middle', `fill="#7a3f12" ${HALO}`)
+  for (const l of ids) s.text({ x: l.at.x, y: l.at.y - tag.size * 0.41 }, l.id, tag.size, 'middle', `fill="#7a3f12" ${tag.halo}`, tag.size)
 
   const title = side === 'top' ? 'TOP — parts side' : 'BOTTOM — solder side (board turned over)'
   // The title is wider than a small board; a caller with its own caption leaves it out.
