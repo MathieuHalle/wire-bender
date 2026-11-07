@@ -62,7 +62,8 @@ function command(peer: MessagePeer, room: Room, author: string, d: decoding.Deco
   if ((op !== 'undo' && op !== 'redo') || typeof id !== 'number' || !Number.isFinite(id)) return { ok: false, reason: 'malformed command' }
   let reply: LiveAnswer
   try {
-    const revision = op === 'undo' ? room.undo(author) : room.redo(author)
+    const authorId = room.peerAuthorId(peer.id)
+    const revision = op === 'undo' ? room.undo(author, authorId) : room.redo(author, authorId)
     reply = revision === null ? { id, ok: false, reason: NOTHING[op] } : { id, ok: true }
   } catch (e) {
     // A server fault, not the client's: answer it and keep the socket open.

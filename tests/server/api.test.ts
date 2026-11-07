@@ -6,7 +6,7 @@ import * as Y from 'yjs'
 import { parseBoard, type BoardFile } from '../../core/schema'
 import { eq } from 'drizzle-orm'
 import { openDb, type Db } from '../../server/db'
-import { boards, linkVisits } from '../../server/db/schema'
+import { boards, linkVisits, revisions } from '../../server/db/schema'
 import { signIn } from '../../server/utils/accounts'
 import * as api from '../../server/utils/api'
 import { MAX_BOARD_BYTES } from '../../server/utils/api'
@@ -349,6 +349,36 @@ describe('access by key and role', () => {
       vi.useRealTimers()
     }
     expect(db.select().from(linkVisits).all()).toEqual([{ userId: bob.userId, boardId: b.id, linkId: b.linkId, lastOpened: 5000 }])
+  })
+
+  it('a revision written by a signed-in user stores their id', () => {
+    const b = adaBoard({ visibility: 'edit' })
+    const bob = user('Bob')
+    const ids = () => db.select({ n: revisions.n, how: revisions.how, authorId: revisions.authorId }).from(revisions)
+      .where(eq(revisions.boardId, b.id)).orderBy(revisions.n).all().map(r => [r.n, r.how, r.authorId])
+    const req = { key: b.linkId, who: bob }
+    expect(api.putBoard(db, req, JSON.stringify({ board: { ...fixture, name: 'Bob' } })).status).toBe(200)
+    expect(api.undoBoard(db, req).status).toBe(200)
+    expect(api.redoBoard(db, req).status).toBe(200)
+    expect(api.restoreRevision(db, req, '1').status).toBe(200)
+    expect(api.renameBoard(db, { key: b.id, who: b.owner }, JSON.stringify({ name: 'Z' })).status).toBe(200)
+    expect(ids()).toEqual([
+      [1, 'import', b.owner.userId], [2, 'api', b.owner.userId], [3, 'api', bob.userId],
+      [4, 'undo', bob.userId], [5, 'redo', bob.userId], [6, 'restore', bob.userId], [7, 'api', b.owner.userId]
+    ])
+    // The local user's are 'local'.
+    const local = importFixture()
+    api.putBoard(db, own(local), JSON.stringify({ board: fixture }))
+    expect(db.select({ authorId: revisions.authorId }).from(revisions).where(eq(revisions.boardId, local)).all()).toEqual([{ authorId: 'local' }, { authorId: 'local' }])
+  })
+
+  it('the bench tick key does not tie a link to the board id', () => {
+    const b = adaBoard()
+    const key = (r: api.ApiResult) => /wirebender:B:([0-9a-f]{12})/.exec(r.body as string)![1]
+    const byId = key(api.benchBoard(db, { key: b.id, who: b.owner }, '2026-11-07'))
+    const byLink = key(api.benchBoard(db, { key: b.linkId, who: user('Bob') }, '2026-11-07'))
+    expect(byLink).not.toBe(byId)
+    expect(key(api.benchBoard(db, { key: b.id, who: b.owner }, '2026-11-07'))).toBe(byId)
   })
 
   it('boards are created and listed for who asks', () => {

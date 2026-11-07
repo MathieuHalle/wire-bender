@@ -65,6 +65,23 @@ describe('finishSignIn', () => {
     expect(replaced).toHaveBeenCalledWith({ user: { id: row.id } })
   })
 
+  it('signing in keeps the links the visitor unlocked, and nothing else', async () => {
+    session = { unlocked: ['link-1', 'link-2'], pendingDeletion: true }
+    const callbackWithCookie = { node: { req: { method: 'GET', headers: { host: 'wire.example.org', cookie: 'nuxt-auth-session=Fe26.2**sealed' } } }, context: {} } as never
+    expect(await finishSignIn(callbackWithCookie, 'github', { id: '42', name: 'Ada' })).toEqual({ redirect: '/', status: 302 })
+    const row = useDb().select().from(users).all().find(u => u.name === 'Ada')!
+    expect(replaced).toHaveBeenCalledWith({ user: { id: row.id }, unlocked: ['link-1', 'link-2'] })
+  })
+
+  it('a deleted account keeps the unlocked links too (R1)', async () => {
+    const a = existing('42')
+    useDb().update(users).set({ deletedAt: Date.now() }).where(eq(users.id, a)).run()
+    session = { unlocked: ['link-1'] }
+    const callbackWithCookie = { node: { req: { method: 'GET', headers: { host: 'wire.example.org', cookie: 'nuxt-auth-session=Fe26.2**sealed' } } }, context: {} } as never
+    await finishSignIn(callbackWithCookie, 'github', { id: '42', name: 'Ada' })
+    expect(replaced).toHaveBeenCalledWith({ user: { id: a }, pendingDeletion: true, unlocked: ['link-1'] })
+  })
+
   it('linking from a signed-in session goes to / and keeps the session', async () => {
     const a = existing('42')
     session = { user: { id: a } }

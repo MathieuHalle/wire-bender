@@ -107,6 +107,10 @@ export async function unlockLink(
   const seen = wrongBy.get(key)
   if (seen && now - seen.since > UNLOCK_WINDOW_MS) wrongBy.delete(key)
   if ((wrongBy.get(key)?.count ?? 0) >= MAX_WRONG_UNLOCKS) return { status: 429, body: { error: 'Too many wrong passwords. Wait 10 minutes and try again.' } }
+  // Counted as wrong before the (async) check, so tries sent in parallel all count.
+  const w = wrongBy.get(key) ?? { count: 0, since: now }
+  w.count++
+  wrongBy.set(key, w)
 
   let right = false
   if (typeof password === 'string' && password !== '') {
@@ -116,12 +120,8 @@ export async function unlockLink(
       right = false
     }
   }
-  if (!right) {
-    const w = wrongBy.get(key) ?? { count: 0, since: now }
-    w.count++
-    wrongBy.set(key, w)
-    return { status: 403, body: { error: 'Wrong password.' } }
-  }
+  if (!right) return { status: 403, body: { error: 'Wrong password.' } }
+  wrongBy.delete(key)
   return { status: 200, body: { ok: true }, unlock: true }
 }
 

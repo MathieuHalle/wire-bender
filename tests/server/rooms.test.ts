@@ -9,6 +9,8 @@ import { openDb, type Db } from '../../server/db'
 import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
+import { eq } from 'drizzle-orm'
+import { revisions } from '../../server/db/schema'
 import { createBoard, getBoard, getRevision, listRevisions } from '../../server/utils/boards'
 import { GROUP_IDLE_MS, openRoom, type Room } from '../../server/utils/rooms'
 import { handleMessage } from '../../server/utils/liveMessage'
@@ -29,7 +31,7 @@ function fixture(): BoardFile {
 /** An in-memory Yjs doc wired to a room, as a browser tab would be. */
 interface Client { peerId: string, author: string, doc: Y.Doc, awareness: Awareness, room: Room, last: { ok: boolean, reason?: string } | null, left: boolean }
 
-function connect(peerId: string, author = 'Local'): Client {
+function connect(peerId: string, author = 'Local', authorId: string | null = null): Client {
   const room = openRoom(db, id)!
   const doc = new Y.Doc()
   const awareness = new Awareness(doc)
@@ -37,7 +39,7 @@ function connect(peerId: string, author = 'Local'): Client {
   room.join(peerId, author, {
     update: u => Y.applyUpdate(doc, u, 'remote'),
     awareness: u => applyAwarenessUpdate(awareness, u, 'remote')
-  })
+  }, { role: 'owner', viaLink: false, authorId })
   Y.applyUpdate(doc, Y.encodeStateAsUpdate(room.doc), 'remote')
   doc.on('update', (u: Uint8Array, origin: unknown) => {
     if (origin !== 'remote') client.last = room.receive(peerId, author, u)
@@ -357,6 +359,29 @@ describe('rooms', () => {
     expect(getRevision(db, id, 2)!.board.trails.some(t => t.id === 'T40')).toBe(true)
     vi.advanceTimersByTime(GROUP_IDLE_MS * 2)
     expect(listRevisions(db, id)).toHaveLength(2)
+  })
+
+  it('live edits store their author\'s id; a revision of several authors stores none', () => {
+    vi.useFakeTimers()
+    const authorIds = () => db.select({ n: revisions.n, authorId: revisions.authorId }).from(revisions).where(eq(revisions.boardId, id)).orderBy(revisions.n).all().map(r => [r.n, r.authorId])
+    const a = connect('a', 'A', 'user-a')
+    edit(a, moveT7('L3'))
+    vi.advanceTimersByTime(GROUP_IDLE_MS)
+    expect(authorIds()).toEqual([[1, null], [2, 'user-a']])
+    // An undo from the socket is the peer's.
+    const e = encoding.createEncoder()
+    encoding.writeVarUint(e, MESSAGE_COMMAND)
+    encoding.writeVarString(e, JSON.stringify({ op: 'undo', id: 1 }))
+    expect(handleMessage({ id: 'a', send: () => {} }, a.room, 'A', encoding.toUint8Array(e))).toEqual({ ok: true })
+    expect(authorIds().at(-1)).toEqual([3, 'user-a'])
+
+    const b = connect('b', 'B', 'user-b')
+    edit(b, x => ({ ...x, board: { ...x.board, cols: 20 } }))
+    vi.advanceTimersByTime(500)
+    edit(a, x => ({ ...x, trails: [...x.trails, { id: 'T40', side: 'bottom', points: ['A19', 'A20'], joints: [] }] }))
+    leave(a)
+    expect(listRevisions(db, id)[0]!.author).toBe('A, B')
+    expect(authorIds().at(-1)).toEqual([4, null])
   })
 
   it('concurrent create of the same id is rejected', () => {

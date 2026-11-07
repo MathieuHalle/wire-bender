@@ -44,6 +44,7 @@ vi.stubGlobal('replaceUserSession', async (_event: unknown, data: SessionData) =
 vi.stubGlobal('getRouterParam', (event: FakeEvent, name: string) => (event.context.params as Record<string, string> | undefined)?.[name])
 vi.stubGlobal('getRequestHeader', (event: FakeEvent, name: string) => event.node.req.headers[name])
 vi.stubGlobal('setResponseHeader', () => {})
+vi.stubGlobal('setResponseHeaders', () => {})
 // The link-password check: a stand-in for nuxt-auth-utils' scrypt.
 vi.stubGlobal('verifyPassword', async (hash: string, plain: string) => hash === `h:${plain}`)
 vi.stubGlobal('clearUserSession', async () => {
@@ -63,6 +64,7 @@ const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../fixtures/cha
 let middleware: Handler
 let ws: WsHooks
 let unlock: Handler
+let putRoute: Handler
 
 let dir: string
 
@@ -70,6 +72,7 @@ beforeAll(async () => {
   middleware = (await import('../../server/middleware/access')).default as unknown as Handler
   ws = (await import('../../server/routes/_ws/board/[id]')).default as unknown as WsHooks
   unlock = (await import('../../server/api/links/[linkId]/unlock.post')).default as unknown as Handler
+  putRoute = (await import('../../server/api/boards/[id].put')).default as unknown as Handler
 })
 afterAll(() => {
   vi.unstubAllGlobals()
@@ -153,7 +156,7 @@ describe('access middleware, public mode', () => {
   })
 
   it('anonymous writes need sign-in', async () => {
-    for (const [method, url] of [['POST', '/api/boards'], ['PATCH', '/api/me'], ['POST', '/api/boards/abc/fork'], ['DELETE', '/api/boards/abc'], ['POST', '/api/links/abc'], ['PUT', '/api/links/abc/unlock']] as const) {
+    for (const [method, url] of [['POST', '/api/boards'], ['PATCH', '/api/me'], ['PATCH', '/api/boards/abc'], ['POST', '/api/boards/abc/fork'], ['DELETE', '/api/boards/abc'], ['POST', '/api/links/abc'], ['PUT', '/api/links/abc/unlock']] as const) {
       const e = publicEvent(method, url)
       expect(await middleware(e), url).toEqual({ error: 'Sign in first.' })
       expect(e.status, url).toBe(401)
@@ -161,7 +164,7 @@ describe('access middleware, public mode', () => {
   })
 
   it('anonymous board edits and link unlocks reach their route, which decides per board', async () => {
-    for (const [method, url] of [['PUT', '/api/boards/abc'], ['PATCH', '/api/boards/abc'], ['POST', '/api/boards/abc/undo'], ['POST', '/api/boards/abc/redo'], ['POST', '/api/boards/abc/revisions/2/restore'], ['POST', '/api/links/abc/unlock']] as const) {
+    for (const [method, url] of [['PUT', '/api/boards/abc'], ['POST', '/api/boards/abc/undo'], ['POST', '/api/boards/abc/redo'], ['POST', '/api/boards/abc/revisions/2/restore'], ['POST', '/api/links/abc/unlock']] as const) {
       const e = publicEvent(method, url)
       expect(await middleware(e), url).toBeUndefined()
       expect(e.context.who, url).toEqual({ kind: 'anonymous' })
@@ -418,5 +421,43 @@ describe('POST /api/links/:linkId/unlock', () => {
     expect(await unlock(limited)).toEqual({ error: 'Too many wrong passwords. Wait 10 minutes and try again.' })
     expect(limited.status).toBe(429)
     expect(session.unlocked).toBeUndefined()
+  })
+})
+
+describe('PUT /api/boards/:key body', () => {
+  /** A PUT whose body is never sent: reading it would be seen. */
+  function put(key: string, who: unknown, contentLength: string): FakeEvent & { read: () => boolean } {
+    let read = false
+    const req = Object.assign(
+      { method: 'PUT', socket: { remoteAddress: '203.0.113.9', localPort: 3002 }, headers: { 'host': 'wire.example.org', 'content-length': contentLength } } as NodeReqLike,
+      { async* [Symbol.asyncIterator]() {
+        read = true
+        yield Buffer.from('{}')
+      } }
+    )
+    return { node: { req }, method: 'PUT', path: `/api/boards/${key}`, context: { params: { id: key }, who }, read: () => read }
+  }
+
+  it('an anonymous PUT with a huge content-length is refused without its body being read', async () => {
+    publicMode()
+    const { id } = createBoard(useDb(), fixture, 'import', 'x', newUser('Ada'))
+    useDb().update(boards).set({ visibility: 'edit' }).where(eq(boards.id, id)).run()
+    const linkId = getBoardRow(useDb(), id)!.linkId
+    const huge = String(10 ** 10)
+
+    const anonymous = put(linkId, { kind: 'anonymous' }, huge)
+    expect(await putRoute(anonymous)).toEqual({ error: 'Sign in to edit.' })
+    expect(anonymous.status).toBe(403)
+    expect(anonymous.read()).toBe(false)
+
+    const unknown = put('no-such-board', { kind: 'anonymous' }, huge)
+    expect(await putRoute(unknown)).toEqual({ error: 'not found' })
+    expect(unknown.read()).toBe(false)
+
+    // An editor gets 413, still without the body being read.
+    const editor = put(linkId, { kind: 'user', userId: newUser('Bob'), author: 'Bob', isAdmin: false, isPremium: false }, huge)
+    expect(await putRoute(editor)).toEqual({ error: 'body is larger than 2000000 bytes' })
+    expect(editor.status).toBe(413)
+    expect(editor.read()).toBe(false)
   })
 })

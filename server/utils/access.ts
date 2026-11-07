@@ -193,7 +193,6 @@ const PAIRING = /^\/(pair|api\/pair|api\/devices)(\/|$)/
 /** The board edits and the link unlock an anonymous visitor may send on to their route. */
 const ANONYMOUS_WRITES: [string, RegExp][] = [
   ['PUT', /^\/api\/boards\/[^/]+$/],
-  ['PATCH', /^\/api\/boards\/[^/]+$/],
   ['POST', /^\/api\/boards\/[^/]+\/(undo|redo)$/],
   ['POST', /^\/api\/boards\/[^/]+\/revisions\/[^/]+\/restore$/],
   ['POST', /^\/api\/links\/[^/]+\/unlock$/]

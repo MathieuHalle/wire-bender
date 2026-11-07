@@ -24,7 +24,7 @@ function revisionBoard(db: Db, id: string, n: number): BoardFile | null {
 }
 
 /** Insert a new board with revision 1. */
-export function createBoard(db: Db, board: BoardFile, how: 'create' | 'import', author: string, ownerId = 'local', authorId?: string): { id: string, head: 1 } {
+export function createBoard(db: Db, board: BoardFile, how: 'create' | 'import', author: string, ownerId = 'local', authorId?: string | null): { id: string, head: 1 } {
   const id = randomUUID()
   const now = Date.now()
   const stored = JSON.stringify(withRevision(board, 1))
@@ -47,7 +47,7 @@ export function saveCurrent(db: Db, id: string, board: BoardFile): void {
 }
 
 /** Append revision `head + 1` and make it the board's current state, in one transaction. */
-export function commitRevision(db: Db, id: string, r: { board: BoardFile, author: string, how: string, target?: number, authorId?: string }): number {
+export function commitRevision(db: Db, id: string, r: { board: BoardFile, author: string, how: string, target?: number, authorId?: string | null }): number {
   return db.transaction((tx) => {
     const row = tx.select().from(boards).where(eq(boards.id, id)).get()
     if (!row) throw new Error(`no board ${id}`)

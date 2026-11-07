@@ -146,6 +146,26 @@ describe('unlock', () => {
     expect((await unlockLink(db, b.linkId, 'secret', '203.0.113.9', verify, now + UNLOCK_WINDOW_MS + 1)).status).toBe(200)
   })
 
+  it('parallel tries count before the password is checked', async () => {
+    const b = board(user('Ada').userId, { passwordHash: 'h:secret' })
+    let verified = 0
+    const slow = async (hash: string, plain: string) => {
+      verified++
+      await new Promise(resolve => setTimeout(resolve, 20))
+      return verify(hash, plain)
+    }
+    const results = await Promise.all(Array.from({ length: 10 }, (_, i) => unlockLink(db, b.linkId, `wrong${i}`, '203.0.113.9', slow)))
+    expect(verified).toBeLessThanOrEqual(MAX_WRONG_UNLOCKS)
+    expect(results.filter(r => r.status === 429)).toHaveLength(10 - MAX_WRONG_UNLOCKS)
+  })
+
+  it('the right password clears the count', async () => {
+    const b = board(user('Ada').userId, { passwordHash: 'h:secret' })
+    for (let i = 0; i < MAX_WRONG_UNLOCKS - 1; i++) await unlockLink(db, b.linkId, 'nope', '203.0.113.9', verify)
+    expect((await unlockLink(db, b.linkId, 'secret', '203.0.113.9', verify)).status).toBe(200)
+    for (let i = 0; i < MAX_WRONG_UNLOCKS; i++) expect((await unlockLink(db, b.linkId, 'nope', '203.0.113.9', verify)).status).toBe(403)
+  })
+
   it('an unknown, private or trashed link is 404; a link without a password needs no unlock', async () => {
     const ada = user('Ada')
     const priv = board(ada.userId, { visibility: 'private', passwordHash: 'h:x' })

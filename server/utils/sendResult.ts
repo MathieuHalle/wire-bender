@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
-import type { ApiResult, BoardRequest } from './api'
+import { MAX_BOARD_BYTES, tooLarge, type ApiResult, type BoardRequest } from './api'
+import { readCapped } from './readCapped'
 import { unlockedOf, type Who } from './who'
 
 /** Send an ApiResult: its status, headers and body. */
@@ -9,9 +10,28 @@ export function sendResult(event: H3Event, r: ApiResult): unknown {
   return r.body
 }
 
-/** The raw request body as text; the API checks its size before parsing it. */
-export async function bodyText(event: H3Event): Promise<string> {
-  return (await readRawBody(event, 'utf8')) ?? ''
+/**
+ * The request body as text, or null past MAX_BOARD_BYTES: a larger content-length is
+ * refused unread, and the body is read chunk by chunk and dropped as soon as it passes.
+ */
+async function bodyText(event: H3Event): Promise<string | null> {
+  if (Number(getRequestHeader(event, 'content-length') ?? 0) > MAX_BOARD_BYTES) return null
+  return await readCapped(event.node.req, MAX_BOARD_BYTES)
+}
+
+/**
+ * Answer a write with a body: `refused` (from the access step) is sent without reading the
+ * body; otherwise `write` gets the body, or the 413 is sent if it is too large.
+ */
+export async function sendWrite(event: H3Event, refused: ApiResult | null, write: (text: string) => ApiResult): Promise<unknown> {
+  if (refused) return sendResult(event, refused)
+  const text = await bodyText(event)
+  if (text === null) {
+    // The rest of the body is never read; the connection closes after this answer.
+    setResponseHeader(event, 'connection', 'close')
+    return sendResult(event, tooLarge())
+  }
+  return sendResult(event, write(text))
 }
 
 export const boardId = (event: H3Event): string => getRouterParam(event, 'id') ?? ''

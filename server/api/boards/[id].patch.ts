@@ -1,5 +1,10 @@
-import { renameBoard } from '../../utils/api'
+import { renameBoard, renameRefusal } from '../../utils/api'
 import { useDb } from '../../db'
-import { boardRequest, bodyText, sendResult } from '../../utils/sendResult'
+import { boardRequest, sendWrite } from '../../utils/sendResult'
 
-export default defineEventHandler(async event => sendResult(event, renameBoard(useDb(), await boardRequest(event), await bodyText(event))))
+// Access (owner only) is decided before the body is read.
+export default defineEventHandler(async (event) => {
+  const db = useDb()
+  const req = await boardRequest(event)
+  return sendWrite(event, renameRefusal(db, req), text => renameBoard(db, req, text))
+})

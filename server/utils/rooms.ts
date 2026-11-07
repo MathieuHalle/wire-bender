@@ -22,11 +22,15 @@ export type Received = { ok: true } | { ok: false, reason: string, code?: number
 /** How a peer reached the board: its role, and whether by the share link (Task 5 closes those on a sharing change). */
 export interface PeerAccess { role: Role, viaLink: boolean }
 
+/** How a peer joins: its access, and the account its edits are by. */
+export interface JoinOptions extends PeerAccess { authorId?: string | null }
+
 /** Access changed, or never allowed this: a view peer tried to edit. */
 export const CLOSE_ACCESS = 4403
 export const VIEW_ONLY: Received = { ok: false, reason: 'view only', code: CLOSE_ACCESS }
 
-export interface WriteMeta { author: string, how: string, target?: number }
+/** `authorId`: the account the revision is by ('local' for the local user), null for none. */
+export interface WriteMeta { author: string, how: string, target?: number, authorId?: string | null }
 
 const SERVER = 'server'
 /** The top-level types a client may change. */
@@ -94,7 +98,7 @@ function createCollision(server: Y.Doc, copy: Y.Doc, before: Map<number, number>
 }
 
 /** One author's open revision group: its idle timer and the items its accepted updates touched. */
-interface Group { timer: ReturnType<typeof setTimeout>, keys: Set<string> }
+interface Group { timer: ReturnType<typeof setTimeout>, keys: Set<string>, authorId: string | null }
 const rooms = new Map<string, Room>()
 
 /** The live room for a board, opened (after `recover`) if none is open. `null` when there is no such board. */
@@ -115,7 +119,7 @@ export class Room {
   readonly awareness = new Awareness(this.doc)
   private board: BoardFile
   private head: number
-  private readonly peers = new Map<string, { author: string, link: PeerLink, clients: Set<number>, access: PeerAccess }>()
+  private readonly peers = new Map<string, { author: string, authorId: string | null, link: PeerLink, clients: Set<number>, access: PeerAccess }>()
   private readonly groups = new Map<string, Group>()
   private closed = false
 
@@ -144,8 +148,9 @@ export class Room {
    * Add a peer. It is sent the presence of everyone already here; the doc itself comes
    * through the sync protocol. A peer joined without `access` is the owner by board id.
    */
-  join(peerId: string, author: string, link: PeerLink, access: PeerAccess = { role: 'owner', viaLink: false }): void {
-    this.peers.set(peerId, { author, link, clients: new Set(), access: { ...access } })
+  join(peerId: string, author: string, link: PeerLink, options: JoinOptions = { role: 'owner', viaLink: false }): void {
+    const { authorId = null, role, viaLink } = options
+    this.peers.set(peerId, { author, authorId, link, clients: new Set(), access: { role, viaLink } })
     const present = [...this.awareness.getStates().keys()]
     if (present.length > 0) safely(() => link.awareness(encodeAwarenessUpdate(this.awareness, present)))
   }
@@ -154,6 +159,11 @@ export class Room {
   peerAccess(peerId: string): PeerAccess | null {
     const peer = this.peers.get(peerId)
     return peer ? { ...peer.access } : null
+  }
+
+  /** The account a joined peer's edits are by, or null. */
+  peerAuthorId(peerId: string): string | null {
+    return this.peers.get(peerId)?.authorId ?? null
   }
 
   /**
@@ -178,7 +188,7 @@ export class Room {
     if (!changed) return { ok: true }
     this.board = checked.board
     saveCurrent(this.db, this.id, this.board)
-    this.restartGroup(author, checked.keys)
+    this.restartGroup(author, checked.keys, this.peerAuthorId(peerId))
     return { ok: true }
   }
 
@@ -202,7 +212,7 @@ export class Room {
   serverWrite(next: BoardFile, meta: WriteMeta): number {
     this.closeGroups()
     writeBoard(this.doc, this.board, next, SERVER)
-    const n = commitRevision(this.db, this.id, { board: next, author: meta.author, how: meta.how, target: meta.target })
+    const n = commitRevision(this.db, this.id, { board: next, author: meta.author, how: meta.how, target: meta.target, authorId: meta.authorId })
     this.board = { ...next, revision: n }
     this.head = n
     this.writeServerMap()
@@ -211,20 +221,20 @@ export class Room {
   }
 
   /** Revert the top of the board's undo stack. `null` when there is nothing to undo. */
-  undo(author: string): number | null {
+  undo(author: string, authorId: string | null = null): number | null {
     this.closeGroups()
     const { undo } = this.stacks()
     if (undo === null) return this.nothing()
-    return this.serverWrite(boardBefore(this.db, this.id, undo), { author, how: 'undo', target: undo })
+    return this.serverWrite(boardBefore(this.db, this.id, undo), { author, how: 'undo', target: undo, authorId })
   }
 
   /** Restore the top of the board's redo stack. `null` when there is nothing to redo. */
-  redo(author: string): number | null {
+  redo(author: string, authorId: string | null = null): number | null {
     this.closeGroups()
     const { redo } = this.stacks()
     const rev = redo === null ? null : getRevision(this.db, this.id, redo)
     if (redo === null || !rev) return this.nothing()
-    return this.serverWrite(rev.board, { author, how: 'redo', target: redo })
+    return this.serverWrite(rev.board, { author, how: 'redo', target: redo, authorId })
   }
 
   /** Remove a peer and its presence, and close its author's group. The last leave saves and drops the room. */
@@ -310,15 +320,16 @@ export class Room {
     }, SERVER)
   }
 
-  private restartGroup(author: string, keys: Set<string>): void {
+  private restartGroup(author: string, keys: Set<string>, authorId: string | null): void {
     const group = this.groups.get(author)
     clearTimeout(group?.timer)
     const timer = setTimeout(() => this.closeGroup(author), GROUP_IDLE_MS)
     if (group) {
       group.timer = timer
+      group.authorId = authorId
       for (const k of keys) group.keys.add(k)
     } else {
-      this.groups.set(author, { timer, keys: new Set(keys) })
+      this.groups.set(author, { timer, keys: new Set(keys), authorId })
     }
   }
 
@@ -326,7 +337,8 @@ export class Room {
    * Commit an author's live edits as one `edit` revision: the head board with the items that
    * author touched set to their current values, so another author's open edits stay out.
    * Nothing is committed when that board is the head's. If it does not parse (the author's
-   * edits need someone else's), every open group is committed together, as the current board.
+   * edits need someone else's), every open group is committed together, as the current board;
+   * that revision of several authors stores no author id (its author names them all).
    */
   private closeGroup(author: string): void {
     const group = this.groups.get(author)
@@ -334,11 +346,11 @@ export class Room {
     clearTimeout(group.timer)
     this.groups.delete(author)
     const head = getRevision(this.db, this.id, this.head)
-    if (!head) return this.commitEdit(this.board, author)
+    if (!head) return this.commitEdit(this.board, author, group.authorId)
     const composed = parseBoard(withItems(head.board, this.board, group.keys))
     if (composed.ok) {
       if (sameItems(head.board, composed.board)) return
-      return this.commitEdit(composed.board, author)
+      return this.commitEdit(composed.board, author, group.authorId)
     }
     const authors = [author]
     for (const [other, g] of this.groups) {
@@ -347,11 +359,11 @@ export class Room {
     }
     this.groups.clear()
     if (sameItems(head.board, this.board)) return
-    this.commitEdit(this.board, authors.join(', '))
+    this.commitEdit(this.board, authors.join(', '), authors.length === 1 ? group.authorId : null)
   }
 
-  private commitEdit(board: BoardFile, author: string): void {
-    this.head = commitRevision(this.db, this.id, { board, author, how: 'edit' })
+  private commitEdit(board: BoardFile, author: string, authorId: string | null): void {
+    this.head = commitRevision(this.db, this.id, { board, author, how: 'edit', authorId })
     this.board = { ...this.board, revision: this.head }
     // The commit stored `board` as current; the live board may hold other authors' open edits.
     if (!sameItems(board, this.board)) saveCurrent(this.db, this.id, this.board)

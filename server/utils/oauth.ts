@@ -1,11 +1,11 @@
 // The end of a GitHub or Google sign-in (server/routes/auth/*). The provider's profile is
-// mapped to an account by `signIn`; the session then holds the user's id only. Tokens are
+// mapped to an account by `signIn`; the session then holds the user's id (and any unlocked share links). Tokens are
 // never kept or logged.
 import type { H3Event } from 'h3'
 import { useDb } from '../db'
 import { signIn, type Profile, type Provider } from './accounts'
 import { checkMode, configuredProviders, publicUrl } from './mode'
-import { whoIs } from './who'
+import { unlockedOf, whoIs } from './who'
 
 const LABEL: Record<Provider, string> = { github: 'GitHub', google: 'Google' }
 
@@ -31,8 +31,11 @@ export async function finishSignIn(event: H3Event, provider: Provider, profile: 
   const r = signIn(useDb(), provider, profile, current)
   if (!r.ok) return sendRedirect(event, `/account?error=${r.reason}`, 302)
   if (current === undefined) {
-    // Replaced, not merged: nothing from an earlier session (such as R1's flag) is kept.
-    await replaceUserSession(event, r.deleted ? { user: { id: r.userId }, pendingDeletion: true } : { user: { id: r.userId } })
+    // Replaced, not merged: nothing from an earlier session (such as R1's flag) is kept,
+    // except the share links whose password this visitor already entered.
+    const unlocked = await unlockedOf(event)
+    const session = r.deleted ? { user: { id: r.userId }, pendingDeletion: true } : { user: { id: r.userId } }
+    await replaceUserSession(event, unlocked.length > 0 ? { ...session, unlocked } : session)
   }
   return sendRedirect(event, r.deleted ? '/account' : '/', 302)
 }

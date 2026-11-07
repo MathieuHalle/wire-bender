@@ -8,7 +8,7 @@ import { benchResponse, fileStem } from './bench'
 import { access, allows, ownerName, recordVisit, type Access, type Role } from './boardAccess'
 import { createBoard, getBoard, getRevision, listBoards, listRevisions } from './boards'
 import { openRoom, type Room } from './rooms'
-import type { Who } from './who'
+import { authorIdOf, type Who } from './who'
 
 /** The largest request body, in bytes, that the API accepts. */
 export const MAX_BOARD_BYTES = 2_000_000
@@ -28,11 +28,14 @@ const ok = (body: unknown, headers?: Record<string, string>): ApiResult => ({ st
 const notFound = (): ApiResult => ({ status: 404, body: { error: 'not found' } })
 const invalid = (...errors: string[]): ApiResult => ({ status: 422, body: { errors } })
 
+/** A body over MAX_BOARD_BYTES. */
+export const tooLarge = (): ApiResult => ({ status: 413, body: { error: `body is larger than ${MAX_BOARD_BYTES} bytes` } })
+
 type Parsed = { ok: true, json: Record<string, unknown> } | { ok: false, result: ApiResult }
 
 /** A request body as a JSON object, or the 413 / 422 to answer with. The size is checked before parsing. */
 function parseBody(text: string): Parsed {
-  if (Buffer.byteLength(text) > MAX_BOARD_BYTES) return { ok: false, result: { status: 413, body: { error: `body is larger than ${MAX_BOARD_BYTES} bytes` } } }
+  if (Buffer.byteLength(text) > MAX_BOARD_BYTES) return { ok: false, result: tooLarge() }
   let json: unknown
   try {
     json = JSON.parse(text)
@@ -70,7 +73,7 @@ export function createOrImport(db: Db, text: string, author = AUTHOR, ownerId = 
   if (!importing && (typeof json.name !== 'string' || json.name.trim() === '')) return invalid('name: must be a non-empty string')
   const parsed = parseBoard(importing ? json.board : emptyBoard(json))
   if (!parsed.ok) return invalid(...parsed.errors)
-  return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', author, ownerId).id })
+  return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', author, ownerId, ownerId).id })
 }
 
 /** `ownerId`'s boards (Task 7 adds the shared and trash lists). */
@@ -94,10 +97,23 @@ type Granted = Access & { ok: true }
  */
 function withAccess(db: Db, req: BoardRequest, need: Role, fn: (a: Granted) => ApiResult): ApiResult {
   const a = access(db, req.who, req.key, req.unlocked ?? [])
+  return refusalOf(a, need) ?? fn(a as Granted)
+}
+
+/** What to answer for access `a` when `need` is asked for; null when it is allowed. */
+function refusalOf(a: Access, need: Role): ApiResult | null {
   if (!a.ok) return a.status === 401 ? { status: 401, body: { password: true } } : notFound()
-  if (allows(a.role, need)) return fn(a)
+  if (allows(a.role, need)) return null
   return a.signInToEdit && need === 'edit' ? { status: 403, body: { error: 'Sign in to edit.' } } : notFound()
 }
+
+const refusal = (db: Db, req: BoardRequest, need: Role): ApiResult | null =>
+  refusalOf(access(db, req.who, req.key, req.unlocked ?? []), need)
+
+/** Before a PUT's body is read: its refusal, or null. `putBoard` checks again. */
+export const putRefusal = (db: Db, req: BoardRequest): ApiResult | null => refusal(db, req, 'edit')
+/** Before a PATCH's body is read: its refusal, or null. `renameBoard` checks again. */
+export const renameRefusal = (db: Db, req: BoardRequest): ApiResult | null => refusal(db, req, 'owner')
 
 /** Who a board change is by. Only the owner or a signed-in editor gets this far. */
 const authorOf = (who: Who): string => who.kind === 'anonymous' ? AUTHOR : who.author
@@ -144,7 +160,7 @@ export function putBoard(db: Db, req: BoardRequest, text: string): ApiResult {
         room.dropIfEmpty()
         return { status: 409, body: { current: head } }
       }
-      return ok({ revision: room.serverWrite(parsed.board, { author: authorOf(req.who), how: HOW }) })
+      return ok({ revision: room.serverWrite(parsed.board, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who) }) })
     })
   })
 }
@@ -158,7 +174,7 @@ export function renameBoard(db: Db, req: BoardRequest, text: string): ApiResult 
     if (name === '') return invalid('name: must be a non-empty string')
     return withRoom(db, a.boardId, (room) => {
       const current = getBoard(db, a.boardId)!.board
-      return ok({ revision: room.serverWrite({ ...current, name }, { author: authorOf(req.who), how: HOW }) })
+      return ok({ revision: room.serverWrite({ ...current, name }, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who) }) })
     })
   })
 }
@@ -176,8 +192,8 @@ export function benchBoard(db: Db, req: BoardRequest, date?: string): ApiResult 
   return withAccess(db, req, 'view', (a) => {
     const stored = getBoard(db, a.boardId)
     if (!stored) return notFound()
-    // A one-way hash: it keys the bench's ticks and does not show the board id.
-    const hash = tickKey(createHash('sha256').update(`${stored.id}:${stored.head}`).digest('hex'))
+    // Keyed by the key asked with: a link's ticks never tie it to the board id or to another link.
+    const hash = tickKey(createHash('sha256').update(`${req.key}:${stored.head}`).digest('hex'))
     const r = benchResponse(stored.board, hash, date)
     return ok(r.body, r.headers)
   })
@@ -197,15 +213,15 @@ export function downloadBoard(db: Db, req: BoardRequest): ApiResult {
   })
 }
 
-function change(db: Db, req: BoardRequest, step: (room: Room, author: string) => number | null, reason: string): ApiResult {
+function change(db: Db, req: BoardRequest, step: (room: Room, author: string, authorId: string | null) => number | null, reason: string): ApiResult {
   return withAccess(db, req, 'edit', a => withRoom(db, a.boardId, (room) => {
-    const revision = step(room, authorOf(req.who))
+    const revision = step(room, authorOf(req.who), authorIdOf(req.who))
     return revision === null ? { status: 409, body: { reason } } : ok({ revision })
   }))
 }
 
-export const undoBoard = (db: Db, req: BoardRequest): ApiResult => change(db, req, (r, author) => r.undo(author), 'nothing to undo')
-export const redoBoard = (db: Db, req: BoardRequest): ApiResult => change(db, req, (r, author) => r.redo(author), 'nothing to redo')
+export const undoBoard = (db: Db, req: BoardRequest): ApiResult => change(db, req, (r, author, authorId) => r.undo(author, authorId), 'nothing to undo')
+export const redoBoard = (db: Db, req: BoardRequest): ApiResult => change(db, req, (r, author, authorId) => r.redo(author, authorId), 'nothing to redo')
 
 export function listRevisionsResponse(db: Db, req: BoardRequest): ApiResult {
   return withAccess(db, req, 'view', a => ok(listRevisions(db, a.boardId)))
@@ -228,6 +244,6 @@ export function restoreRevision(db: Db, req: BoardRequest, segment: string): Api
     const n = revisionNumber(segment)
     const rev = n === null ? null : getRevision(db, a.boardId, n)
     if (n === null || !rev) return notFound()
-    return withRoom(db, a.boardId, room => ok({ revision: room.serverWrite(rev.board as BoardFile, { author: authorOf(req.who), how: 'restore', target: n }) }))
+    return withRoom(db, a.boardId, room => ok({ revision: room.serverWrite(rev.board as BoardFile, { author: authorOf(req.who), how: 'restore', target: n, authorId: authorIdOf(req.who) }) }))
   })
 }

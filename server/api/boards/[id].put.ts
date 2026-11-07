@@ -1,5 +1,10 @@
-import { putBoard } from '../../utils/api'
+import { putBoard, putRefusal } from '../../utils/api'
 import { useDb } from '../../db'
-import { boardRequest, bodyText, sendResult } from '../../utils/sendResult'
+import { boardRequest, sendWrite } from '../../utils/sendResult'
 
-export default defineEventHandler(async event => sendResult(event, putBoard(useDb(), await boardRequest(event), await bodyText(event))))
+// Access is decided before the body is read: anonymous visitors reach this route.
+export default defineEventHandler(async (event) => {
+  const db = useDb()
+  const req = await boardRequest(event)
+  return sendWrite(event, putRefusal(db, req), text => putBoard(db, req, text))
+})
