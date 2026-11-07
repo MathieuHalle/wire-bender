@@ -190,7 +190,21 @@ export type PublicGate = 'pass' | 'deny' | 'not-found' | 'account'
 /** Pairing is local mode's: in public mode these routes do not exist. */
 const PAIRING = /^\/(pair|api\/pair|api\/devices)(\/|$)/
 
-/** What anonymous may read in public mode, besides pages: Task 4 decides per board. */
+/** The board edits and the link unlock an anonymous visitor may send on to their route. */
+const ANONYMOUS_WRITES: [string, RegExp][] = [
+  ['PUT', /^\/api\/boards\/[^/]+$/],
+  ['PATCH', /^\/api\/boards\/[^/]+$/],
+  ['POST', /^\/api\/boards\/[^/]+\/(undo|redo)$/],
+  ['POST', /^\/api\/boards\/[^/]+\/revisions\/[^/]+\/restore$/],
+  ['POST', /^\/api\/links\/[^/]+\/unlock$/]
+]
+
+function anonymousWrite(method: string, pathname: string): boolean {
+  const path = pathname.replace(/\/$/, '')
+  return ANONYMOUS_WRITES.some(([m, re]) => m === method && re.test(path))
+}
+
+/** What anonymous may read in public mode, besides pages: the board routes decide per board. */
 function anonymousRead(pathname: string): boolean {
   return pathname === '/api/me' || pathname === '/api/_auth/session'
     || pathname.startsWith('/api/boards/') || pathname.startsWith('/auth/')
@@ -212,6 +226,8 @@ export function publicGate(method: string, path: string, signedIn: boolean, pend
   if (PAIRING.test(pathname)) return 'not-found'
   if (method === 'DELETE' && pathname === '/api/_auth/session') return 'pass'
   if (signedIn) return 'pass'
+  // The board's own route decides these per board: 404, or 403 "Sign in to edit." on an edit link.
+  if (anonymousWrite(method, pathname)) return 'pass'
   const get = method === 'GET' || method === 'HEAD'
   if (!get || !anonymousRead(pathname)) return 'deny'
   const page = !(pathname === '/api' || pathname.startsWith('/api/') || pathname.startsWith('/_') || pathname.startsWith('/auth/') || OPEN_FILES.has(pathname))

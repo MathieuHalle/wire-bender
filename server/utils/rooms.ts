@@ -4,6 +4,7 @@ import { parseBoard, type BoardFile } from '~core/schema'
 import { undoState } from '#shared/undoState'
 import { RECORDS, SECTION_NAMES, boardToDoc, docToBoard, itemKey, sameItems, unknownSingles, withItems, writeBoard } from '#shared/yboard'
 import type { Db } from '../db'
+import type { Role } from './boardAccess'
 import { boardBefore, commitRevision, getBoard, getRevision, listRevisions, recover, saveCurrent } from './boards'
 
 /** Live updates from one author join one revision until that author has been idle this long. */
@@ -15,7 +16,15 @@ export interface PeerLink {
   awareness: (update: Uint8Array) => void
 }
 
-export type Received = { ok: true } | { ok: false, reason: string }
+/** A refusal with `code` closes the socket with that code (else 4400). */
+export type Received = { ok: true } | { ok: false, reason: string, code?: number }
+
+/** How a peer reached the board: its role, and whether by the share link (Task 5 closes those on a sharing change). */
+export interface PeerAccess { role: Role, viaLink: boolean }
+
+/** Access changed, or never allowed this: a view peer tried to edit. */
+export const CLOSE_ACCESS = 4403
+export const VIEW_ONLY: Received = { ok: false, reason: 'view only', code: CLOSE_ACCESS }
 
 export interface WriteMeta { author: string, how: string, target?: number }
 
@@ -106,7 +115,7 @@ export class Room {
   readonly awareness = new Awareness(this.doc)
   private board: BoardFile
   private head: number
-  private readonly peers = new Map<string, { author: string, link: PeerLink, clients: Set<number> }>()
+  private readonly peers = new Map<string, { author: string, link: PeerLink, clients: Set<number>, access: PeerAccess }>()
   private readonly groups = new Map<string, Group>()
   private closed = false
 
@@ -131,15 +140,29 @@ export class Room {
     })
   }
 
-  /** Add a peer. It is sent the presence of everyone already here; the doc itself comes through the sync protocol. */
-  join(peerId: string, author: string, link: PeerLink): void {
-    this.peers.set(peerId, { author, link, clients: new Set() })
+  /**
+   * Add a peer. It is sent the presence of everyone already here; the doc itself comes
+   * through the sync protocol. A peer joined without `access` is the owner by board id.
+   */
+  join(peerId: string, author: string, link: PeerLink, access: PeerAccess = { role: 'owner', viaLink: false }): void {
+    this.peers.set(peerId, { author, link, clients: new Set(), access: { ...access } })
     const present = [...this.awareness.getStates().keys()]
     if (present.length > 0) safely(() => link.awareness(encodeAwarenessUpdate(this.awareness, present)))
   }
 
-  /** Validate a client's update on a copy of the doc; apply, broadcast and save it only if the board stays valid. */
+  /** A joined peer's role and how it came, or null. */
+  peerAccess(peerId: string): PeerAccess | null {
+    const peer = this.peers.get(peerId)
+    return peer ? { ...peer.access } : null
+  }
+
+  /**
+   * Validate a client's update on a copy of the doc; apply, broadcast and save it only if the
+   * board stays valid. A view peer's update is refused unless it changes nothing (its sync
+   * step 2 on connecting).
+   */
   receive(peerId: string, author: string, update: Uint8Array): Received {
+    if (this.peers.get(peerId)?.access.role === 'view') return this.changes(update) ? VIEW_ONLY : { ok: true }
     const checked = this.check(update)
     if (!checked.ok) return checked
     let changed = false
@@ -213,6 +236,24 @@ export class Room {
       if (peer.clients.size > 0) removeAwarenessStates(this.awareness, [...peer.clients], null)
     }
     this.dropIfEmpty()
+  }
+
+  /** True when applying `update` would change the doc. */
+  private changes(update: Uint8Array): boolean {
+    const copy = new Y.Doc()
+    try {
+      Y.applyUpdate(copy, Y.encodeStateAsUpdate(this.doc))
+      let changed = false
+      copy.on('update', () => {
+        changed = true
+      })
+      Y.applyUpdate(copy, update)
+      return changed || copy.store.pendingStructs !== null || copy.store.pendingDs !== null
+    } catch {
+      return true
+    } finally {
+      copy.destroy()
+    }
   }
 
   private check(update: Uint8Array): { ok: true, board: BoardFile, keys: Set<string> } | { ok: false, reason: string } {

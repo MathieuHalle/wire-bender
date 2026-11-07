@@ -1,5 +1,10 @@
 import { listBoardsResponse } from '../../utils/api'
 import { useDb } from '../../db'
-import { sendResult } from '../../utils/sendResult'
+import { sendResult, whoOf } from '../../utils/sendResult'
 
-export default defineEventHandler(event => sendResult(event, listBoardsResponse(useDb())))
+/** The asker's own boards; anonymous never gets here (the access middleware). */
+export default defineEventHandler((event) => {
+  const who = whoOf(event)
+  if (who.kind === 'anonymous') throw createError({ statusCode: 401, statusMessage: 'not trusted' })
+  return sendResult(event, listBoardsResponse(useDb(), who.userId))
+})

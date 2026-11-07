@@ -1,14 +1,21 @@
 // The access middleware and the board socket's upgrade/open hooks, driven with h3- and
 // crossws-shaped sources (step 1 deferred minor). Nitro's auto-imported helpers are stubbed
 // with the few behaviours these handlers use.
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { eq } from 'drizzle-orm'
+import * as encoding from 'lib0/encoding'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as syncProtocol from 'y-protocols/sync'
+import * as Y from 'yjs'
+import type { BoardFile } from '../../core/schema'
 import { closeDb, useDb } from '../../server/db'
-import { users } from '../../server/db/schema'
+import { boards, linkVisits, users } from '../../server/db/schema'
 import { signIn } from '../../server/utils/accounts'
+import { createBoard, getBoardRow } from '../../server/utils/boards'
+import { openRoom } from '../../server/utils/rooms'
+import { docToBoard, writeBoard } from '../../shared/yboard'
 import type { NodeReqLike } from '../../server/utils/peerAddress'
 import type { SessionData } from '../../server/utils/who'
 
@@ -31,6 +38,14 @@ vi.stubGlobal('setResponseStatus', (event: FakeEvent, status: number) => {
 vi.stubGlobal('sendRedirect', (_event: FakeEvent, location: string, status: number) => ({ redirect: location, status }))
 vi.stubGlobal('getUserSession', async () => session)
 vi.stubGlobal('useRuntimeConfig', () => ({ session: { name: 'nuxt-auth-session' } }))
+vi.stubGlobal('replaceUserSession', async (_event: unknown, data: SessionData) => {
+  session = data
+})
+vi.stubGlobal('getRouterParam', (event: FakeEvent, name: string) => (event.context.params as Record<string, string> | undefined)?.[name])
+vi.stubGlobal('getRequestHeader', (event: FakeEvent, name: string) => event.node.req.headers[name])
+vi.stubGlobal('setResponseHeader', () => {})
+// The link-password check: a stand-in for nuxt-auth-utils' scrypt.
+vi.stubGlobal('verifyPassword', async (hash: string, plain: string) => hash === `h:${plain}`)
 vi.stubGlobal('clearUserSession', async () => {
   cleared()
   session = {}
@@ -40,15 +55,21 @@ type Handler = (event: FakeEvent) => unknown
 interface WsHooks {
   upgrade: (request: unknown) => Promise<Response | undefined> | Response | undefined
   open: (peer: unknown) => void
+  message: (peer: unknown, msg: { uint8Array: () => Uint8Array }) => void
+  close: (peer: unknown) => void
 }
+
+const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../fixtures/channel-board-2.json'), 'utf8')) as BoardFile
 let middleware: Handler
 let ws: WsHooks
+let unlock: Handler
 
 let dir: string
 
 beforeAll(async () => {
   middleware = (await import('../../server/middleware/access')).default as unknown as Handler
   ws = (await import('../../server/routes/_ws/board/[id]')).default as unknown as WsHooks
+  unlock = (await import('../../server/api/links/[linkId]/unlock.post')).default as unknown as Handler
 })
 afterAll(() => {
   vi.unstubAllGlobals()
@@ -132,15 +153,23 @@ describe('access middleware, public mode', () => {
   })
 
   it('anonymous writes need sign-in', async () => {
-    for (const [method, url] of [['POST', '/api/boards'], ['PUT', '/api/boards/abc'], ['PATCH', '/api/me'], ['POST', '/api/boards/abc/undo']] as const) {
+    for (const [method, url] of [['POST', '/api/boards'], ['PATCH', '/api/me'], ['POST', '/api/boards/abc/fork'], ['DELETE', '/api/boards/abc'], ['POST', '/api/links/abc'], ['PUT', '/api/links/abc/unlock']] as const) {
       const e = publicEvent(method, url)
       expect(await middleware(e), url).toEqual({ error: 'Sign in first.' })
       expect(e.status, url).toBe(401)
     }
   })
 
+  it('anonymous board edits and link unlocks reach their route, which decides per board', async () => {
+    for (const [method, url] of [['PUT', '/api/boards/abc'], ['PATCH', '/api/boards/abc'], ['POST', '/api/boards/abc/undo'], ['POST', '/api/boards/abc/redo'], ['POST', '/api/boards/abc/revisions/2/restore'], ['POST', '/api/links/abc/unlock']] as const) {
+      const e = publicEvent(method, url)
+      expect(await middleware(e), url).toBeUndefined()
+      expect(e.context.who, url).toEqual({ kind: 'anonymous' })
+    }
+  })
+
   it('public mode does not trust loopback', async () => {
-    const e = event('PUT', '/api/boards/x', '127.0.0.1', { host: 'wire.example.org' })
+    const e = event('POST', '/api/boards', '127.0.0.1', { host: 'wire.example.org' })
     expect(await middleware(e)).toEqual({ error: 'Sign in first.' })
     // The machine's own names are not the public server's.
     expect(await middleware(event('GET', '/', '127.0.0.1', { host: 'localhost:3002' }))).toEqual({ error: 'This request names another site.' })
@@ -183,7 +212,7 @@ describe('access middleware, public mode', () => {
   })
 
   it('a device cookie means nothing', async () => {
-    const e = publicEvent('PUT', '/api/boards/abc', { cookie: `wb_device=${'a'.repeat(43)}; ${SESSION_COOKIE}` })
+    const e = publicEvent('POST', '/api/boards', { cookie: `wb_device=${'a'.repeat(43)}; ${SESSION_COOKIE}` })
     expect(await middleware(e)).toEqual({ error: 'Sign in first.' })
   })
 
@@ -191,7 +220,7 @@ describe('access middleware, public mode', () => {
     const id = newUser()
     useDb().update(users).set({ suspendedAt: Date.now() }).where(eq(users.id, id)).run()
     session = { user: { id } }
-    expect(await middleware(publicEvent('PUT', '/api/boards/abc'))).toEqual({ error: 'Sign in first.' })
+    expect(await middleware(publicEvent('POST', '/api/boards'))).toEqual({ error: 'Sign in first.' })
     expect(cleared).toHaveBeenCalled()
   })
 
@@ -204,47 +233,190 @@ describe('access middleware, public mode', () => {
     expect(await middleware(publicEvent('GET', '/account'))).toBeUndefined()
     expect(await middleware(publicEvent('GET', '/api/me'))).toBeUndefined()
     expect(await middleware(publicEvent('DELETE', '/api/_auth/session'))).toBeUndefined()
-    expect(await middleware(publicEvent('PUT', '/api/boards/abc'))).toEqual({ error: 'Sign in first.' })
+    expect(await middleware(publicEvent('POST', '/api/boards'))).toEqual({ error: 'Sign in first.' })
     expect(cleared).not.toHaveBeenCalled()
   })
 })
 
 describe('board socket', () => {
-  function peer(request: ReturnType<typeof upgradeRequest>) {
+  function peer(request: ReturnType<typeof upgradeRequest>, id = 'p1') {
     const closed: { code?: number, reason?: string }[] = []
     return {
       closed,
-      peer: { id: 'p1', request, context: request.context, send: () => {}, close: (code?: number, reason?: string) => closed.push({ code, reason }) }
+      peer: { id, request, context: request.context, send: () => {}, close: (code?: number, reason?: string) => closed.push({ code, reason }) }
     }
   }
 
+  /** A board owned by `ownerId`, with `set` applied (visibility, password, trash). */
+  function board(ownerId: string, set: Partial<typeof boards.$inferInsert> = {}): { id: string, linkId: string } {
+    const { id } = createBoard(useDb(), fixture, 'import', 'x', ownerId)
+    if (Object.keys(set).length > 0) useDb().update(boards).set(set).where(eq(boards.id, id)).run()
+    return { id, linkId: getBoardRow(useDb(), id)!.linkId }
+  }
+
+  const PUBLIC_HEADERS = { host: 'wire.example.org', origin: 'https://wire.example.org' }
+  const signedIn = (url: string) => upgradeRequest(url, '203.0.113.9', { ...PUBLIC_HEADERS, cookie: SESSION_COOKIE })
+  const anonymous = (url: string) => upgradeRequest(url, '203.0.113.9', PUBLIC_HEADERS)
+
+  /** A sync update message that moves the board's first part. */
+  function editMessage(): Uint8Array {
+    const room = openRoom(useDb(), getBoardRow(useDb(), joinedId)!.id)!
+    const doc = new Y.Doc()
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(room.doc))
+    let update: Uint8Array | null = null
+    doc.on('update', (u: Uint8Array) => {
+      update = u
+    })
+    const before = docToBoard(doc, 0)
+    if (!before.ok) throw new Error(before.errors.join())
+    writeBoard(doc, before.board, { ...before.board, name: 'edited by a viewer' })
+    const e = encoding.createEncoder()
+    encoding.writeVarUint(e, 0)
+    syncProtocol.writeUpdate(e, update!)
+    return encoding.toUint8Array(e)
+  }
+  let joinedId = ''
+
   it('local mode: the machine may connect, a stranger may not', async () => {
-    expect(await ws.upgrade(upgradeRequest('/_ws/board/abc', '127.0.0.1', { host: 'localhost:3002' }))).toBeUndefined()
-    const r = await ws.upgrade(upgradeRequest('/_ws/board/abc', '192.168.1.20', { host: 'localhost:3002' }))
+    const b = board('local')
+    const mine = upgradeRequest(`/_ws/board/${b.id}`, '127.0.0.1', { host: 'localhost:3002' })
+    expect(await ws.upgrade(mine)).toBeUndefined()
+    const p = peer(mine)
+    ws.open(p.peer)
+    expect(p.closed).toEqual([])
+    ws.close(p.peer)
+    const r = await ws.upgrade(upgradeRequest(`/_ws/board/${b.id}`, '192.168.1.20', { host: 'localhost:3002' }))
     expect(r?.status).toBe(401)
-    const foreign = await ws.upgrade(upgradeRequest('/_ws/board/abc', '127.0.0.1', { host: 'evil.example' }))
+    const foreign = await ws.upgrade(upgradeRequest(`/_ws/board/${b.id}`, '127.0.0.1', { host: 'evil.example' }))
     expect(foreign?.status).toBe(403)
   })
 
-  it('public mode: anonymous is refused, a signed-in user connects', async () => {
+  it('board id is 404 for non-owners', async () => {
     publicMode()
-    const anon = await ws.upgrade(upgradeRequest('/_ws/board/abc', '127.0.0.1', { host: 'wire.example.org' }))
-    expect(anon?.status).toBe(401)
+    const ada = newUser('Ada')
+    const b = board(ada, { visibility: 'edit' })
+    session = { user: { id: newUser('Bob') } }
+    const unknown = await ws.upgrade(signedIn('/_ws/board/no-such-board'))
+    expect(unknown?.status).toBe(404)
+    const unknownBody = await unknown!.text()
+    expect(JSON.parse(unknownBody)).toEqual({ error: 'not found' })
+    for (const request of [signedIn(`/_ws/board/${b.id}`), anonymous(`/_ws/board/${b.id}`)]) {
+      const r = await ws.upgrade(request)
+      expect(r?.status).toBe(404)
+      expect(await r!.text()).toBe(unknownBody)
+    }
+    session = { user: { id: ada } }
+    expect(await ws.upgrade(signedIn(`/_ws/board/${b.id}`))).toBeUndefined()
+  })
 
-    const id = newUser('Ada')
-    session = { user: { id } }
-    const request = upgradeRequest('/_ws/board/abc', '203.0.113.9', { host: 'wire.example.org', origin: 'https://wire.example.org', cookie: SESSION_COOKIE })
+  it('a password link needs unlock first; a private or trashed one is 404', async () => {
+    publicMode()
+    const ada = newUser('Ada')
+    const locked = board(ada, { passwordHash: 'h:x' })
+    const r = await ws.upgrade(anonymous(`/_ws/board/${locked.linkId}`))
+    expect(r?.status).toBe(401)
+    expect(await r!.json()).toEqual({ password: true })
+    session = { unlocked: [locked.linkId] }
+    expect(await ws.upgrade(signedIn(`/_ws/board/${locked.linkId}`))).toBeUndefined()
+    for (const set of [{ visibility: 'private' as const }, { trashedAt: Date.now() }]) {
+      expect((await ws.upgrade(anonymous(`/_ws/board/${board(ada, set).linkId}`)))?.status).toBe(404)
+    }
+  })
+
+  it('view peer\'s update closes it with 4403', async () => {
+    publicMode()
+    const b = board(newUser('Ada'), { visibility: 'edit' })
+    joinedId = b.id
+    // Anonymous on an edit link: view.
+    const request = anonymous(`/_ws/board/${b.linkId}`)
     expect(await ws.upgrade(request)).toBeUndefined()
-    expect(request.context.who).toMatchObject({ kind: 'user', userId: id, author: 'Ada' })
+    expect(request.context.who).toEqual({ kind: 'anonymous' })
+    const p = peer(request)
+    ws.open(p.peer)
+    expect(p.closed).toEqual([])
+    expect(openRoom(useDb(), b.id)!.peerAccess('p1')).toEqual({ role: 'view', viaLink: true })
+    ws.message(p.peer, { uint8Array: () => editMessage() })
+    expect(p.closed).toEqual([{ code: 4403, reason: 'view only' }])
+    expect(getBoardRow(useDb(), b.id)!.name).toBe(fixture.name)
 
-    // On open the upgrade's answer is used: past the access check, an unknown board is 4404.
+    // A signed-in visitor on the same link edits; the visit is remembered.
+    const bob = newUser('Bob')
+    session = { user: { id: bob } }
+    const signed = signedIn(`/_ws/board/${b.linkId}`)
+    expect(await ws.upgrade(signed)).toBeUndefined()
+    const q = peer(signed, 'p2')
+    ws.open(q.peer)
+    expect(openRoom(useDb(), b.id)!.peerAccess('p2')).toEqual({ role: 'edit', viaLink: true })
+    ws.message(q.peer, { uint8Array: () => editMessage() })
+    expect(q.closed).toEqual([])
+    expect(useDb().select().from(linkVisits).all()).toMatchObject([{ userId: bob, boardId: b.id, linkId: b.linkId }])
+    ws.close(q.peer)
+  })
+
+  it('access is checked again on open', async () => {
+    publicMode()
+    const b = board(newUser('Ada'))
+    const request = anonymous(`/_ws/board/${b.linkId}`)
+    expect(await ws.upgrade(request)).toBeUndefined()
+    // The owner made it private between the upgrade and the open.
+    useDb().update(boards).set({ visibility: 'private' }).where(eq(boards.id, b.id)).run()
     const p = peer(request)
     ws.open(p.peer)
     expect(p.closed).toEqual([{ code: 4404, reason: 'no such board' }])
 
     // A peer without a checked upgrade is refused.
-    const q = peer(upgradeRequest('/_ws/board/abc', '127.0.0.1', { host: 'wire.example.org' }))
+    const q = peer(upgradeRequest(`/_ws/board/${b.linkId}`, '127.0.0.1', { host: 'wire.example.org' }))
     ws.open(q.peer)
     expect(q.closed[0]?.code).toBe(4401)
+  })
+})
+
+describe('POST /api/links/:linkId/unlock', () => {
+  /** An unlock request from an address, with a JSON body. */
+  function unlockEvent(linkId: string, body: unknown, address = '203.0.113.9'): FakeEvent {
+    const text = JSON.stringify(body)
+    const req = Object.assign(req_(address), { async* [Symbol.asyncIterator]() {
+      yield Buffer.from(text)
+    } })
+    return { node: { req }, method: 'POST', path: `/api/links/${linkId}/unlock`, context: { params: { linkId } } }
+  }
+  const req_ = (address: string): NodeReqLike => ({ method: 'POST', socket: { remoteAddress: address, localPort: 3002 }, headers: { 'host': 'wire.example.org', 'content-length': '20' } })
+
+  beforeEach(async () => {
+    publicMode()
+    ;(await import('../../server/utils/boardAccess')).resetUnlocks()
+  })
+
+  it('password link needs unlock, then opens', async () => {
+    const { id } = createBoard(useDb(), fixture, 'import', 'x', newUser('Ada'))
+    useDb().update(boards).set({ passwordHash: 'h:secret' }).where(eq(boards.id, id)).run()
+    const linkId = getBoardRow(useDb(), id)!.linkId
+    session = { user: { id: newUser('Bob') }, unlocked: ['older'] }
+
+    const wrong = unlockEvent(linkId, { password: 'nope' })
+    expect(await unlock(wrong)).toEqual({ error: 'Wrong password.' })
+    expect(wrong.status).toBe(403)
+    expect(session.unlocked).toEqual(['older'])
+
+    const right = unlockEvent(linkId, { password: 'secret' })
+    expect(await unlock(right)).toEqual({ ok: true })
+    expect(right.status).toBe(200)
+    // The rest of the session is kept.
+    expect(session).toMatchObject({ user: { id: expect.any(String) }, unlocked: ['older', linkId] })
+    expect(session).not.toHaveProperty('id')
+
+    // The socket upgrade now opens.
+    expect(await ws.upgrade(upgradeRequest(`/_ws/board/${linkId}`, '203.0.113.9', { host: 'wire.example.org', origin: 'https://wire.example.org', cookie: SESSION_COOKIE }))).toBeUndefined()
+  })
+
+  it('five wrong passwords then 429', async () => {
+    const { id } = createBoard(useDb(), fixture, 'import', 'x', newUser('Ada'))
+    useDb().update(boards).set({ passwordHash: 'h:secret' }).where(eq(boards.id, id)).run()
+    const linkId = getBoardRow(useDb(), id)!.linkId
+    for (let i = 0; i < 5; i++) expect((await unlock(unlockEvent(linkId, { password: 'nope' })))).toEqual({ error: 'Wrong password.' })
+    const limited = unlockEvent(linkId, { password: 'secret' })
+    expect(await unlock(limited)).toEqual({ error: 'Too many wrong passwords. Wait 10 minutes and try again.' })
+    expect(limited.status).toBe(429)
+    expect(session.unlocked).toBeUndefined()
   })
 })

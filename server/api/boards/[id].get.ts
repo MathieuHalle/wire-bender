@@ -1,5 +1,5 @@
 import { getBoardResponse } from '../../utils/api'
 import { useDb } from '../../db'
-import { boardId, sendResult } from '../../utils/sendResult'
+import { boardRequest, sendResult } from '../../utils/sendResult'
 
-export default defineEventHandler(event => sendResult(event, getBoardResponse(useDb(), boardId(event))))
+export default defineEventHandler(async event => sendResult(event, getBoardResponse(useDb(), await boardRequest(event))))

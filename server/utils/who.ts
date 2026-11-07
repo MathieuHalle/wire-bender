@@ -14,8 +14,8 @@ export type Who
     | { kind: 'user', userId: string, author: string, isAdmin: boolean, isPremium: boolean }
     | { kind: 'anonymous' }
 
-/** What the session cookie holds: the user's id only, and R1's flag. */
-export interface SessionData { user?: { id?: unknown }, pendingDeletion?: boolean }
+/** What the session cookie holds: the user's id only, R1's flag, and the link ids whose password was entered. */
+export interface SessionData { user?: { id?: unknown }, pendingDeletion?: boolean, unlocked?: unknown }
 
 export interface WhoDeps {
   mode?: Mode
@@ -29,7 +29,7 @@ export interface WhoDeps {
 const ANONYMOUS: Who = { kind: 'anonymous' }
 
 /** The name nuxt-auth-utils keeps its session under (NUXT_SESSION_NAME may change it). */
-function sessionCookieName(): string {
+export function sessionCookieName(): string {
   const name = (useRuntimeConfig().session as { name?: unknown } | undefined)?.name
   return typeof name === 'string' && name !== '' && name !== 'nuxt-session' ? name : 'nuxt-auth-session'
 }
@@ -85,4 +85,14 @@ export async function resolveSession(source: TrustSource, deps: WhoDeps = {}): P
 /** Who a request (h3 event), WebSocket upgrade request or WebSocket peer is. */
 export async function whoIs(source: TrustSource, deps: WhoDeps = {}): Promise<Who> {
   return (await resolveSession(source, deps)).who
+}
+
+/**
+ * The share link ids whose password this request's session has entered (any mode, signed in
+ * or not); none without a session cookie, so nothing is read or sealed for a cookieless visitor.
+ */
+export async function unlockedOf(source: TrustSource, deps: WhoDeps = {}): Promise<string[]> {
+  if (cookieOf(source, deps.sessionCookie ?? sessionCookieName()) === undefined) return []
+  const list = (await (deps.readSession ?? defaultRead)(source)).unlocked
+  return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : []
 }

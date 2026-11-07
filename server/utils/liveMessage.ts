@@ -4,7 +4,7 @@ import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import { MESSAGE_COMMAND, type LiveAnswer } from '#shared/liveCommand'
-import type { Received, Room } from './rooms'
+import { VIEW_ONLY, type Received, type Room } from './rooms'
 
 /** y-websocket message types; commands use MESSAGE_COMMAND from #shared/liveCommand. */
 export const MESSAGE_SYNC = 0
@@ -50,6 +50,8 @@ const NOTHING = { undo: 'nothing to undo', redo: 'nothing to redo' } as const
 function command(peer: MessagePeer, room: Room, author: string, d: decoding.Decoder): Received {
   // An empty type 3 is y-websocket's awareness query (sent only over BroadcastChannel): ignore it.
   if (!decoding.hasContent(d)) return { ok: true }
+  // A viewer may not undo or redo: refused before the command is even read.
+  if (room.peerAccess(peer.id)?.role === 'view') return VIEW_ONLY
   let parsed: unknown
   try {
     parsed = JSON.parse(decoding.readVarString(d))

@@ -1,5 +1,5 @@
 import { undoBoard } from '../../../utils/api'
 import { useDb } from '../../../db'
-import { authorOf, boardId, sendResult } from '../../../utils/sendResult'
+import { boardRequest, sendResult } from '../../../utils/sendResult'
 
-export default defineEventHandler(event => sendResult(event, undoBoard(useDb(), boardId(event), authorOf(event))))
+export default defineEventHandler(async event => sendResult(event, undoBoard(useDb(), await boardRequest(event))))

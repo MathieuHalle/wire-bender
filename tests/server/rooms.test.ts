@@ -466,6 +466,54 @@ describe('rooms', () => {
     logged.mockRestore()
     room.leave(peer.id)
   })
+
+  it('view peer\'s update closes it with 4403', () => {
+    const room = openRoom(db, id)!
+    const sent: Uint8Array[] = []
+    const viewer = { id: 'v1', send: (d: Uint8Array) => sent.push(d) }
+    const editor = { id: 'e1', send: () => {} }
+    room.join(viewer.id, 'Visitor', { update: () => {}, awareness: () => {} }, { role: 'view', viaLink: true })
+    room.join(editor.id, 'Bob', { update: () => {}, awareness: () => {} }, { role: 'edit', viaLink: true })
+    expect(room.peerAccess(viewer.id)).toEqual({ role: 'view', viaLink: true })
+    expect(room.peerAccess(editor.id)).toEqual({ role: 'edit', viaLink: true })
+    expect(room.peerAccess('nobody')).toBeNull()
+
+    const sync = (step: 'update' | 'step2', update: Uint8Array) => {
+      const e = encoding.createEncoder()
+      encoding.writeVarUint(e, 0)
+      encoding.writeVarUint(e, step === 'update' ? syncProtocol.messageYjsUpdate : syncProtocol.messageYjsSyncStep2)
+      encoding.writeVarUint8Array(e, update)
+      return encoding.toUint8Array(e)
+    }
+    const VIEW_ONLY = { ok: false, reason: 'view only', code: 4403 }
+
+    // A viewer's own sync step 2 changes nothing: it is accepted, so a viewer can connect.
+    const doc = detached(room)
+    expect(handleMessage(viewer, room, 'Visitor', sync('step2', Y.encodeStateAsUpdate(doc, Y.encodeStateVector(room.doc))))).toEqual({ ok: true })
+    // An update that changes the board is refused, and the board is untouched.
+    expect(handleMessage(viewer, room, 'Visitor', sync('update', captured(doc, moveT7('L3'))))).toEqual(VIEW_ONLY)
+    expect(t7(boardOf(room.doc))).toEqual(['K3', 'M3'])
+    // So is a command, before it runs.
+    const e = encoding.createEncoder()
+    encoding.writeVarUint(e, MESSAGE_COMMAND)
+    encoding.writeVarString(e, JSON.stringify({ op: 'undo', id: 1 }))
+    expect(handleMessage(viewer, room, 'Visitor', encoding.toUint8Array(e))).toEqual(VIEW_ONLY)
+    expect(sent).toEqual([])
+    expect(listRevisions(db, id)).toHaveLength(1)
+
+    // An editor's same update is accepted.
+    expect(handleMessage(editor, room, 'Bob', sync('update', captured(detached(room), moveT7('L3'))))).toEqual({ ok: true })
+    expect(t7(boardOf(room.doc))).toEqual(['K3', 'L3'])
+    room.leave(viewer.id)
+    room.leave(editor.id)
+  })
+
+  it('a peer joined without access is the owner (step 1 callers)', () => {
+    const room = openRoom(db, id)!
+    room.join('o', 'Local', { update: () => {}, awareness: () => {} })
+    expect(room.peerAccess('o')).toEqual({ role: 'owner', viaLink: false })
+    room.leave('o')
+  })
 })
 
 function relabelJA(label: string) {

@@ -5,13 +5,15 @@ import { statsLine, ADVISORY } from '../../cli/format'
 import { tickKey } from '../../export/benchHtml'
 import type { Db } from '../db'
 import { benchResponse, fileStem } from './bench'
+import { access, allows, ownerName, recordVisit, type Access, type Role } from './boardAccess'
 import { createBoard, getBoard, getRevision, listBoards, listRevisions } from './boards'
 import { openRoom, type Room } from './rooms'
+import type { Who } from './who'
 
 /** The largest request body, in bytes, that the API accepts. */
 export const MAX_BOARD_BYTES = 2_000_000
 
-/** The author when a caller passes none (tests); routes pass the request's, from the access check. */
+/** The author of a create or import when a caller passes none (tests); routes pass the request's. */
 const AUTHOR = 'Local'
 const HOW = 'api'
 
@@ -59,8 +61,8 @@ function emptyBoard(json: Record<string, unknown>): unknown {
   }
 }
 
-/** `POST /api/boards`: `{ board }` imports, `{ name, cols, rows, type }` creates an empty board. */
-export function createOrImport(db: Db, text: string, author = AUTHOR): ApiResult {
+/** `POST /api/boards`: `{ board }` imports, `{ name, cols, rows, type }` creates an empty board, owned by `ownerId`. */
+export function createOrImport(db: Db, text: string, author = AUTHOR, ownerId = 'local'): ApiResult {
   const p = parseBody(text)
   if (!p.ok) return p.result
   const { json } = p
@@ -68,15 +70,52 @@ export function createOrImport(db: Db, text: string, author = AUTHOR): ApiResult
   if (!importing && (typeof json.name !== 'string' || json.name.trim() === '')) return invalid('name: must be a non-empty string')
   const parsed = parseBoard(importing ? json.board : emptyBoard(json))
   if (!parsed.ok) return invalid(...parsed.errors)
-  return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', author, 'local').id })
+  return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', author, ownerId).id })
 }
 
-export function listBoardsResponse(db: Db): ApiResult {
-  return ok(listBoards(db, 'local', 'mine'))
+/** `ownerId`'s boards (Task 7 adds the shared and trash lists). */
+export function listBoardsResponse(db: Db, ownerId = 'local'): ApiResult {
+  return ok(listBoards(db, ownerId, 'mine'))
 }
 
-export function getBoardResponse(db: Db, id: string): ApiResult {
-  return foundOr404(getBoard(db, id))
+/**
+ * Which board a route is asked about, and by whom: `key` is the board id or its share link
+ * id, `unlocked` the link ids whose password the session has entered.
+ */
+export interface BoardRequest { key: string, who: Who, unlocked?: readonly string[] }
+
+type Granted = Access & { ok: true }
+
+/**
+ * The access step every board route takes: `fn` runs on the board `req` names only if the
+ * asker's role allows `need`. Otherwise the same 404 as an unknown board, 401
+ * `{ password: true }` for a link whose password the session has not entered, or 403 for a
+ * signed-out visitor on an edit link asking to edit.
+ */
+function withAccess(db: Db, req: BoardRequest, need: Role, fn: (a: Granted) => ApiResult): ApiResult {
+  const a = access(db, req.who, req.key, req.unlocked ?? [])
+  if (!a.ok) return a.status === 401 ? { status: 401, body: { password: true } } : notFound()
+  if (allows(a.role, need)) return fn(a)
+  return a.signInToEdit && need === 'edit' ? { status: 403, body: { error: 'Sign in to edit.' } } : notFound()
+}
+
+/** Who a board change is by. Only the owner or a signed-in editor gets this far. */
+const authorOf = (who: Who): string => who.kind === 'anonymous' ? AUTHOR : who.author
+
+/** `GET /api/boards/:key`: to anyone but the owner by board id, `id` is the key they used. */
+export function getBoardResponse(db: Db, req: BoardRequest): ApiResult {
+  return withAccess(db, req, 'view', (a) => {
+    const stored = getBoard(db, a.boardId)
+    if (!stored) return notFound()
+    recordVisit(db, req.who, a, req.key)
+    return ok({
+      ...stored,
+      id: a.viaLink ? req.key : a.boardId,
+      role: a.role,
+      signInToEdit: a.signInToEdit,
+      owner: { name: ownerName(db, a.boardId) }
+    })
+  })
 }
 
 function foundOr404(body: unknown): ApiResult {
@@ -89,76 +128,87 @@ function withRoom(db: Db, id: string, fn: (room: Room) => ApiResult): ApiResult 
   return room ? fn(room) : notFound()
 }
 
-/** `PUT /api/boards/:id`: `{ board, baseRevision? }`. */
-export function putBoard(db: Db, id: string, text: string, author = AUTHOR): ApiResult {
-  const p = parseBody(text)
-  if (!p.ok) return p.result
-  const { board, baseRevision } = p.json
-  if (baseRevision !== undefined && !Number.isInteger(baseRevision)) return invalid('baseRevision must be an integer')
-  const parsed = parseBoard(board)
-  if (!parsed.ok) return invalid(...parsed.errors)
-  return withRoom(db, id, (room) => {
-    // Commit live edits still grouping first: they are part of the board the base is checked against.
-    const head = room.flush()
-    if (baseRevision !== undefined && baseRevision !== head) {
-      room.dropIfEmpty()
-      return { status: 409, body: { current: head } }
-    }
-    return ok({ revision: room.serverWrite(parsed.board, { author, how: HOW }) })
+/** `PUT /api/boards/:key`: `{ board, baseRevision? }`. */
+export function putBoard(db: Db, req: BoardRequest, text: string): ApiResult {
+  return withAccess(db, req, 'edit', (a) => {
+    const p = parseBody(text)
+    if (!p.ok) return p.result
+    const { board, baseRevision } = p.json
+    if (baseRevision !== undefined && !Number.isInteger(baseRevision)) return invalid('baseRevision must be an integer')
+    const parsed = parseBoard(board)
+    if (!parsed.ok) return invalid(...parsed.errors)
+    return withRoom(db, a.boardId, (room) => {
+      // Commit live edits still grouping first: they are part of the board the base is checked against.
+      const head = room.flush()
+      if (baseRevision !== undefined && baseRevision !== head) {
+        room.dropIfEmpty()
+        return { status: 409, body: { current: head } }
+      }
+      return ok({ revision: room.serverWrite(parsed.board, { author: authorOf(req.who), how: HOW }) })
+    })
   })
 }
 
-/** `PATCH /api/boards/:id`: `{ name }`, a board change like any other. */
-export function renameBoard(db: Db, id: string, text: string, author = AUTHOR): ApiResult {
-  const p = parseBody(text)
-  if (!p.ok) return p.result
-  const name = typeof p.json.name === 'string' ? p.json.name.trim() : ''
-  if (name === '') return invalid('name: must be a non-empty string')
-  return withRoom(db, id, (room) => {
-    const current = getBoard(db, id)!.board
-    return ok({ revision: room.serverWrite({ ...current, name }, { author, how: HOW }) })
+/** `PATCH /api/boards/:id`: `{ name }`, a board change like any other; the owner's only. */
+export function renameBoard(db: Db, req: BoardRequest, text: string): ApiResult {
+  return withAccess(db, req, 'owner', (a) => {
+    const p = parseBody(text)
+    if (!p.ok) return p.result
+    const name = typeof p.json.name === 'string' ? p.json.name.trim() : ''
+    if (name === '') return invalid('name: must be a non-empty string')
+    return withRoom(db, a.boardId, (room) => {
+      const current = getBoard(db, a.boardId)!.board
+      return ok({ revision: room.serverWrite({ ...current, name }, { author: authorOf(req.who), how: HOW }) })
+    })
   })
 }
 
-export function checkBoard(db: Db, id: string): ApiResult {
-  const stored = getBoard(db, id)
-  if (!stored) return notFound()
-  const result = runCheck(stored.board)
-  return ok({ ...result, statsLine: statsLine(result.stats), advisory: ADVISORY })
-}
-
-export function benchBoard(db: Db, id: string, date?: string): ApiResult {
-  const stored = getBoard(db, id)
-  if (!stored) return notFound()
-  const hash = tickKey(createHash('sha256').update(`${stored.id}:${stored.head}`).digest('hex'))
-  const r = benchResponse(stored.board, hash, date)
-  return ok(r.body, r.headers)
-}
-
-export function downloadBoard(db: Db, id: string): ApiResult {
-  const stored = getBoard(db, id)
-  if (!stored) return notFound()
-  const filename = `${fileStem(stored.name)}.wirebender.json`
-  return ok(`${JSON.stringify(stored.board, null, 2)}\n`, {
-    'content-type': 'application/json; charset=utf-8',
-    'cache-control': 'no-store',
-    'x-content-type-options': 'nosniff',
-    'content-disposition': `attachment; filename="${filename}"`
+export function checkBoard(db: Db, req: BoardRequest): ApiResult {
+  return withAccess(db, req, 'view', (a) => {
+    const stored = getBoard(db, a.boardId)
+    if (!stored) return notFound()
+    const result = runCheck(stored.board)
+    return ok({ ...result, statsLine: statsLine(result.stats), advisory: ADVISORY })
   })
 }
 
-function change(db: Db, id: string, step: (room: Room) => number | null, reason: string): ApiResult {
-  return withRoom(db, id, (room) => {
-    const revision = step(room)
+export function benchBoard(db: Db, req: BoardRequest, date?: string): ApiResult {
+  return withAccess(db, req, 'view', (a) => {
+    const stored = getBoard(db, a.boardId)
+    if (!stored) return notFound()
+    // A one-way hash: it keys the bench's ticks and does not show the board id.
+    const hash = tickKey(createHash('sha256').update(`${stored.id}:${stored.head}`).digest('hex'))
+    const r = benchResponse(stored.board, hash, date)
+    return ok(r.body, r.headers)
+  })
+}
+
+export function downloadBoard(db: Db, req: BoardRequest): ApiResult {
+  return withAccess(db, req, 'view', (a) => {
+    const stored = getBoard(db, a.boardId)
+    if (!stored) return notFound()
+    const filename = `${fileStem(stored.name)}.wirebender.json`
+    return ok(`${JSON.stringify(stored.board, null, 2)}\n`, {
+      'content-type': 'application/json; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+      'content-disposition': `attachment; filename="${filename}"`
+    })
+  })
+}
+
+function change(db: Db, req: BoardRequest, step: (room: Room, author: string) => number | null, reason: string): ApiResult {
+  return withAccess(db, req, 'edit', a => withRoom(db, a.boardId, (room) => {
+    const revision = step(room, authorOf(req.who))
     return revision === null ? { status: 409, body: { reason } } : ok({ revision })
-  })
+  }))
 }
 
-export const undoBoard = (db: Db, id: string, author = AUTHOR): ApiResult => change(db, id, r => r.undo(author), 'nothing to undo')
-export const redoBoard = (db: Db, id: string, author = AUTHOR): ApiResult => change(db, id, r => r.redo(author), 'nothing to redo')
+export const undoBoard = (db: Db, req: BoardRequest): ApiResult => change(db, req, (r, author) => r.undo(author), 'nothing to undo')
+export const redoBoard = (db: Db, req: BoardRequest): ApiResult => change(db, req, (r, author) => r.redo(author), 'nothing to redo')
 
-export function listRevisionsResponse(db: Db, id: string): ApiResult {
-  return getBoard(db, id) ? ok(listRevisions(db, id)) : notFound()
+export function listRevisionsResponse(db: Db, req: BoardRequest): ApiResult {
+  return withAccess(db, req, 'view', a => ok(listRevisions(db, a.boardId)))
 }
 
 /** A revision number from a URL segment, or `null` if it is not a positive integer. */
@@ -166,14 +216,18 @@ function revisionNumber(segment: string): number | null {
   return /^[1-9]\d{0,9}$/.test(segment) ? Number(segment) : null
 }
 
-export function getRevisionResponse(db: Db, id: string, segment: string): ApiResult {
-  const n = revisionNumber(segment)
-  return foundOr404(n === null ? null : getRevision(db, id, n)?.board ?? null)
+export function getRevisionResponse(db: Db, req: BoardRequest, segment: string): ApiResult {
+  return withAccess(db, req, 'view', (a) => {
+    const n = revisionNumber(segment)
+    return foundOr404(n === null ? null : getRevision(db, a.boardId, n)?.board ?? null)
+  })
 }
 
-export function restoreRevision(db: Db, id: string, segment: string, author = AUTHOR): ApiResult {
-  const n = revisionNumber(segment)
-  const rev = n === null ? null : getRevision(db, id, n)
-  if (n === null || !rev) return notFound()
-  return withRoom(db, id, room => ok({ revision: room.serverWrite(rev.board as BoardFile, { author, how: 'restore', target: n }) }))
+export function restoreRevision(db: Db, req: BoardRequest, segment: string): ApiResult {
+  return withAccess(db, req, 'edit', (a) => {
+    const n = revisionNumber(segment)
+    const rev = n === null ? null : getRevision(db, a.boardId, n)
+    if (n === null || !rev) return notFound()
+    return withRoom(db, a.boardId, room => ok({ revision: room.serverWrite(rev.board as BoardFile, { author: authorOf(req.who), how: 'restore', target: n }) }))
+  })
 }

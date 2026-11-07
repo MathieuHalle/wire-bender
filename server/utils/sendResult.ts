@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
-import type { ApiResult } from './api'
+import type { ApiResult, BoardRequest } from './api'
+import { unlockedOf, type Who } from './who'
 
 /** Send an ApiResult: its status, headers and body. */
 export function sendResult(event: H3Event, r: ApiResult): unknown {
@@ -20,4 +21,12 @@ export function authorOf(event: H3Event): string {
   const author = event.context.author
   if (typeof author !== 'string') throw createError({ statusCode: 401, statusMessage: 'not trusted' })
   return author
+}
+
+/** Who the access middleware found; anonymous if it found no one. */
+export const whoOf = (event: H3Event): Who => (event.context.who as Who | undefined) ?? { kind: 'anonymous' }
+
+/** The board a board route is asked about (its board id or share link id) and who asks. */
+export async function boardRequest(event: H3Event): Promise<BoardRequest> {
+  return { key: boardId(event), who: whoOf(event), unlocked: await unlockedOf(event) }
 }

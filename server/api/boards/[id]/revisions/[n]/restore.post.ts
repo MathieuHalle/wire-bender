@@ -1,5 +1,5 @@
 import { restoreRevision } from '../../../../../utils/api'
 import { useDb } from '../../../../../db'
-import { authorOf, boardId, sendResult } from '../../../../../utils/sendResult'
+import { boardRequest, sendResult } from '../../../../../utils/sendResult'
 
-export default defineEventHandler(event => sendResult(event, restoreRevision(useDb(), boardId(event), getRouterParam(event, 'n') ?? '', authorOf(event))))
+export default defineEventHandler(async event => sendResult(event, restoreRevision(useDb(), await boardRequest(event), getRouterParam(event, 'n') ?? '')))

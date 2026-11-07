@@ -1,5 +1,5 @@
 import { downloadBoard } from '../../../utils/api'
 import { useDb } from '../../../db'
-import { boardId, sendResult } from '../../../utils/sendResult'
+import { boardRequest, sendResult } from '../../../utils/sendResult'
 
-export default defineEventHandler(event => sendResult(event, downloadBoard(useDb(), boardId(event))))
+export default defineEventHandler(async event => sendResult(event, downloadBoard(useDb(), await boardRequest(event))))
