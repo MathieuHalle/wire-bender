@@ -80,6 +80,15 @@ describe('boards', () => {
     expect(recover(db2, id)).toBeNull()
   })
 
+  it('recover ignores the order of a section (doc order vs file order)', () => {
+    const db = openDb(dir)
+    const { id } = createBoard(db, fixture(), 'create', 'Local')
+    saveCurrent(db, id, { ...fixture(), trails: [...fixture().trails].reverse() })
+    expect(recover(db, id)).toBeNull()
+    expect(listRevisions(db, id)).toHaveLength(1)
+    db.$client.close()
+  })
+
   it('recover ignores key order in the saved current state', () => {
     const db = openDb(dir)
     const { id } = createBoard(db, fixture(), 'create', 'Local')

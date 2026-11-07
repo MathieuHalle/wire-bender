@@ -45,6 +45,8 @@ function rootOf(doc: Y.Doc, type: Y.AbstractType<unknown>, sub: string | null): 
 }
 
 const SECTION_SET = new Set<string>(SECTION_NAMES)
+// createCollision reads Yjs internals (`_map`, `item.left`, `item.origin`), checked against
+// yjs 13.6.33. The collision tests in tests/server/rooms.test.ts guard them on an upgrade.
 const mapItems = (map: Y.Map<unknown>) => (map as unknown as { _map: Map<string, Y.Item> })._map
 const sameId = (a: Y.ID | null, b: Y.ID) => a !== null && a.client === b.client && a.clock === b.clock
 
@@ -65,6 +67,9 @@ function createCollision(server: Y.Doc, copy: Y.Doc, before: Map<number, number>
     const key = k.slice(at + 1)
     const live = mapItems(server.getMap(name)).get(key)
     if (!live || live.deleted) continue
+    // Known limitation: for a sync step 2 the update's delete set is the client's whole
+    // delete set, so a create whose origin is an old tombstone passes as an edit. Every
+    // reconnect starts a fresh, read-only-until-synced doc, so a step 2 carries no creates.
     // The update's items for the key: the winner, or ones that lost to a concurrent write
     // (those stay in the key's chain, deleted). Each first write links to what it replaced.
     for (let item = mapItems(copy.getMap(name)).get(key) ?? null; item; item = item.left as Y.Item | null) {

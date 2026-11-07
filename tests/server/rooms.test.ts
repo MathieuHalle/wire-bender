@@ -11,7 +11,8 @@ import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import { createBoard, getBoard, getRevision, listRevisions } from '../../server/utils/boards'
 import { GROUP_IDLE_MS, openRoom, type Room } from '../../server/utils/rooms'
-import { MESSAGE_COMMAND, handleMessage } from '../../server/utils/liveMessage'
+import { handleMessage } from '../../server/utils/liveMessage'
+import { MESSAGE_COMMAND } from '../../shared/liveCommand'
 import { docToBoard, stable, writeBoard } from '../../shared/yboard'
 
 let dir: string
@@ -442,6 +443,27 @@ describe('rooms', () => {
       return dec
     })())))).toEqual([{ id: 8, ok: false, reason: 'nothing to undo' }, { id: 9, ok: false, reason: 'nothing to undo' }])
     expect(handleMessage(peer, room, 'A', command('explode', 10)).ok).toBe(false)
+    room.leave(peer.id)
+  })
+
+  it('a server fault in undo is answered, not a closed socket', () => {
+    const room = openRoom(db, id)!
+    const sent: Uint8Array[] = []
+    const peer = { id: 'ws1', send: (d: Uint8Array) => sent.push(d) }
+    room.join(peer.id, 'A', { update: () => {}, awareness: () => {} })
+    vi.spyOn(room, 'undo').mockImplementation(() => {
+      throw new Error('disk full')
+    })
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const e = encoding.createEncoder()
+    encoding.writeVarUint(e, MESSAGE_COMMAND)
+    encoding.writeVarString(e, JSON.stringify({ op: 'undo', id: 4 }))
+    expect(handleMessage(peer, room, 'A', encoding.toUint8Array(e))).toEqual({ ok: true })
+    const dec = decoding.createDecoder(sent[0]!)
+    expect(decoding.readVarUint(dec)).toBe(MESSAGE_COMMAND)
+    expect(JSON.parse(decoding.readVarString(dec))).toEqual({ id: 4, ok: false, reason: 'undo failed on the server' })
+    expect(logged).toHaveBeenCalled()
+    logged.mockRestore()
     room.leave(peer.id)
   })
 })

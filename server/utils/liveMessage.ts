@@ -3,13 +3,12 @@
 import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
+import { MESSAGE_COMMAND, type LiveAnswer } from '#shared/liveCommand'
 import type { Received, Room } from './rooms'
 
-/** y-websocket message types, plus our command message. */
+/** y-websocket message types; commands use MESSAGE_COMMAND from #shared/liveCommand. */
 export const MESSAGE_SYNC = 0
 export const MESSAGE_AWARENESS = 1
-/** `varString` JSON `{ op: 'undo' | 'redo', id }`; the answer is `{ id, ok, reason? }` on the same type. */
-export const MESSAGE_COMMAND = 3
 
 /** The parts of a socket peer the reader uses. */
 export interface MessagePeer {
@@ -59,8 +58,15 @@ function command(peer: MessagePeer, room: Room, author: string, d: decoding.Deco
   }
   const { op, id } = (parsed ?? {}) as { op?: unknown, id?: unknown }
   if ((op !== 'undo' && op !== 'redo') || typeof id !== 'number' || !Number.isFinite(id)) return { ok: false, reason: 'malformed command' }
-  const revision = op === 'undo' ? room.undo(author) : room.redo(author)
-  const reply = revision === null ? { id, ok: false, reason: NOTHING[op] } : { id, ok: true }
+  let reply: LiveAnswer
+  try {
+    const revision = op === 'undo' ? room.undo(author) : room.redo(author)
+    reply = revision === null ? { id, ok: false, reason: NOTHING[op] } : { id, ok: true }
+  } catch (e) {
+    // A server fault, not the client's: answer it and keep the socket open.
+    console.error(`[ws] ${op} failed`, e)
+    reply = { id, ok: false, reason: `${op} failed on the server` }
+  }
   peer.send(message((e) => {
     encoding.writeVarUint(e, MESSAGE_COMMAND)
     encoding.writeVarString(e, JSON.stringify(reply))

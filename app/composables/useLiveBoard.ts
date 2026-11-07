@@ -12,7 +12,8 @@
 //   and the shared undo stack.
 // - `undo` and `redo` are commands on the socket (message type 3), so the server runs them
 //   after this tab's edits sent before them. A command still unanswered when the socket
-//   closes is reported, not resent.
+//   closes is reported (the server may have run it), not resent. Closing on purpose
+//   (unmount, another board) reports nothing.
 import * as Y from 'yjs'
 import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
@@ -20,6 +21,7 @@ import type { Awareness } from 'y-protocols/awareness'
 import { WebsocketProvider } from 'y-websocket'
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Ref } from 'vue'
 import type { BoardFile } from '~core/schema'
+import { MESSAGE_COMMAND, type LiveAnswer, type LiveCommand, type LiveOp } from '#shared/liveCommand'
 import { docToBoard, writeBoard } from '#shared/yboard'
 
 export type LiveStatus = 'connecting' | 'live' | 'offline'
@@ -53,8 +55,6 @@ export interface LiveDeps {
 const CLOSE_REJECTED = 4400
 const CLOSE_UNTRUSTED = 4401
 const CLOSE_NO_BOARD = 4404
-/** Undo and redo, and their answers `{ id, ok, reason? }`. */
-const MESSAGE_COMMAND = 3
 const MAX_BACKOFF_MS = 2500
 
 /** Presence colours; one is picked per tab. */
@@ -82,7 +82,7 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
   let stopWatch: (() => void) | null = null
   let nextCommand = 1
   /** Commands sent on the current socket and not answered yet. */
-  const waiting = new Map<number, { op: 'undo' | 'redo', done: () => void }>()
+  const waiting = new Map<number, { op: LiveOp, done: () => void }>()
 
   function readServer(doc: Y.Doc) {
     const map = doc.getMap('server')
@@ -112,7 +112,8 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
     if (synced.value) failures = 0
   }
 
-  function drop() {
+  /** Closes the current connection; `quiet` when closing on purpose, so lost commands are not reported. */
+  function drop(quiet = false) {
     if (!provider) return
     const p = provider
     provider = null
@@ -122,14 +123,14 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
     peers.value = []
     synced.value = false
     for (const { op, done } of waiting.values()) {
-      deps.notify(`${op} did not reach the server; try again`)
+      if (!quiet) deps.notify(`${op} may not have reached the server; check the history`)
       done()
     }
     waiting.clear()
   }
 
   function answered(decoder: decoding.Decoder) {
-    let reply: { id?: unknown, ok?: unknown, reason?: unknown }
+    let reply: Partial<Record<keyof LiveAnswer, unknown>>
     try {
       reply = JSON.parse(decoding.readVarString(decoder))
     } catch {
@@ -144,7 +145,8 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
 
   function open() {
     retry = null
-    drop()
+    // Only a new board id finds a connection still open here (a closed one was dropped).
+    drop(true)
     const p = deps.connect(id.value)
     provider = p
     status.value = 'connecting'
@@ -199,13 +201,13 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
   }
 
   /** Sends an undo or redo command; resolves once the server answers (or the socket closes). */
-  function call(op: 'undo' | 'redo'): Promise<void> {
+  function call(op: LiveOp): Promise<void> {
     const ws = provider?.ws
     if (readOnly.value || !ws) return Promise.resolve()
     const n = nextCommand++
     const e = encoding.createEncoder()
     encoding.writeVarUint(e, MESSAGE_COMMAND)
-    encoding.writeVarString(e, JSON.stringify({ op, id: n }))
+    encoding.writeVarString(e, JSON.stringify({ op, id: n } satisfies LiveCommand))
     return new Promise((resolve) => {
       waiting.set(n, { op, done: resolve })
       try {
@@ -244,7 +246,7 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
     stopWatch = null
     if (retry) clearTimeout(retry)
     retry = null
-    drop()
+    drop(true)
     status.value = 'offline'
   }
 

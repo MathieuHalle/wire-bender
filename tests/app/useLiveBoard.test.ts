@@ -219,7 +219,33 @@ describe('useLiveBoard', () => {
     const undone = live.undo()
     last().close()
     await undone
-    expect(notes).toEqual(['undo did not reach the server; try again'])
+    expect(notes).toEqual(['undo may not have reached the server; check the history'])
+  })
+
+  it('closing on purpose (unmount, another board) reports no waiting command', async () => {
+    const id = ref('b1')
+    const providers: FakeProvider[] = []
+    const notes: string[] = []
+    const live = createLiveBoard(id, {
+      connect: (b) => {
+        const p = new FakeProvider(b)
+        providers.push(p)
+        return p
+      },
+      notify: m => notes.push(m)
+    })
+    live.start()
+    providers.at(-1)!.goLive(serverDoc(start))
+    const first = live.undo()
+    id.value = 'b2'
+    await nextTick()
+    await first
+    expect(providers).toHaveLength(2)
+    providers.at(-1)!.goLive(serverDoc(start))
+    const second = live.redo()
+    live.stop()
+    await second
+    expect(notes).toEqual([])
   })
 
   it('undo and redo do nothing, and send nothing, while read-only', async () => {
