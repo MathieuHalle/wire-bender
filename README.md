@@ -7,7 +7,7 @@ WireBender is a local Nuxt app for planning hand-soldered perfboards: you draw w
 ```sh
 pnpm install
 pnpm dev                # http://localhost:3000
-PORT=3002 pnpm dev      # another port
+WIREBENDER_DATA=/tmp/wb PORT=3002 pnpm dev   # a second server: its own port and data folder
 ```
 
 `pnpm dev` runs in local mode and listens on the network (`--host`), so a tablet on the same Wi-Fi can open `http://<this computer's LAN address>:<port>`. Open the board list, import a `.wirebender.json` file or start a new board. Boards are live: every open copy updates as you edit, and a copy that loses the server goes read-only (`Reconnecting… editing is paused`) until it is back.
@@ -26,6 +26,8 @@ Everything is stored in `WIREBENDER_DATA` (default `./.data`, which git ignores)
 - `backups/`: the server writes `pre-migration-<time>.sqlite` here before it changes the database layout.
 
 Revisions are only ever added, never edited or deleted. To back up, stop the server and copy the whole data folder. To restore, put the folder back. Use `WIREBENDER_DATA=/some/folder pnpm dev` to keep experiments apart from your real boards.
+
+One server per data folder: the server holds `<data>/wirebender.lock` while it runs, and a second server on the same folder refuses to start, naming the folder. So `PORT=3002 pnpm dev` without its own `WIREBENDER_DATA` will not start while another server uses `./.data`; give each server its own folder. A lock left by a server that crashed (its process is gone) is taken over.
 
 ## Pair a device
 
@@ -52,6 +54,14 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `GET /api/boards/:id/bench` | bench sheet (HTML) |
 | `GET /api/boards/:id/download` | the board as a `.wirebender.json` file |
 | `GET /api/boards/:id/revisions` | history; `POST /api/boards/:id/revisions/:n/restore` restores one |
+| `GET /api/boards/:id/revisions/:n` | the board as it was at revision `n` |
 | `POST /api/boards/:id/undo`, `/redo` | undo or redo the last change |
+| `POST /api/pair/start` | this computer only: a new pairing code, `{ code, expiresAt, url }` |
+| `POST /api/pair` | `{ "code", "name" }` pairs the calling device (the one call an unpaired device may make); sets its cookie |
+| `GET /api/devices` | the paired devices (`id`, `name`, `createdAt`, `lastSeen`) |
+| `DELETE /api/devices/:id` | unpairs a device |
+| `GET /api/devices/me` | the calling device: `{ name, paired }` |
 
-Every API write is its own revision (`how: api`) and shows live in open tabs.
+Every API write is its own revision (`how: api`) and shows live in open tabs. Writes from this computer (loopback, e.g. `curl` or Claude) are recorded as `Local · This computer`; a paired device's as `Local · <device name>`.
+
+To change a board safely while others may be editing it, `GET` it first and `PUT` with `"baseRevision"` set to the `head` from that `GET`. A `409` means someone changed it in between (live edits still being grouped count): read it again and redo the change.

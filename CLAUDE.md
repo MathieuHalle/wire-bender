@@ -15,3 +15,8 @@
 
 - `pnpm test`
 - `pnpm typecheck`
+
+## Editing boards through the API
+
+- `GET /api/boards/:id` first, then `PUT` with `baseRevision` set to that GET's `head`. Never PUT without it.
+- A `409` means someone else changed the board in between (a tablet edit counts): GET it again, redo the change on the new board, and PUT with the new `head`. Never retry the old body.
