@@ -49,8 +49,9 @@ async function restore() {
   try {
     await $fetch(`/api/boards/${encodeURIComponent(id.value)}/revisions/${row.n}/restore`, { method: 'POST' })
     previewRow.value = null
-  } catch {
-    toast.add({ title: `Restoring #${row.n} failed.`, color: 'warning', icon: 'i-lucide-ban' })
+  } catch (e) {
+    const reason = (e as { data?: { reason?: unknown } }).data?.reason
+    toast.add({ title: typeof reason === 'string' ? reason : `Restoring #${row.n} failed: ${(e as Error).message}`, color: 'warning', icon: 'i-lucide-ban' })
   } finally {
     restoring.value = false
   }

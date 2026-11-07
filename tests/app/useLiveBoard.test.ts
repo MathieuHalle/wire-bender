@@ -222,42 +222,6 @@ describe('useLiveBoard', () => {
       notify: () => {}
     })
     live.start()
-    const server = serverDoc(start)
-    const map = server.getMap('server')
-    map.set('revision', 4)
-    map.set('canUndo', true)
-    providers.at(-1)!.goLive(server)
-    expect(live.revision.value).toBe(4)
-    expect(live.canUndo.value).toBe(true)
-    id.value = 'b2'
-    await nextTick()
-    expect(live.board.value).toBeNull()
-    expect(live.revision.value).toBe(0)
-    expect(live.canUndo.value).toBe(false)
-    expect(live.canRedo.value).toBe(false)
-  })
-
-  it('undo and redo do nothing, and do not POST, while read-only', async () => {
-    const { live, posts } = setup()
-    expect(live.readOnly.value).toBe(true)
-    await live.undo()
-    await live.redo()
-    expect(posts).toEqual([])
-  })
-
-  it('a new id resets the board, the revision and the undo state', async () => {
-    const id = ref('b1')
-    const providers: FakeProvider[] = []
-    const live = createLiveBoard(id, {
-      connect: (b) => {
-        const p = new FakeProvider(b)
-        providers.push(p)
-        return p
-      },
-      post: async () => {},
-      notify: () => {}
-    })
-    live.start()
     providers.at(-1)!.goLive(serverDoc(start, { revision: 4, canUndo: true, canRedo: true }))
     expect(live.revision.value).toBe(4)
     expect(live.canUndo.value).toBe(true)

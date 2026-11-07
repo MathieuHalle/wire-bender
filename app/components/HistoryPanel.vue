@@ -15,15 +15,24 @@ const rows = ref<RevisionRow[]>([])
 const error = ref(false)
 const now = ref(Date.now())
 
+/** Counts loads; only the latest one may write its result (or its error). */
+let loadSeq = 0
 async function load() {
+  const seq = ++loadSeq
   try {
-    rows.value = await $fetch<RevisionRow[]>(`/api/boards/${encodeURIComponent(props.boardId)}/revisions`)
+    const list = await $fetch<RevisionRow[]>(`/api/boards/${encodeURIComponent(props.boardId)}/revisions`)
+    if (seq !== loadSeq) return
+    rows.value = list
     error.value = false
     now.value = Date.now()
   } catch {
-    error.value = true
+    if (seq === loadSeq) error.value = true
   }
 }
+watch(() => props.boardId, () => {
+  rows.value = []
+  error.value = false
+})
 watch(() => [props.boardId, props.revision] as const, load, { immediate: true })
 
 const pick = (r: RevisionRow) => (selected.value = selected.value?.n === r.n ? null : r)
