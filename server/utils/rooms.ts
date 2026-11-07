@@ -97,8 +97,14 @@ function createCollision(server: Y.Doc, copy: Y.Doc, before: Map<number, number>
   return null
 }
 
-/** One author's open revision group: its idle timer and the items its accepted updates touched. */
-interface Group { timer: ReturnType<typeof setTimeout>, keys: Set<string>, authorId: string | null }
+/**
+ * One author's open revision group: who (account and display name), its idle timer and the
+ * items its accepted updates touched. Groups are keyed by both (groupKey): anyone may take
+ * any display name, so two accounts' edits never share a group.
+ */
+interface Group { author: string, authorId: string | null, timer: ReturnType<typeof setTimeout>, keys: Set<string> }
+
+const groupKey = (author: string, authorId: string | null): string => JSON.stringify([authorId, author])
 const rooms = new Map<string, Room>()
 
 /** The live room for a board, opened (after `recover`) if none is open. `null` when there is no such board. */
@@ -188,7 +194,7 @@ export class Room {
     if (!changed) return { ok: true }
     this.board = checked.board
     saveCurrent(this.db, this.id, this.board)
-    this.restartGroup(author, checked.keys, this.peerAuthorId(peerId))
+    this.restartGroup(author, this.peerAuthorId(peerId), checked.keys)
     return { ok: true }
   }
 
@@ -242,7 +248,7 @@ export class Room {
     const peer = this.peers.get(peerId)
     if (peer) {
       this.peers.delete(peerId)
-      this.closeGroup(peer.author)
+      this.closeGroup(groupKey(peer.author, peer.authorId))
       if (peer.clients.size > 0) removeAwarenessStates(this.awareness, [...peer.clients], null)
     }
     this.dropIfEmpty()
@@ -320,16 +326,16 @@ export class Room {
     }, SERVER)
   }
 
-  private restartGroup(author: string, keys: Set<string>, authorId: string | null): void {
-    const group = this.groups.get(author)
+  private restartGroup(author: string, authorId: string | null, keys: Set<string>): void {
+    const key = groupKey(author, authorId)
+    const group = this.groups.get(key)
     clearTimeout(group?.timer)
-    const timer = setTimeout(() => this.closeGroup(author), GROUP_IDLE_MS)
+    const timer = setTimeout(() => this.closeGroup(key), GROUP_IDLE_MS)
     if (group) {
       group.timer = timer
-      group.authorId = authorId
       for (const k of keys) group.keys.add(k)
     } else {
-      this.groups.set(author, { timer, keys: new Set(keys), authorId })
+      this.groups.set(key, { author, authorId, timer, keys: new Set(keys) })
     }
   }
 
@@ -338,13 +344,14 @@ export class Room {
    * author touched set to their current values, so another author's open edits stay out.
    * Nothing is committed when that board is the head's. If it does not parse (the author's
    * edits need someone else's), every open group is committed together, as the current board;
-   * that revision of several authors stores no author id (its author names them all).
+   * that revision names every author, and stores an author id only if they are all one account.
    */
-  private closeGroup(author: string): void {
-    const group = this.groups.get(author)
+  private closeGroup(key: string): void {
+    const group = this.groups.get(key)
     if (!group) return
     clearTimeout(group.timer)
-    this.groups.delete(author)
+    this.groups.delete(key)
+    const { author } = group
     const head = getRevision(this.db, this.id, this.head)
     if (!head) return this.commitEdit(this.board, author, group.authorId)
     const composed = parseBoard(withItems(head.board, this.board, group.keys))
@@ -352,14 +359,12 @@ export class Room {
       if (sameItems(head.board, composed.board)) return
       return this.commitEdit(composed.board, author, group.authorId)
     }
-    const authors = [author]
-    for (const [other, g] of this.groups) {
-      clearTimeout(g.timer)
-      authors.push(other)
-    }
+    const all = [group, ...this.groups.values()]
+    for (const g of all) clearTimeout(g.timer)
     this.groups.clear()
     if (sameItems(head.board, this.board)) return
-    this.commitEdit(this.board, authors.join(', '), authors.length === 1 ? group.authorId : null)
+    const accounts = new Set(all.map(g => g.authorId))
+    this.commitEdit(this.board, all.map(g => g.author).join(', '), accounts.size === 1 ? group.authorId : null)
   }
 
   private commitEdit(board: BoardFile, author: string, authorId: string | null): void {
@@ -371,7 +376,7 @@ export class Room {
   }
 
   private closeGroups(): void {
-    for (const author of [...this.groups.keys()]) this.closeGroup(author)
+    for (const key of [...this.groups.keys()]) this.closeGroup(key)
   }
 
   /** With no peers left: save, close the open groups and drop the room. */

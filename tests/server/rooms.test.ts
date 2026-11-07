@@ -384,6 +384,41 @@ describe('rooms', () => {
     expect(authorIds().at(-1)).toEqual([4, null])
   })
 
+  it('two accounts with the same name never share a revision under one id', () => {
+    vi.useFakeTimers()
+    const rows = () => db.select({ n: revisions.n, author: revisions.author, authorId: revisions.authorId, board: revisions.board })
+      .from(revisions).where(eq(revisions.boardId, id)).orderBy(revisions.n).all()
+    const a = connect('a', 'Ada', 'user-a')
+    const b = connect('b', 'Ada', 'user-b')
+    edit(a, moveT7('L3'))
+    edit(b, relabelJA('by the other Ada'))
+    vi.advanceTimersByTime(GROUP_IDLE_MS)
+    // Each account's edit is its own revision, under its own id; the second builds on the first.
+    expect(rows().map((r) => {
+      const board = JSON.parse(r.board) as BoardFile
+      return [r.n, r.author, r.authorId, t7(board)[1], ja(board)]
+    })).toEqual([
+      [1, 'Local', null, 'M3', ja(fixture())],
+      [2, 'Ada', 'user-a', 'L3', ja(fixture())],
+      [3, 'Ada', 'user-b', 'L3', 'by the other Ada']
+    ])
+  })
+
+  it('a revision combining two accounts of the same name stores no id', () => {
+    vi.useFakeTimers()
+    const a = connect('a', 'Ada', 'user-a')
+    const b = connect('b', 'Ada', 'user-b')
+    // B widens the board; A draws a trail that only fits the wider board.
+    edit(b, x => ({ ...x, board: { ...x.board, cols: 20 } }))
+    vi.advanceTimersByTime(500)
+    edit(a, x => ({ ...x, trails: [...x.trails, { id: 'T40', side: 'bottom', points: ['A19', 'A20'], joints: [] }] }))
+    leave(a)
+    const head = db.select({ n: revisions.n, author: revisions.author, authorId: revisions.authorId }).from(revisions)
+      .where(eq(revisions.boardId, id)).orderBy(revisions.n).all().at(-1)
+    expect(head).toEqual({ n: 2, author: 'Ada, Ada', authorId: null })
+    leave(b)
+  })
+
   it('concurrent create of the same id is rejected', () => {
     const room = openRoom(db, id)!
     const first = detached(room)
