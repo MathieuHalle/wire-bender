@@ -12,8 +12,18 @@ import {
 
 /** Printable width in mm: paper width minus two 12 mm margins. */
 const PRINTABLE_MM = { letter: 215.9 - 24, a4: 210 - 24 } as const
+/** Printable height in mm: paper height minus two 12 mm margins. */
+const PRINTABLE_H_MM = { letter: 279.4 - 24, a4: 297 - 24 } as const
 /** Gap between the two overviews when side by side, mm. */
 const OVERVIEW_GAP_MM = 6
+/** Room on the enlarged page for its heading and note, and for each caption, mm. */
+const ENLARGED_HEAD_MM = 22
+const CAPTION_MM = 8
+/** Printable area of a page, mm, portrait or turned to landscape. */
+export function enlargedArea(paper: keyof typeof PRINTABLE_MM, landscape: boolean): { w: number, h: number } {
+  const [w, h] = [PRINTABLE_MM[paper], PRINTABLE_H_MM[paper]]
+  return landscape ? { w: h, h: w } : { w, h }
+}
 /** Card border plus padding on both sides, mm: what a 1:1 drawing loses inside a card. */
 const CARD_INSET_MM = 10
 /** Gap between the two printed columns of cards and meter rows, mm. */
@@ -22,6 +32,10 @@ const COLUMN_GAP_MM = 5
 const PAPER_LABEL = { letter: 'Letter', a4: 'A4' } as const
 
 const svgWidthMm = (svg: string) => Number(/^<svg width="([\d.]+)mm"/.exec(svg)?.[1] ?? 0)
+const svgHeightMm = (svg: string) => Number(/^<svg width="[\d.]+mm" height="([\d.]+)mm"/.exec(svg)?.[1] ?? 0)
+/** The same drawing printed `k` times bigger: only its printed size changes, not its viewBox. */
+const scaleSvg = (svg: string, k: number) => svg.replace(/^<svg width="([\d.]+)mm" height="([\d.]+)mm"/,
+  (_, w, h) => `<svg width="${(Number(w) * k).toFixed(2)}mm" height="${(Number(h) * k).toFixed(2)}mm"`)
 const plural = (k: number, word: string) => `${k} ${word}${k === 1 ? '' : 's'}`
 
 /** Unique, stable tick ids: the content key, with a suffix only when it repeats. */
@@ -58,6 +72,39 @@ ${box}
 }
 
 export const OVERVIEW_FITTED_NOTE = 'Overview not to scale (board wider than the page). Wire cards are 1:1.'
+
+/**
+ * Page 2: both sides as big as one page allows, side by side or one above the other,
+ * whichever draws them bigger. For reading at the bench, so not to scale: no scale bar.
+ */
+function enlarged(board: BoardFile, paper: keyof typeof PRINTABLE_MM): string {
+  // No in-drawing title: the captions name the sides, and the title would widen the drawing.
+  const top = boardOverviewSvg(board, 'top', { title: false })
+  const bottom = boardOverviewSvg(board, 'bottom', { title: false })
+  const [w1, h1, w2, h2] = [svgWidthMm(top), svgHeightMm(top), svgWidthMm(bottom), svgHeightMm(bottom)]
+  // Every layout this page can take: side by side or stacked, on a portrait or a landscape page.
+  const layouts = [false, true].flatMap((landscape) => {
+    const { w: W, h: Hp } = enlargedArea(paper, landscape)
+    const H = Hp - ENLARGED_HEAD_MM
+    return [
+      { landscape, pair: true, k: Math.min((W - OVERVIEW_GAP_MM) / (w1 + w2), (H - CAPTION_MM) / Math.max(h1, h2)) },
+      { landscape, pair: false, k: Math.min(W / Math.max(w1, w2), (H - 2 * CAPTION_MM - OVERVIEW_GAP_MM) / (h1 + h2)) }
+    ]
+  })
+  // The biggest drawing wins; on a tie, portrait (like the other pages) and side by side.
+  const best = layouts.reduce((a, b) => (b.k > a.k + 1e-9 ? b : a))
+  const k = Math.floor(best.k * 100) / 100
+  const fig = (svg: string, caption: string) =>
+    `<figure><figcaption>${caption}</figcaption><div class="drawing">${scaleSvg(svg, k)}</div></figure>`
+  return `<section id="enlarged" class="page enlarged${best.landscape ? ' landscape' : ''}">
+<h2>Both sides, enlarged</h2>
+<p class="fitted-note"><strong>Enlarged ${Math.round(k * 100)}%, not to scale: measure on the 1:1 overview or the wire cards.</strong></p>
+<div class="${best.pair ? 'pair' : 'stack'}">
+${fig(top, 'Top: parts side')}
+${fig(bottom, 'Bottom: solder side, seen from below (mirrored)')}
+</div>
+</section>`
+}
 
 function overview(board: BoardFile, printable: number): string {
   const top = boardOverviewSvg(board, 'top')
@@ -285,6 +332,8 @@ footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); 
   .fold .sketch { grid-column: 1 / -1; }
 }
 @page { size: ${paper === 'a4' ? 'A4' : 'letter'}; margin: 12mm; }
+@page landscape { size: ${paper === 'a4' ? 'A4' : 'letter'} landscape; margin: 12mm; }
+.enlarged.landscape { page: landscape; }
 @media print {
   :root { --ink: #000000; --muted: #333333; --bg: #ffffff; --line: #999999; --card: #ffffff; --err-bg: #ffffff; --err: #000000; }
   body { max-width: none; padding: 0; font-size: 10pt; color: #000; background: #fff; }
@@ -387,6 +436,7 @@ export function benchHtml(board: BoardFile, opts: { hash?: string, date?: string
 <body>
 ${header(m, date)}
 ${overview(board, printable)}
+${enlarged(board, m.paper)}
 ${placement(m, id)}
 ${cards(m, board, printable, id)}
 ${legFolds(m, board.board.pitchMm, id)}

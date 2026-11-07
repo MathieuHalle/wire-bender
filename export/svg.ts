@@ -232,7 +232,7 @@ function partMarks(s: Scene, pp: PlacedPart, g: ReturnType<typeof sideGeo>) {
  * (solid on top, dashed on the bottom) with refs, that side's trails and wires, wire
  * ends and joints, solder bridges and (bottom) leg-folds. The bottom is mirrored.
  */
-export function boardOverviewSvg(board: BoardFile, side: Side): string {
+export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: boolean } = {}): string {
   const s = new Scene()
   const g = sideGeo(board, side)
   const { cols, rows } = board.board
@@ -341,8 +341,11 @@ export function boardOverviewSvg(board: BoardFile, side: Side): string {
   for (const l of ids) s.text({ x: l.at.x, y: l.at.y - 0.9 }, l.id, MIN_FONT, 'middle', `fill="#7a3f12" ${HALO}`)
 
   const title = side === 'top' ? 'TOP — parts side' : 'BOTTOM — solder side (board turned over)'
-  const b = s.bounds()
-  s.text({ x: b.x0, y: b.y0 - 1.4 }, `${board.name}: ${title}`, 2.8, 'start', 'font-weight="700"')
+  // The title is wider than a small board; a caller with its own caption leaves it out.
+  if (opts.title !== false) {
+    const b = s.bounds()
+    s.text({ x: b.x0, y: b.y0 - 1.4 }, `${board.name}: ${title}`, 2.8, 'start', 'font-weight="700"')
+  }
   return s.fit(1, `${board.name}, ${title}, 1:1`)
 }
 

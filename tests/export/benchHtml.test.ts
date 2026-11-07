@@ -4,7 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { ADVISORY } from '~core/advisory'
 import { benchModel } from '~core/bench/sheet'
 import { parseBoard, type BoardFile } from '~core/schema'
-import { benchHtml } from '../../export/benchHtml'
+import { benchHtml, enlargedArea } from '../../export/benchHtml'
+import { boardOverviewSvg } from '../../export/svg'
 import { axial, mk, trail } from '../core/helpers'
 
 function board2(): BoardFile {
@@ -116,6 +117,73 @@ describe('benchHtml', () => {
     expect([...ids].sort((a, b) => a - b)).toEqual(ids)
   })
 
+  describe('enlarged page (both sides, filling a page)', () => {
+    const sectionOf = (out: string, id: string) => {
+      const s = out.slice(out.indexOf(`<section id="${id}"`))
+      return s.slice(0, s.indexOf('</section>'))
+    }
+    /** The board drawings' printed sizes (the scale bar left out). */
+    const sizes = (sec: string) => [...sec.matchAll(/<svg width="([\d.]+)mm" height="([\d.]+)mm"[^>]*aria-label="([^"]*)"/g)]
+      .filter(m => !m[3]!.startsWith('scale bar')).map(m => ({ w: Number(m[1]), h: Number(m[2]) }))
+
+    it('comes right after the 1:1 overview, on its own page, and says it is not to scale', () => {
+      const ids = ['overview', 'enlarged', 'placement'].map(id => html.indexOf(`id="${id}"`))
+      expect(ids.every(i => i > 0)).toBe(true)
+      expect([...ids].sort((a, b) => a - b)).toEqual(ids)
+      const sec = sectionOf(html, 'enlarged')
+      expect(sec).toMatch(/^<section id="enlarged" class="page[ "]/)
+      expect(text(sec)).toContain('not to scale')
+      expect(sec).not.toContain('aria-label="scale bar, 10 mm"')
+      expect(text(sec)).toContain('Top: parts side')
+      expect(text(sec)).toContain('Bottom: solder side, seen from below (mirrored)')
+    })
+
+    it('draws both sides bigger than 1:1, keeping their shape, and fits the printable page', () => {
+      for (const paper of ['letter', 'a4'] as const) {
+        const b = board2()
+        const out = benchHtml({ ...b, bench: { ...b.bench, paper } }, { date: DATE })
+        // the 1:1 drawings without their in-drawing titles, as the enlarged page draws them
+        const one = (['top', 'bottom'] as const).map((side) => {
+          const m = /^<svg width="([\d.]+)mm" height="([\d.]+)mm"/.exec(boardOverviewSvg(b, side, { title: false }))!
+          return { w: Number(m[1]), h: Number(m[2]) }
+        })
+        const big = sizes(sectionOf(out, 'enlarged'))
+        expect(big).toHaveLength(2)
+        const landscape = sectionOf(out, 'enlarged').startsWith('<section id="enlarged" class="page enlarged landscape"')
+        const area = enlargedArea(paper, landscape)
+        big.forEach((s, i) => {
+          expect(s.w).toBeGreaterThan(one[i]!.w * 1.5)
+          expect(s.w / s.h).toBeCloseTo(one[i]!.w / one[i]!.h, 2)
+          expect(s.w).toBeLessThanOrEqual(area.w)
+          expect(s.h).toBeLessThanOrEqual(area.h)
+        })
+        // side by side or stacked, the pair fits the page too
+        const sideBySide = sectionOf(out, 'enlarged').includes('class="pair"')
+        if (sideBySide) expect(big[0]!.w + big[1]!.w).toBeLessThanOrEqual(area.w)
+        else expect(big[0]!.h + big[1]!.h).toBeLessThanOrEqual(area.h)
+      }
+    })
+
+    it('channel board 2 is drawn side by side on a landscape page, its own page size', () => {
+      const sec = sectionOf(html, 'enlarged')
+      expect(sec).toContain('class="pair"')
+      expect(sec).toContain('class="page enlarged landscape"')
+      expect(html).toMatch(/@page landscape \{\s*size:\s*letter landscape;\s*margin:\s*12mm/)
+      expect(html).toMatch(/\.enlarged\.landscape \{ page: landscape; \}/)
+    })
+
+    it('enlargedArea turns the printable area for landscape', () => {
+      expect(enlargedArea('letter', false)).toEqual({ w: 215.9 - 24, h: 279.4 - 24 })
+      expect(enlargedArea('letter', true)).toEqual({ w: 279.4 - 24, h: 215.9 - 24 })
+    })
+
+    it('a board wider than tall is stacked, one side above the other', () => {
+      const b = mk({ board: { cols: 40, rows: 10 }, nets: { N: {} }, parts: [axial('R1', 'A1', 'A4', 'N')] })
+      const sec = sectionOf(benchHtml(b, { date: DATE }), 'enlarged')
+      expect(sec).toContain('class="stack"')
+    })
+  })
+
   it('cards show the cut length, breakdown and bend drawing or "no bends"', () => {
     const m = benchModel(board2())
     const c = m.cards.find(x => x.kind === 'trail')!
@@ -125,7 +193,9 @@ describe('benchHtml', () => {
   })
 
   it('no fixed content wider than the printable width', () => {
-    const widths = [...html.matchAll(/<svg width="([\d.]+)mm"/g)].map(m => Number(m[1]))
+    // the enlarged page is checked against its own page (it may turn landscape)
+    const portrait = html.replace(/<section id="enlarged"[\s\S]*?<\/section>/, '')
+    const widths = [...portrait.matchAll(/<svg width="([\d.]+)mm"/g)].map(m => Number(m[1]))
     expect(Math.max(...widths)).toBeLessThanOrEqual(191.9)
   })
 
@@ -197,7 +267,9 @@ describe('benchHtml', () => {
         // no 1:1 scale bar claims the fitted overview
         const ov = out.slice(out.indexOf('<section id="overview"'))
         expect(ov.slice(0, ov.indexOf('</section>'))).not.toContain('aria-label="scale bar, 10 mm"')
+        // the enlarged page is checked against its own page (it may turn landscape)
         const rest = out.replace(/<div class="drawing fitted">[\s\S]*?<\/svg><\/div>/g, '')
+          .replace(/<section id="enlarged"[\s\S]*?<\/section>/, '')
         const widths = [...rest.matchAll(/<svg width="([\d.]+)mm"/g)].map(m => Number(m[1]))
         expect(widths.length).toBeGreaterThan(5)
         for (const w of widths) expect(w).toBeLessThanOrEqual(PRINTABLE[paper])
