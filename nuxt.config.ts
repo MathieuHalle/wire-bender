@@ -33,6 +33,13 @@ export default defineNuxtConfig({
 
   compatibilityDate: '2026-06-30',
 
+  // Live boards speak the y-websocket protocol on /_ws/board/<id>.
+  nitro: {
+    experimental: {
+      websocket: true
+    }
+  },
+
   // export/ is not imported by the app; include it so `nuxt typecheck` covers it.
   typescript: {
     tsConfig: {
