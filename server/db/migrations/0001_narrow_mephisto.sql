@@ -29,8 +29,9 @@ CREATE TABLE `users` (
 	`deleted_at` integer
 );
 --> statement-breakpoint
--- SQLite cannot add a NOT NULL column without a constant default, and link_id needs a fresh
--- UUID per existing board, so boards is rebuilt (no foreign keys point at it).
+-- Hand-edited. boards is rebuilt because SQLite can't add a NOT NULL UNIQUE column with a
+-- per-row value (link_id needs a fresh UUID per existing board). No foreign keys point at it,
+-- and the net effect only adds columns: every old column and row is copied unchanged.
 CREATE TABLE `__new_boards` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
@@ -48,7 +49,7 @@ CREATE TABLE `__new_boards` (
 --> statement-breakpoint
 INSERT INTO `__new_boards` (`id`, `name`, `created_at`, `updated_at`, `current`, `head`, `link_id`)
 SELECT `id`, `name`, `created_at`, `updated_at`, `current`, `head`,
-	lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)), 2) || '-' || substr('89ab', 1 + (abs(random()) % 4), 1) || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6)))
+	lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)), 2) || '-' || substr('89ab', 1 + (random() & 3), 1) || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6)))
 FROM `boards`;
 --> statement-breakpoint
 DROP TABLE `boards`;

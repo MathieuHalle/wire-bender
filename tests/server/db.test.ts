@@ -151,9 +151,9 @@ describe('migration to accounts', () => {
     writeFileSync(path.join(first, 'meta/_journal.json'), JSON.stringify({ ...journal, entries: [zero] }))
     cpSync(path.join(REAL_MIGRATIONS, `${zero.tag}.sql`), path.join(first, `${zero.tag}.sql`))
     const old = openDb(data, first)
-    const ins = old.$client.prepare('INSERT INTO boards (id, name, created_at, updated_at, current, head) VALUES (?, ?, 1, 2, \'{}\', 2)')
-    ins.run('b1', 'One')
-    ins.run('b2', 'Two')
+    const ins = old.$client.prepare('INSERT INTO boards (id, name, created_at, updated_at, current, head) VALUES (?, ?, ?, ?, ?, 2)')
+    ins.run('b1', 'One', 11, 12, '{"a":1}')
+    ins.run('b2', 'Two', 21, 22, '{"b":2}')
     const rev = old.$client.prepare('INSERT INTO revisions (board_id, n, created_at, author, how, summary, board) VALUES (?, ?, 1, \'Local\', \'edit\', \'s\', \'{}\')')
     for (const [b, n] of [['b1', 1], ['b1', 2], ['b2', 1], ['b2', 2]] as const) rev.run(b, n)
     old.$client.close()
@@ -161,6 +161,10 @@ describe('migration to accounts', () => {
     const db = openDb(data)
     const rows = db.$client.prepare('SELECT id, owner_id, link_id, visibility, trashed_at FROM boards ORDER BY id').all() as { id: string, owner_id: string, link_id: string, visibility: string, trashed_at: number | null }[]
     expect(rows.map(r => [r.id, r.owner_id, r.visibility, r.trashed_at])).toEqual([['b1', 'local', 'view', null], ['b2', 'local', 'view', null]])
+    expect(db.$client.prepare('SELECT id, name, created_at, updated_at, current, head FROM boards ORDER BY id').all()).toEqual([
+      { id: 'b1', name: 'One', created_at: 11, updated_at: 12, current: '{"a":1}', head: 2 },
+      { id: 'b2', name: 'Two', created_at: 21, updated_at: 22, current: '{"b":2}', head: 2 }
+    ])
     for (const r of rows) expect(r.link_id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
     expect(rows[0]!.link_id).not.toBe(rows[1]!.link_id)
     expect(db.$client.prepare('SELECT count(*) AS n FROM revisions').get()).toEqual({ n: 4 })

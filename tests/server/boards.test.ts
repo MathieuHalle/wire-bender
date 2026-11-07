@@ -112,7 +112,7 @@ describe('ownership and trash', () => {
     expect(ra.linkId).toMatch(/^[0-9a-f-]{36}$/)
     expect(ra.linkId).not.toBe(rb.linkId)
     expect(getBoardByLink(db, rb.linkId)!.id).toBe(b.id)
-    expect(getBoardByLink(db, 'nope')).toBeUndefined()
+    expect(getBoardByLink(db, 'nope')).toBeNull()
     expect(() => db.update(boards).set({ linkId: ra.linkId }).where(eq(boards.id, b.id)).run()).toThrow(/UNIQUE/)
     expect([ra.ownerId, ra.visibility, ra.trashedAt, ra.passwordHash, ra.forkedFrom]).toEqual(['local', 'view', null, null, null])
     db.$client.close()

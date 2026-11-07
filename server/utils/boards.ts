@@ -72,7 +72,7 @@ export function boardBefore(db: Db, id: string, n: number): BoardFile {
 }
 
 export function getBoardByLink(db: Db, linkId: string) {
-  return db.select().from(boards).where(eq(boards.linkId, linkId)).get()
+  return db.select().from(boards).where(eq(boards.linkId, linkId)).get() ?? null
 }
 
 /** `ownerId`'s boards, newest change first: `mine` leaves out the trashed ones, `trash` lists only those. */
