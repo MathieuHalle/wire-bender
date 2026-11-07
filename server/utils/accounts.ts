@@ -25,17 +25,25 @@ export type SignInResult = { ok: true, userId: string, deleted?: true } | { ok: 
 export const MAX_NAME = 60
 const PLACEHOLDER_NAME = 'New user'
 
-/** A display name with control and format characters (zero-width, bidi overrides) dropped; null unless 1 to 60 chars. */
-export function cleanName(name: unknown): string | null {
-  if (typeof name !== 'string') return null
-  const clean = name.replace(/[\p{Cc}\p{Cf}]/gu, '').trim()
-  return clean.length >= 1 && clean.length <= MAX_NAME ? clean : null
+/**
+ * A name's code points with what can't be shown dropped: control and format characters
+ * (zero-width, bidi overrides), line and paragraph separators, lone surrogates. Trimmed.
+ * Lengths are counted in these code points, so an emoji counts once.
+ */
+function nameCodePoints(name: string): string[] {
+  return [...name.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\p{Cs}]/gu, '').trim()]
 }
 
-/** A provider's name as a display name: cleaned, cut to 60 chars, or a placeholder. */
+/** A display name, cleaned; null unless 1 to 60 code points. */
+export function cleanName(name: unknown): string | null {
+  if (typeof name !== 'string') return null
+  const points = nameCodePoints(name)
+  return points.length >= 1 && points.length <= MAX_NAME ? points.join('') : null
+}
+
+/** A provider's name as a display name: cleaned, cut to 60 code points, or a placeholder. Always one `cleanName` accepts. */
 function nameFromProvider(name: string): string {
-  const clean = name.replace(/[\p{Cc}\p{Cf}]/gu, '').trim()
-  return clean === '' ? PLACEHOLDER_NAME : [...clean].slice(0, MAX_NAME).join('').trim()
+  return cleanName(nameCodePoints(name).slice(0, MAX_NAME).join('')) ?? PLACEHOLDER_NAME
 }
 
 /** Only an https avatar URL is kept. */

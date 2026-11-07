@@ -41,6 +41,11 @@ function nodeReq(source: TrustSource): NodeReqLike | undefined {
   return undefined
 }
 
+/** A cookie of a request, upgrade request or peer; undefined if it sent none by that name. */
+export function cookieOf(source: TrustSource, name: string): string | undefined {
+  return cookieValue(nodeReq(source)?.headers.cookie, name)
+}
+
 function cookieValue(header: string | string[] | undefined, name: string): string | undefined {
   const all = Array.isArray(header) ? header.join('; ') : header
   if (!all) return undefined
@@ -201,7 +206,9 @@ function anonymousRead(pathname: string): boolean {
  */
 export function publicGate(method: string, path: string, signedIn: boolean, pendingDeletion = false): PublicGate {
   const pathname = path.split('?')[0]!
-  if (!plainPath(pathname)) return 'deny'
+  // An odd path ('..', '//', escapes) is refused before anything else: a signed-in user gets
+  // the 404 of any unknown address, never "Sign in first.".
+  if (!plainPath(pathname)) return signedIn ? 'not-found' : 'deny'
   if (PAIRING.test(pathname)) return 'not-found'
   if (method === 'DELETE' && pathname === '/api/_auth/session') return 'pass'
   if (signedIn) return 'pass'

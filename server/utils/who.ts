@@ -6,7 +6,7 @@
 import { eq } from 'drizzle-orm'
 import { useDb, type Db } from '../db'
 import { users } from '../db/schema'
-import { trust, type TrustSource } from './access'
+import { cookieOf, trust, type TrustSource } from './access'
 import { checkMode, type Mode } from './mode'
 
 export type Who
@@ -20,11 +20,19 @@ export interface SessionData { user?: { id?: unknown }, pendingDeletion?: boolea
 export interface WhoDeps {
   mode?: Mode
   db?: Db
+  /** The session cookie's name (nuxt-auth-utils: `runtimeConfig.session.name`). */
+  sessionCookie?: string
   readSession?: (source: TrustSource) => Promise<SessionData>
   clearSession?: (source: TrustSource) => Promise<void>
 }
 
 const ANONYMOUS: Who = { kind: 'anonymous' }
+
+/** The name nuxt-auth-utils keeps its session under (NUXT_SESSION_NAME may change it). */
+function sessionCookieName(): string {
+  const name = (useRuntimeConfig().session as { name?: unknown } | undefined)?.name
+  return typeof name === 'string' && name !== '' && name !== 'nuxt-session' ? name : 'nuxt-auth-session'
+}
 
 /** An h3 event (the only source a session can be written on: sockets can only read it). */
 function isEvent(source: TrustSource): boolean {
@@ -57,6 +65,9 @@ export async function resolveSession(source: TrustSource, deps: WhoDeps = {}): P
     return { who, account: db.select().from(users).where(eq(users.id, 'local')).get() ?? null, pendingDeletion: false }
   }
 
+  // No session cookie, no session: reading one would make and seal an empty session, and
+  // send every anonymous visitor (and cookieless CLI or AI client) a Set-Cookie.
+  if (cookieOf(source, deps.sessionCookie ?? sessionCookieName()) === undefined) return { who: ANONYMOUS, account: null, pendingDeletion: false }
   const session = await (deps.readSession ?? defaultRead)(source)
   const id = session.user?.id
   if (typeof id !== 'string' || id === '') return { who: ANONYMOUS, account: null, pendingDeletion: false }

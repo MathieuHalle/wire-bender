@@ -30,6 +30,7 @@ vi.stubGlobal('setResponseStatus', (event: FakeEvent, status: number) => {
 })
 vi.stubGlobal('sendRedirect', (_event: FakeEvent, location: string, status: number) => ({ redirect: location, status }))
 vi.stubGlobal('getUserSession', async () => session)
+vi.stubGlobal('useRuntimeConfig', () => ({ session: { name: 'nuxt-auth-session' } }))
 vi.stubGlobal('clearUserSession', async () => {
   cleared()
   session = {}
@@ -81,8 +82,11 @@ function event(method: string, url: string, remoteAddress = '127.0.0.1', headers
   return { node: { req: req(remoteAddress, headers, method) }, method, path: url, context: {} }
 }
 
+/** The session cookie a browser sends once it has one; its contents are `session` above. */
+const SESSION_COOKIE = 'nuxt-auth-session=Fe26.2**sealed'
+
 const publicEvent = (method: string, url: string, headers: Record<string, string> = {}) =>
-  event(method, url, '203.0.113.9', { host: 'wire.example.org', ...headers })
+  event(method, url, '203.0.113.9', { host: 'wire.example.org', cookie: SESSION_COOKIE, ...headers })
 
 /** A crossws upgrade request (Node adapter): a Request-like proxy with the Node request as `_req`. */
 function upgradeRequest(url: string, remoteAddress: string, headers: Record<string, string>) {
@@ -151,6 +155,17 @@ describe('access middleware, public mode', () => {
     expect(e.context.who).toEqual({ kind: 'user', userId: id, author: 'Ada', isAdmin: false, isPremium: false })
   })
 
+  it('an odd path is the normal 404 for a signed-in user, 401 for anonymous', async () => {
+    session = { user: { id: newUser() } }
+    for (const url of ['/api/boards/../devices', '/a//b', '/%2e%2e/x']) {
+      const e = publicEvent('GET', url)
+      expect(await middleware(e), url).toEqual({ error: 'not found' })
+      expect(e.status, url).toBe(404)
+    }
+    session = {}
+    expect(await middleware(publicEvent('GET', '/a//b'))).toEqual({ error: 'Sign in first.' })
+  })
+
   it('anyone may sign out', async () => {
     expect(await middleware(publicEvent('DELETE', '/api/_auth/session'))).toBeUndefined()
   })
@@ -168,7 +183,7 @@ describe('access middleware, public mode', () => {
   })
 
   it('a device cookie means nothing', async () => {
-    const e = publicEvent('PUT', '/api/boards/abc', { cookie: 'wb_device=' + 'a'.repeat(43) })
+    const e = publicEvent('PUT', '/api/boards/abc', { cookie: `wb_device=${'a'.repeat(43)}; ${SESSION_COOKIE}` })
     expect(await middleware(e)).toEqual({ error: 'Sign in first.' })
   })
 
@@ -218,7 +233,7 @@ describe('board socket', () => {
 
     const id = newUser('Ada')
     session = { user: { id } }
-    const request = upgradeRequest('/_ws/board/abc', '203.0.113.9', { host: 'wire.example.org', origin: 'https://wire.example.org' })
+    const request = upgradeRequest('/_ws/board/abc', '203.0.113.9', { host: 'wire.example.org', origin: 'https://wire.example.org', cookie: SESSION_COOKIE })
     expect(await ws.upgrade(request)).toBeUndefined()
     expect(request.context.who).toMatchObject({ kind: 'user', userId: id, author: 'Ada' })
 

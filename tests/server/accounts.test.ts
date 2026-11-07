@@ -98,6 +98,24 @@ describe('names', () => {
     expect(cleanName(42)).toBeNull()
   })
 
+  it('line and paragraph separators and lone surrogates are stripped too', () => {
+    expect(cleanName('Ada\u2028Love\u2029lace')).toBe('AdaLovelace')
+    expect(cleanName('A\uD800da\uDC00')).toBe('Ada')
+    expect(cleanName('\u2028\uD800')).toBeNull()
+  })
+
+  it('1 to 60 counts code points, the same for PATCH and provider names', () => {
+    const emoji = '\u{1F50C}'
+    expect(cleanName(emoji.repeat(60))).toBe(emoji.repeat(60))
+    expect(cleanName(emoji.repeat(61))).toBeNull()
+    const r = signIn(db, 'github', { id: 'e', name: emoji.repeat(70) })
+    if (!r.ok) throw new Error('sign-in failed')
+    const stored = me(db, r.userId)!.name
+    expect(stored).toBe(emoji.repeat(60))
+    // What a provider gives can always be saved back unchanged.
+    expect(cleanName(stored)).toBe(stored)
+  })
+
   it('rename sets the name', () => {
     const a = userId(signIn(db, 'github', { id: '42', name: 'Ada' }))
     expect(rename(db, a, 'Ada L.')).toBe(true)
