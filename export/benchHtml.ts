@@ -320,7 +320,15 @@ tr.group th { padding-top: 10px; font-size: 0.95em; color: var(--ink); border-bo
 .fold { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 12px; align-items: start; padding: 8px 0;
   border-bottom: 1px solid var(--line); break-inside: avoid; page-break-inside: avoid; }
 footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); }
+#sections-panel { position: fixed; top: 8px; right: 8px; z-index: 10; max-width: 15rem; font-size: 13px;
+  padding: 4px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); opacity: 0.92; }
+#sections-panel button { padding: 3px 8px; }
+#sections-body { margin-top: 6px; }
+#sections-body label { display: flex; gap: 6px; align-items: center; padding: 3px 2px; cursor: pointer; }
+#sections-body .row { display: flex; gap: 6px; margin-top: 6px; }
+.section-off { display: none !important; }
 @media screen and (max-width: 600px) {
+  #sections-panel { position: static; max-width: none; margin-bottom: 8px; opacity: 1; }
   body { padding: 12px; font-size: 16px; }
   table, thead, tbody, tr, th, td { display: block; }
   thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
@@ -342,8 +350,10 @@ footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); 
 @media print {
   :root { --ink: #000000; --muted: #333333; --bg: #ffffff; --line: #999999; --card: #ffffff; --err-bg: #ffffff; --err: #000000; }
   body { max-width: none; padding: 0; font-size: 10pt; color: #000; background: #fff; }
-  .screen-only { display: none; }
+  .screen-only, #sections-panel { display: none; }
   .page { break-before: page; page-break-before: always; }
+  /* the first section left on the sheet follows the header on the same page, not a blank one */
+  .page.section-first:not(.enlarged) { break-before: auto; page-break-before: auto; }
   /* belt and braces: nothing may push the page wider, or the browser shrinks every page */
   .drawing, .scale, .strip, .sketch, section, figure { overflow: hidden; }
   .errors { border-width: 2pt; }
@@ -380,7 +390,61 @@ function script(key: string): string {
   function clear() {
     try { window.localStorage.removeItem(KEY); } catch (e) { /* storage unavailable */ }
   }
+  var SKEY = KEY + ':sections';
+  function loadOff() {
+    var s = null;
+    try { s = window.localStorage.getItem(SKEY); } catch (e) { s = null; }
+    var a = null;
+    try { a = s ? JSON.parse(s) : null; } catch (e) { a = null; }
+    return Array.isArray(a) ? a : [];
+  }
+  function saveOff(a) {
+    try { window.localStorage.setItem(SKEY, JSON.stringify(a)); } catch (e) { /* storage unavailable */ }
+  }
+  function sections() {
+    var panel = document.getElementById('sections-panel');
+    if (!panel) return;
+    var off = loadOff();
+    var boxes = Array.prototype.slice.call(panel.querySelectorAll('input[data-section]'));
+    function apply() {
+      var first = true;
+      var hidden = [];
+      boxes.forEach(function (b) {
+        var id = b.getAttribute('data-section');
+        var sec = document.getElementById(id);
+        if (!sec) return;
+        sec.classList.remove('section-first');
+        if (b.checked) {
+          if (first) sec.classList.add('section-first');
+          first = false;
+        } else hidden.push(id);
+        sec.classList.toggle('section-off', !b.checked);
+      });
+      saveOff(hidden);
+    }
+    boxes.forEach(function (b) {
+      b.checked = off.indexOf(b.getAttribute('data-section')) < 0;
+      b.addEventListener('change', apply);
+    });
+    function setAll(on) { boxes.forEach(function (b) { b.checked = on; }); apply(); }
+    document.getElementById('sections-all').addEventListener('click', function () { setAll(true); });
+    document.getElementById('sections-none').addEventListener('click', function () { setAll(false); });
+    var toggle = document.getElementById('sections-toggle');
+    var body = document.getElementById('sections-body');
+    toggle.addEventListener('click', function () {
+      var open = body.hidden;
+      body.hidden = !open;
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    boxes.forEach(function (b) {
+      var sec = document.getElementById(b.getAttribute('data-section'));
+      if (sec) sec.classList.toggle('section-off', !b.checked);
+    });
+    apply();
+    panel.hidden = false;
+  }
   document.addEventListener('DOMContentLoaded', function () {
+    sections();
     var ticks = load();
     var boxes = document.querySelectorAll('input[data-tick]');
     Array.prototype.forEach.call(boxes, function (b) {
@@ -399,6 +463,25 @@ function script(key: string): string {
     });
   });
 })();`
+}
+
+/** The id and heading of a rendered section (they are all `<section id=".."...>\n<h2>..</h2>`). */
+function sectionHead(html: string): { id: string, heading: string } {
+  const mt = /^<section id="([a-z]+)"[^>]*>\s*<h2>([^<]*)<\/h2>/.exec(html)
+  if (!mt) throw new Error('bench section without an id and heading')
+  return { id: mt[1]!, heading: mt[2]! }
+}
+
+/** The on-screen "Sections" panel (never printed; shown by the script only, so no-JS output is unchanged). */
+function panel(parts: { id: string, heading: string }[]): string {
+  const boxes = parts.map(p => `<label><input type="checkbox" data-section="${p.id}" checked> ${p.heading}</label>`).join('\n')
+  return `<aside id="sections-panel" aria-label="Sections" hidden>
+<button type="button" id="sections-toggle" aria-expanded="false" aria-controls="sections-body">Sections</button>
+<div id="sections-body" hidden>
+${boxes}
+<div class="row"><button type="button" id="sections-all">All</button><button type="button" id="sections-none">None</button></div>
+</div>
+</aside>`
 }
 
 /** Today's date as YYYY-MM-DD, local time. */
@@ -428,6 +511,10 @@ export function benchHtml(board: BoardFile, opts: { hash?: string, date?: string
   const id = tickIds()
   const date = opts.date ?? today()
   const key = `wirebender:${m.name}:${opts.hash ?? m.revision}`
+  const parts = [
+    overview(board, printable), enlarged(board, m.paper), placement(m, id), cards(m, board, printable, id),
+    legFolds(m, board.board.pitchMm, id), meter(m, id)
+  ].map(html => ({ html, ...sectionHead(html) }))
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -439,13 +526,9 @@ export function benchHtml(board: BoardFile, opts: { hash?: string, date?: string
 <script>${script(key)}</script>
 </head>
 <body>
+${panel(parts)}
 ${header(m, date)}
-${overview(board, printable)}
-${enlarged(board, m.paper)}
-${placement(m, id)}
-${cards(m, board, printable, id)}
-${legFolds(m, board.board.pitchMm, id)}
-${meter(m, id)}
+${parts.map(p => p.html).join('\n')}
 <footer><p class="advisory"><strong>${esc(ADVISORY)}</strong></p></footer>
 </body>
 </html>

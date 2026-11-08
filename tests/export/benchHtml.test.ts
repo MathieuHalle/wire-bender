@@ -117,6 +117,60 @@ describe('benchHtml', () => {
     expect([...ids].sort((a, b) => a - b)).toEqual(ids)
   })
 
+  describe('section toggles panel', () => {
+    const panelOf = (out: string) => out.match(/<aside id="sections-panel"[\s\S]*?<\/aside>/)?.[0] ?? ''
+    const presentIds = (out: string) =>
+      ['enlarged', 'overview', 'placement', 'cards', 'legfolds', 'meter'].filter(id => out.includes(`<section id="${id}"`))
+
+    it('has one labelled checkbox per section present, plus All and None', () => {
+      for (const out of [html, benchHtml(small(), { date: DATE })]) {
+        const panel = panelOf(out)
+        expect(panel).toContain('Sections')
+        const boxes = [...panel.matchAll(/<input type="checkbox" data-section="([a-z]+)"/g)].map(m => m[1])
+        expect(boxes.sort()).toEqual(presentIds(out).sort())
+        for (const id of boxes) {
+          const heading = out.match(new RegExp(`<section id="${id}"[^>]*>\\s*<h2>([^<]*)</h2>`))![1]!
+          expect(panel).toMatch(new RegExp(`<label[^>]*><input type="checkbox" data-section="${id}"[^>]*> ${heading}</label>`))
+        }
+        expect(panel).toContain('>All</button>')
+        expect(panel).toContain('>None</button>')
+      }
+    })
+
+    it('names every section by its heading, in sheet order', () => {
+      const labels = [...panelOf(html).matchAll(/data-section="[a-z]+"[^>]*> ([^<]*)<\/label>/g)].map(m => m[1])
+      expect(labels).toEqual(['Board overview, 1:1', 'Both sides, enlarged', 'Parts placement', 'Wire cards', 'Leg-fold bridges', 'Meter tests'])
+    })
+
+    it('is hidden in print and starts hidden, so no-JS output is unchanged', () => {
+      const print = html.slice(html.indexOf('@media print'))
+      expect(print).toMatch(/#sections-panel\s*\{\s*display:\s*none/)
+      expect(panelOf(html)).toMatch(/<aside id="sections-panel"[^>]* hidden/)
+    })
+
+    it('hidden sections vanish on screen and in print, without a page-break gap', () => {
+      expect(html).toMatch(/\.section-off\s*\{\s*display:\s*none\s*!important/)
+      expect(html).toMatch(/\.page\s*\{\s*break-before:\s*page/)
+    })
+
+    it('remembers the choice under the board key, every storage access in try/catch', () => {
+      const js = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]!)[0]!
+      expect(js).toContain(':sections')
+      expect(js).toContain('section-off')
+    })
+
+    it('the advisory sits outside every section, so no toggle can hide it', () => {
+      for (const out of [html, benchHtml(small(), { date: DATE })]) {
+        const footer = out.slice(out.indexOf('<footer>'))
+        expect(footer).toContain(ADVISORY)
+        const beforeFooter = out.slice(0, out.indexOf('<footer>'))
+        expect((beforeFooter.match(/<section\b/g) ?? []).length).toBeGreaterThan(0)
+        // the footer is not inside an open section
+        expect((beforeFooter.match(/<section\b/g) ?? []).length).toBe((beforeFooter.match(/<\/section>/g) ?? []).length)
+      }
+    })
+  })
+
   describe('enlarged page (both sides, filling a page)', () => {
     const sectionOf = (out: string, id: string) => {
       const s = out.slice(out.indexOf(`<section id="${id}"`))
