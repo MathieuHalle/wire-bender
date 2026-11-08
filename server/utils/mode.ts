@@ -40,6 +40,15 @@ export function publicUrl(env: Env = process.env): URL | null {
   }
 }
 
+/**
+ * Where share links point: `WIREBENDER_URL` in public mode, without a trailing slash, or
+ * null in local mode (which offers no sharing).
+ */
+export function publicBase(env: Env = process.env): string | null {
+  if (checkMode(env) !== 'public') return null
+  return publicUrl(env)?.href.replace(/\/+$/, '') ?? null
+}
+
 /** The server's mode; throws (the server stops) with the exact Global Constraints message when it can't run. */
 export function checkMode(env: Env = process.env): Mode {
   const mode = env.WIREBENDER_MODE

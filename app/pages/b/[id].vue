@@ -195,6 +195,28 @@ const frames = computed(() => {
 const pairing = ref(false)
 const devicesOpen = ref(false)
 
+/**
+ * "Share": only the owner may change sharing, and only in public mode (local mode offers
+ * none). The sharing route answers the owner only, so it decides whether the button shows.
+ */
+const shareOpen = ref(false)
+const canShare = ref(false)
+async function checkShare() {
+  canShare.value = false
+  shareOpen.value = false
+  const asked = id.value
+  try {
+    const me = await $fetch<{ mode: 'local' | 'public' }>('/api/me')
+    if (me.mode !== 'public') return
+    await $fetch(`/api/boards/${encodeURIComponent(asked)}/sharing`)
+    if (asked === id.value) canShare.value = true
+  } catch {
+    // Not the owner, or no such board: no Share button.
+  }
+}
+onMounted(() => void checkShare())
+watch(id, () => void checkShare())
+
 const STATUS = {
   live: { label: 'live', color: 'success' },
   connecting: { label: 'connecting…', color: 'info' },
@@ -264,6 +286,14 @@ const sideTitle = (s: Side) => (s === 'top'
       />
       <div class="ml-auto flex gap-1">
         <UButton
+          v-if="canShare"
+          size="xs"
+          variant="ghost"
+          icon="i-lucide-share-2"
+          label="Share"
+          @click="shareOpen = true"
+        />
+        <UButton
           size="xs"
           variant="ghost"
           icon="i-lucide-tablet-smartphone"
@@ -292,6 +322,11 @@ const sideTitle = (s: Side) => (s === 'top'
       </UTooltip>
       <PairDialog v-model:open="pairing" />
       <DevicesDialog v-model:open="devicesOpen" />
+      <ShareDialog
+        v-if="canShare"
+        v-model:open="shareOpen"
+        :board-id="id"
+      />
     </header>
 
     <UAlert

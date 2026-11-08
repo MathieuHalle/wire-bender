@@ -13,6 +13,7 @@ import type { BoardFile } from '../../core/schema'
 import { closeDb, useDb } from '../../server/db'
 import { boards, linkVisits, users } from '../../server/db/schema'
 import { signIn } from '../../server/utils/accounts'
+import { unlockEntry } from '../../server/utils/boardAccess'
 import { createBoard, getBoardRow } from '../../server/utils/boards'
 import { openRoom } from '../../server/utils/rooms'
 import { docToBoard, writeBoard } from '../../shared/yboard'
@@ -47,6 +48,7 @@ vi.stubGlobal('setResponseHeader', () => {})
 vi.stubGlobal('setResponseHeaders', () => {})
 // The link-password check: a stand-in for nuxt-auth-utils' scrypt.
 vi.stubGlobal('verifyPassword', async (hash: string, plain: string) => hash === `h:${plain}`)
+vi.stubGlobal('hashPassword', async (plain: string) => `h:${plain}`)
 vi.stubGlobal('clearUserSession', async () => {
   cleared()
   session = {}
@@ -65,6 +67,9 @@ let middleware: Handler
 let ws: WsHooks
 let unlock: Handler
 let putRoute: Handler
+let sharingGet: Handler
+let sharingPatch: Handler
+let regenerate: Handler
 
 let dir: string
 
@@ -73,6 +78,9 @@ beforeAll(async () => {
   ws = (await import('../../server/routes/_ws/board/[id]')).default as unknown as WsHooks
   unlock = (await import('../../server/api/links/[linkId]/unlock.post')).default as unknown as Handler
   putRoute = (await import('../../server/api/boards/[id].put')).default as unknown as Handler
+  sharingGet = (await import('../../server/api/boards/[id]/sharing.get')).default as unknown as Handler
+  sharingPatch = (await import('../../server/api/boards/[id]/sharing.patch')).default as unknown as Handler
+  regenerate = (await import('../../server/api/boards/[id]/sharing/regenerate.post')).default as unknown as Handler
 })
 afterAll(() => {
   vi.unstubAllGlobals()
@@ -156,7 +164,7 @@ describe('access middleware, public mode', () => {
   })
 
   it('anonymous writes need sign-in', async () => {
-    for (const [method, url] of [['POST', '/api/boards'], ['PATCH', '/api/me'], ['PATCH', '/api/boards/abc'], ['POST', '/api/boards/abc/fork'], ['DELETE', '/api/boards/abc'], ['POST', '/api/links/abc'], ['PUT', '/api/links/abc/unlock']] as const) {
+    for (const [method, url] of [['POST', '/api/boards'], ['PATCH', '/api/me'], ['PATCH', '/api/boards/abc'], ['POST', '/api/boards/abc/fork'], ['DELETE', '/api/boards/abc'], ['POST', '/api/links/abc'], ['PUT', '/api/links/abc/unlock'], ['PATCH', '/api/boards/abc/sharing'], ['POST', '/api/boards/abc/sharing/regenerate']] as const) {
       const e = publicEvent(method, url)
       expect(await middleware(e), url).toEqual({ error: 'Sign in first.' })
       expect(e.status, url).toBe(401)
@@ -319,7 +327,7 @@ describe('board socket', () => {
     const r = await ws.upgrade(anonymous(`/_ws/board/${locked.linkId}`))
     expect(r?.status).toBe(401)
     expect(await r!.json()).toEqual({ password: true })
-    session = { unlocked: [locked.linkId] }
+    session = { unlocked: [unlockEntry(locked.linkId, 'h:x')] }
     expect(await ws.upgrade(signedIn(`/_ws/board/${locked.linkId}`))).toBeUndefined()
     for (const set of [{ visibility: 'private' as const }, { trashedAt: Date.now() }]) {
       expect((await ws.upgrade(anonymous(`/_ws/board/${board(ada, set).linkId}`)))?.status).toBe(404)
@@ -405,7 +413,7 @@ describe('POST /api/links/:linkId/unlock', () => {
     expect(await unlock(right)).toEqual({ ok: true })
     expect(right.status).toBe(200)
     // The rest of the session is kept.
-    expect(session).toMatchObject({ user: { id: expect.any(String) }, unlocked: ['older', linkId] })
+    expect(session).toMatchObject({ user: { id: expect.any(String) }, unlocked: ['older', unlockEntry(linkId, 'h:secret')] })
     expect(session).not.toHaveProperty('id')
 
     // The socket upgrade now opens.
@@ -459,5 +467,104 @@ describe('PUT /api/boards/:key body', () => {
     expect(await putRoute(editor)).toEqual({ error: 'body is larger than 2000000 bytes' })
     expect(editor.status).toBe(413)
     expect(editor.read()).toBe(false)
+  })
+})
+
+describe('sharing routes', () => {
+  type WhoLike = Record<string, unknown>
+  /** A sharing request by `who`; its body (if any) records whether it was read. */
+  function call(method: string, id: string, who: WhoLike, body?: unknown, contentLength?: string): FakeEvent & { read: () => boolean } {
+    let read = false
+    const text = body === undefined ? '' : JSON.stringify(body)
+    const req = Object.assign(
+      { method, socket: { remoteAddress: '203.0.113.9', localPort: 3002 }, headers: { 'host': 'wire.example.org', 'content-length': contentLength ?? String(Buffer.byteLength(text)) } } as NodeReqLike,
+      { async* [Symbol.asyncIterator]() {
+        read = true
+        yield Buffer.from(text)
+      } }
+    )
+    return { node: { req }, method, path: `/api/boards/${id}/sharing`, context: { params: { id }, who }, read: () => read }
+  }
+  const asUser = (userId: string, isPremium = false): WhoLike => ({ kind: 'user', userId, author: 'x', isAdmin: false, isPremium })
+
+  it('the owner reads and changes sharing; the hash never leaves', async () => {
+    publicMode()
+    const ada = newUser('Ada')
+    useDb().update(users).set({ isPremium: 1 }).where(eq(users.id, ada)).run()
+    const { id } = createBoard(useDb(), fixture, 'import', 'x', ada)
+    const linkId = getBoardRow(useDb(), id)!.linkId
+    const get = call('GET', id, asUser(ada, true))
+    expect(await sharingGet(get)).toEqual({ visibility: 'view', hasPassword: false, link: `https://wire.example.org/b/${linkId}`, canUsePremium: true })
+    const patch = call('PATCH', id, asUser(ada, true), { visibility: 'edit', password: 'secret' })
+    const body = await sharingPatch(patch)
+    expect(patch.status).toBe(200)
+    expect(body).toEqual({ visibility: 'edit', hasPassword: true, link: `https://wire.example.org/b/${linkId}`, canUsePremium: true })
+    expect(getBoardRow(useDb(), id)!.passwordHash).toBe('h:secret')
+  })
+
+  it('a non-owner is 404 before the body is read; the owner\'s huge body is 413 unread', async () => {
+    publicMode()
+    const { id } = createBoard(useDb(), fixture, 'import', 'x', newUser('Ada'))
+    const owner = getBoardRow(useDb(), id)!.ownerId
+    const huge = String(10 ** 10)
+    for (const who of [asUser(newUser('Bob'), true), { kind: 'anonymous' }]) {
+      const e = call('PATCH', id, who, { visibility: 'private' }, huge)
+      expect(await sharingPatch(e)).toEqual({ error: 'not found' })
+      expect(e.status).toBe(404)
+      expect(e.read()).toBe(false)
+      const r = call('POST', id, who)
+      expect(await regenerate(r)).toEqual({ error: 'not found' })
+    }
+    const mine = call('PATCH', id, asUser(owner), { visibility: 'edit' }, huge)
+    expect(await sharingPatch(mine)).toEqual({ error: 'body is larger than 4096 bytes' })
+    expect(mine.status).toBe(413)
+    expect(mine.read()).toBe(false)
+    expect(getBoardRow(useDb(), id)!.visibility).toBe('view')
+  })
+
+  it('local mode offers no sharing', async () => {
+    const { id } = createBoard(useDb(), fixture, 'import', 'x', 'local')
+    const local = { kind: 'local', userId: 'local', author: 'Local' }
+    expect(await sharingGet(call('GET', id, local))).toEqual({ error: 'not found' })
+    expect(await sharingPatch(call('PATCH', id, local, { visibility: 'edit' }))).toEqual({ error: 'not found' })
+    expect(await regenerate(call('POST', id, local))).toEqual({ error: 'not found' })
+  })
+
+  it('regenerating the link closes link peers with 4403; the kicked socket is not read', async () => {
+    publicMode()
+    const ada = newUser('Ada')
+    const { id } = createBoard(useDb(), fixture, 'import', 'x', ada)
+    useDb().update(boards).set({ visibility: 'edit' }).where(eq(boards.id, id)).run()
+    const linkId = getBoardRow(useDb(), id)!.linkId
+    session = { user: { id: newUser('Bob') } }
+    const request = upgradeRequest(`/_ws/board/${linkId}`, '203.0.113.9', { host: 'wire.example.org', origin: 'https://wire.example.org', cookie: SESSION_COOKIE })
+    expect(await ws.upgrade(request)).toBeUndefined()
+    const closed: { code?: number, reason?: string }[] = []
+    const peer = { id: 'bob', request, context: request.context, send: () => {}, close: (code?: number, reason?: string) => closed.push({ code, reason }) }
+    ws.open(peer)
+    const room = openRoom(useDb(), id)!
+    expect(room.peerAccess('bob')).toEqual({ role: 'edit', viaLink: true })
+    // An edit Bob made on his own copy, sent after the kick.
+    const doc = new Y.Doc()
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(room.doc))
+    let update: Uint8Array | null = null
+    doc.on('update', (u: Uint8Array) => {
+      update = u
+    })
+    const before = docToBoard(doc, 0)
+    if (!before.ok) throw new Error(before.errors.join())
+    writeBoard(doc, before.board, { ...before.board, name: 'after the kick' })
+
+    const r = call('POST', id, asUser(ada))
+    expect(await regenerate(r)).toEqual({ link: `https://wire.example.org/b/${getBoardRow(useDb(), id)!.linkId}` })
+    expect(closed).toEqual([{ code: 4403, reason: 'access changed' }])
+    const e = encoding.createEncoder()
+    encoding.writeVarUint(e, 0)
+    syncProtocol.writeUpdate(e, update!)
+    ws.message(peer, { uint8Array: () => encoding.toUint8Array(e) })
+    ws.close(peer)
+    expect(getBoardRow(useDb(), id)!.name).toBe(fixture.name)
+    // Reconnecting by the old link: the same 404 as an unknown board.
+    expect((await ws.upgrade(upgradeRequest(`/_ws/board/${linkId}`, '203.0.113.9', { host: 'wire.example.org', origin: 'https://wire.example.org', cookie: SESSION_COOKIE })))?.status).toBe(404)
   })
 })

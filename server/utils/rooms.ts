@@ -14,6 +14,8 @@ export const GROUP_IDLE_MS = 2000
 export interface PeerLink {
   update: (update: Uint8Array) => void
   awareness: (update: Uint8Array) => void
+  /** Close the peer's connection; the room has already let it go (kickLinkPeers). */
+  close?: (code: number, reason: string) => void
 }
 
 /** A refusal with `code` closes the socket with that code (else 4400). */
@@ -28,6 +30,7 @@ export interface JoinOptions extends PeerAccess { authorId?: string | null }
 /** Access changed, or never allowed this: a view peer tried to edit. */
 export const CLOSE_ACCESS = 4403
 export const VIEW_ONLY: Received = { ok: false, reason: 'view only', code: CLOSE_ACCESS }
+const NOT_JOINED: Received = { ok: false, reason: 'not in this room', code: CLOSE_ACCESS }
 
 /** `authorId`: the account the revision is by ('local' for the local user), null for none. */
 export interface WriteMeta { author: string, how: string, target?: number, authorId?: string | null }
@@ -119,6 +122,15 @@ export function openRoom(db: Db, id: string): Room | null {
   return room
 }
 
+/**
+ * The board's sharing changed: every peer that came by the share link leaves the open room
+ * at once and is closed with CLOSE_ACCESS, so it reconnects and its access is decided anew.
+ * Peers by board id (the owner) stay. Nothing to do when the room is not open.
+ */
+export function kickLinkPeers(boardId: string): void {
+  rooms.get(boardId)?.kickLinkPeers()
+}
+
 /** One open board: its Yjs doc, the peers editing it, and each author's open revision group. */
 export class Room {
   readonly doc = new Y.Doc()
@@ -178,7 +190,9 @@ export class Room {
    * step 2 on connecting).
    */
   receive(peerId: string, author: string, update: Uint8Array): Received {
-    if (this.peers.get(peerId)?.access.role === 'view') return this.changes(update) ? VIEW_ONLY : { ok: true }
+    const peer = this.peers.get(peerId)
+    if (!peer) return NOT_JOINED
+    if (peer.access.role === 'view') return this.changes(update) ? VIEW_ONLY : { ok: true }
     const checked = this.check(update)
     if (!checked.ok) return checked
     let changed = false
@@ -200,6 +214,7 @@ export class Room {
 
   /** Apply a peer's presence and relay it to the others. */
   receiveAwareness(peerId: string, update: Uint8Array): Received {
+    if (!this.peers.has(peerId)) return NOT_JOINED
     try {
       applyAwarenessUpdate(this.awareness, update, peerId)
       return { ok: true }
@@ -252,6 +267,15 @@ export class Room {
       if (peer.clients.size > 0) removeAwarenessStates(this.awareness, [...peer.clients], null)
     }
     this.dropIfEmpty()
+  }
+
+  /** See the module-level kickLinkPeers. */
+  kickLinkPeers(): void {
+    for (const [peerId, peer] of [...this.peers]) {
+      if (!peer.access.viaLink) continue
+      this.leave(peerId)
+      safely(() => peer.link.close?.(CLOSE_ACCESS, 'access changed'))
+    }
   }
 
   /** True when applying `update` would change the doc. */

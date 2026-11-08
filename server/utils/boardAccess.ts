@@ -4,6 +4,7 @@
 // orphaned link) is the same 404, so a key tells a stranger nothing.
 //
 // Wrong link-password counters live in memory; a restart drops them.
+import { createHash } from 'node:crypto'
 import { eq, sql } from 'drizzle-orm'
 import type { Db } from '../db'
 import { linkVisits, users } from '../db/schema'
@@ -32,8 +33,23 @@ function ownerActive(db: Db, ownerId: string): boolean {
 }
 
 /**
- * What `who` may do with the board `key` names. `unlocked` is the session's list of link
- * ids whose password it has entered.
+ * A session's unlock of a link (ruling R5): the link id and a short tag of the password
+ * hash it was entered for, so a new or removed password, or a new link id, voids it. The
+ * tag is a digest of the hash, never part of it.
+ */
+export function unlockEntry(linkId: string, passwordHash: string): string {
+  return `${linkId}:${createHash('sha256').update(passwordHash).digest('base64url').slice(0, 12)}`
+}
+
+/** The link id an unlock entry is for (link ids hold no colon). */
+function entryLink(entry: string): string {
+  const at = entry.lastIndexOf(':')
+  return at < 0 ? entry : entry.slice(0, at)
+}
+
+/**
+ * What `who` may do with the board `key` names. `unlocked` is the session's list of
+ * unlock entries (unlockEntry) for the link passwords it has entered.
  */
 export function access(db: Db, who: Who, key: string, unlocked: readonly string[]): Access {
   const userId = userIdOf(who)
@@ -46,7 +62,7 @@ export function access(db: Db, who: Who, key: string, unlocked: readonly string[
   }
   const row = getBoardByLink(db, key)
   if (!row || row.trashedAt !== null || row.visibility === 'private' || !ownerActive(db, row.ownerId)) return NOT_FOUND
-  if (row.passwordHash !== null && !unlocked.includes(key)) return { ok: false, status: 401 }
+  if (row.passwordHash !== null && !unlocked.includes(unlockEntry(key, row.passwordHash))) return { ok: false, status: 401 }
   const anonymousEdit = row.visibility === 'edit' && userId === null
   return { ok: true, boardId: row.id, role: anonymousEdit ? 'view' : row.visibility, signInToEdit: anonymousEdit, viaLink: true }
 }
@@ -85,12 +101,13 @@ export function resetUnlocks(): void {
 }
 
 export type UnlockResult
-  = | { status: 200, body: { ok: true }, unlock: boolean }
+  = | { status: 200, body: { ok: true }, entry: string | null }
     | { status: 403 | 404 | 429, body: { error: string } }
 
 /**
- * `POST /api/links/:linkId/unlock`: check a link's password. `unlock` tells the route to add
- * the link to the session's list; a link without a password needs none.
+ * `POST /api/links/:linkId/unlock`: check a link's password. `entry` is what the route adds
+ * to the session's list: tagged with the hash the password was checked against, so a
+ * change made meanwhile leaves it void. A link without a password needs none (null).
  */
 export async function unlockLink(
   db: Db, linkId: string, password: unknown, address: string | undefined,
@@ -98,7 +115,7 @@ export async function unlockLink(
 ): Promise<UnlockResult> {
   const row = getBoardByLink(db, linkId)
   if (!row || row.trashedAt !== null || row.visibility === 'private' || !ownerActive(db, row.ownerId)) return { status: 404, body: { error: 'not found' } }
-  if (row.passwordHash === null) return { status: 200, body: { ok: true }, unlock: false }
+  if (row.passwordHash === null) return { status: 200, body: { ok: true }, entry: null }
 
   if (wrongBy.size > SWEEP_AT) {
     for (const [k, w] of wrongBy) if (now - w.since > UNLOCK_WINDOW_MS) wrongBy.delete(k)
@@ -122,11 +139,15 @@ export async function unlockLink(
   }
   if (!right) return { status: 403, body: { error: 'Wrong password.' } }
   wrongBy.delete(key)
-  return { status: 200, body: { ok: true }, unlock: true }
+  return { status: 200, body: { ok: true }, entry: unlockEntry(linkId, row.passwordHash) }
 }
 
-/** The session's unlocked list with `linkId` added last, without repeats, at most MAX_UNLOCKED. */
-export function withUnlocked(list: unknown, linkId: string): string[] {
-  const kept = (Array.isArray(list) ? list : []).filter((x): x is string => typeof x === 'string' && x !== linkId)
-  return [...kept, linkId].slice(-MAX_UNLOCKED)
+/**
+ * The session's unlocked list with `entry` added last, at most MAX_UNLOCKED: an older entry
+ * for the same link (a void one, or a repeat) goes.
+ */
+export function withUnlocked(list: unknown, entry: string): string[] {
+  const link = entryLink(entry)
+  const kept = (Array.isArray(list) ? list : []).filter((x): x is string => typeof x === 'string' && entryLink(x) !== link)
+  return [...kept, entry].slice(-MAX_UNLOCKED)
 }

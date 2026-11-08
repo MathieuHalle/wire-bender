@@ -7,7 +7,7 @@ import type { BoardFile } from '../../core/schema'
 import { openDb, type Db } from '../../server/db'
 import { boards, users } from '../../server/db/schema'
 import { signIn } from '../../server/utils/accounts'
-import { MAX_UNLOCKED, MAX_WRONG_UNLOCKS, UNLOCK_WINDOW_MS, access, resetUnlocks, unlockLink, withUnlocked } from '../../server/utils/boardAccess'
+import { MAX_UNLOCKED, MAX_WRONG_UNLOCKS, UNLOCK_WINDOW_MS, access, resetUnlocks, unlockEntry, unlockLink, withUnlocked } from '../../server/utils/boardAccess'
 import { createBoard, getBoardRow } from '../../server/utils/boards'
 import type { Who } from '../../server/utils/who'
 
@@ -118,7 +118,9 @@ describe('access by link', () => {
     const bob = user('Bob')
     expect(access(db, bob, b.linkId, [])).toEqual({ ok: false, status: 401 })
     expect(access(db, ANON, b.linkId, ['another-link'])).toEqual({ ok: false, status: 401 })
-    expect(access(db, bob, b.linkId, [b.linkId])).toMatchObject({ ok: true, role: 'view', viaLink: true })
+    expect(access(db, bob, b.linkId, [unlockEntry(b.linkId, 'h:secret')])).toMatchObject({ ok: true, role: 'view', viaLink: true })
+    // An unlock for another password of the same link (R5), or the bare link id, is none.
+    expect(access(db, bob, b.linkId, [unlockEntry(b.linkId, 'h:old'), b.linkId])).toEqual({ ok: false, status: 401 })
   })
 })
 
@@ -127,7 +129,7 @@ describe('unlock', () => {
     const b = board(user('Ada').userId, { passwordHash: 'h:secret' })
     expect(await unlockLink(db, b.linkId, 'nope', '203.0.113.9', verify)).toEqual({ status: 403, body: { error: 'Wrong password.' } })
     const r = await unlockLink(db, b.linkId, 'secret', '203.0.113.9', verify)
-    expect(r).toEqual({ status: 200, body: { ok: true }, unlock: true })
+    expect(r).toEqual({ status: 200, body: { ok: true }, entry: unlockEntry(b.linkId, 'h:secret') })
   })
 
   it('five wrong passwords then 429', async () => {
@@ -174,7 +176,7 @@ describe('unlock', () => {
     for (const key of ['nope', priv.linkId, trashed.linkId, priv.id]) {
       expect(await unlockLink(db, key, 'x', '203.0.113.9', verify), key).toEqual({ status: 404, body: { error: 'not found' } })
     }
-    expect(await unlockLink(db, open.linkId, 'x', '203.0.113.9', verify)).toEqual({ status: 200, body: { ok: true }, unlock: false })
+    expect(await unlockLink(db, open.linkId, 'x', '203.0.113.9', verify)).toEqual({ status: 200, body: { ok: true }, entry: null })
   })
 
   it('the unlocked list keeps the newest 50, without repeats', () => {
@@ -186,5 +188,7 @@ describe('unlock', () => {
     expect(withUnlocked(['a', 'b'], 'a')).toEqual(['b', 'a'])
     expect(withUnlocked(undefined, 'a')).toEqual(['a'])
     expect(withUnlocked(['a', 3, null], 'b')).toEqual(['a', 'b'])
+    // A new entry for a link replaces the link's older one.
+    expect(withUnlocked(['l1:old', 'l2:x'], 'l1:new')).toEqual(['l2:x', 'l1:new'])
   })
 })

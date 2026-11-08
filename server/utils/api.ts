@@ -25,16 +25,16 @@ export interface ApiResult {
 }
 
 const ok = (body: unknown, headers?: Record<string, string>): ApiResult => ({ status: 200, body, headers })
-const notFound = (): ApiResult => ({ status: 404, body: { error: 'not found' } })
-const invalid = (...errors: string[]): ApiResult => ({ status: 422, body: { errors } })
+export const notFound = (): ApiResult => ({ status: 404, body: { error: 'not found' } })
+export const invalid = (...errors: string[]): ApiResult => ({ status: 422, body: { errors } })
 
-/** A body over MAX_BOARD_BYTES. */
-export const tooLarge = (): ApiResult => ({ status: 413, body: { error: `body is larger than ${MAX_BOARD_BYTES} bytes` } })
+/** A body over `max` bytes (MAX_BOARD_BYTES unless a route caps it lower). */
+export const tooLarge = (max = MAX_BOARD_BYTES): ApiResult => ({ status: 413, body: { error: `body is larger than ${max} bytes` } })
 
 type Parsed = { ok: true, json: Record<string, unknown> } | { ok: false, result: ApiResult }
 
 /** A request body as a JSON object, or the 413 / 422 to answer with. The size is checked before parsing. */
-function parseBody(text: string): Parsed {
+export function parseBody(text: string): Parsed {
   if (Buffer.byteLength(text) > MAX_BOARD_BYTES) return { ok: false, result: tooLarge() }
   let json: unknown
   try {
@@ -95,7 +95,7 @@ type Granted = Access & { ok: true }
  * `{ password: true }` for a link whose password the session has not entered, or 403 for a
  * signed-out visitor on an edit link asking to edit.
  */
-function withAccess(db: Db, req: BoardRequest, need: Role, fn: (a: Granted) => ApiResult): ApiResult {
+export function withAccess<R>(db: Db, req: BoardRequest, need: Role, fn: (a: Granted) => R): R | ApiResult {
   const a = access(db, req.who, req.key, req.unlocked ?? [])
   return refusalOf(a, need) ?? fn(a as Granted)
 }
@@ -107,13 +107,14 @@ function refusalOf(a: Access, need: Role): ApiResult | null {
   return a.signInToEdit && need === 'edit' ? { status: 403, body: { error: 'Sign in to edit.' } } : notFound()
 }
 
-const refusal = (db: Db, req: BoardRequest, need: Role): ApiResult | null =>
+/** The access step alone, for a route that must refuse before it reads a body. */
+export const accessRefusal = (db: Db, req: BoardRequest, need: Role): ApiResult | null =>
   refusalOf(access(db, req.who, req.key, req.unlocked ?? []), need)
 
 /** Before a PUT's body is read: its refusal, or null. `putBoard` checks again. */
-export const putRefusal = (db: Db, req: BoardRequest): ApiResult | null => refusal(db, req, 'edit')
+export const putRefusal = (db: Db, req: BoardRequest): ApiResult | null => accessRefusal(db, req, 'edit')
 /** Before a PATCH's body is read: its refusal, or null. `renameBoard` checks again. */
-export const renameRefusal = (db: Db, req: BoardRequest): ApiResult | null => refusal(db, req, 'owner')
+export const renameRefusal = (db: Db, req: BoardRequest): ApiResult | null => accessRefusal(db, req, 'owner')
 
 /** Who a board change is by. Only the owner or a signed-in editor gets this far. */
 const authorOf = (who: Who): string => who.kind === 'anonymous' ? AUTHOR : who.author

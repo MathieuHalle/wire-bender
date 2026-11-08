@@ -118,7 +118,12 @@ function join(peer: WsPeer): void {
     awareness: u => peer.send(message((e) => {
       encoding.writeVarUint(e, MESSAGE_AWARENESS)
       encoding.writeVarUint8Array(e, u)
-    }))
+    })),
+    // Kicked (the board's sharing changed): the room has let it go; nothing more of it is read.
+    close: (code, reason) => {
+      joined.delete(peer.id)
+      peer.close(code, reason)
+    }
   }, { role: a.role, viaLink: a.viaLink, authorId: authorIdOf(w.who) })
   recordVisit(useDb(), w.who, a, a.key!)
   peer.send(message((e) => {

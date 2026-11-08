@@ -421,6 +421,8 @@ describe('rooms', () => {
 
   it('concurrent create of the same id is rejected', () => {
     const room = openRoom(db, id)!
+    // Only peers in the room may send to it.
+    for (const p of ['p1', 'p2', 'p3', 'p4']) room.join(p, p, { update: () => {}, awareness: () => {} })
     const first = detached(room)
     const second = detached(room)
     const addT40 = (to: string) => (x: BoardFile): BoardFile => ({ ...x, trails: [...x.trails, { id: 'T40', side: 'bottom', points: ['A1', to], joints: [] }] })
@@ -436,7 +438,7 @@ describe('rooms', () => {
     expect(room.receive('p3', 'A', captured(third, moveT7('L3')))).toEqual({ ok: true })
     expect(room.receive('p4', 'B', captured(fourth, moveT7('N3')))).toEqual({ ok: true })
     expect([['K3', 'L3'], ['K3', 'N3']]).toContainEqual(t7(boardOf(room.doc)))
-    room.dropIfEmpty()
+    for (const p of ['p1', 'p2', 'p3', 'p4']) room.leave(p)
   })
 
   it('editing an item someone else created, after seeing it, is accepted', () => {

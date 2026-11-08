@@ -7,6 +7,7 @@ import { parseBoard, type BoardFile } from '../../core/schema'
 import { eq } from 'drizzle-orm'
 import { openDb, type Db } from '../../server/db'
 import { boards, linkVisits, revisions } from '../../server/db/schema'
+import { unlockEntry } from '../../server/utils/boardAccess'
 import { signIn } from '../../server/utils/accounts'
 import * as api from '../../server/utils/api'
 import { MAX_BOARD_BYTES } from '../../server/utils/api'
@@ -318,7 +319,7 @@ describe('access by key and role', () => {
     const b = adaBoard({ passwordHash: 'h:secret' })
     const bob = user('Bob')
     for (const [name, call] of Object.entries(routes({ key: b.linkId, who: bob }))) expect(call(), name).toEqual({ status: 401, body: { password: true } })
-    expect(api.getBoardResponse(db, { key: b.linkId, who: bob, unlocked: [b.linkId] })).toMatchObject({ status: 200, body: { id: b.linkId } })
+    expect(api.getBoardResponse(db, { key: b.linkId, who: bob, unlocked: [unlockEntry(b.linkId, 'h:secret')] })).toMatchObject({ status: 200, body: { id: b.linkId } })
     // The owner by board id never needs it.
     expect(api.getBoardResponse(db, { key: b.id, who: b.owner }).status).toBe(200)
   })

@@ -11,27 +11,29 @@ export function sendResult(event: H3Event, r: ApiResult): unknown {
 }
 
 /**
- * The request body as text, or null past MAX_BOARD_BYTES: a larger content-length is
- * refused unread, and the body is read chunk by chunk and dropped as soon as it passes.
+ * The request body as text, or null past `max` bytes: a larger content-length is refused
+ * unread, and the body is read chunk by chunk and dropped as soon as it passes.
  */
-async function bodyText(event: H3Event): Promise<string | null> {
-  if (Number(getRequestHeader(event, 'content-length') ?? 0) > MAX_BOARD_BYTES) return null
-  return await readCapped(event.node.req, MAX_BOARD_BYTES)
+async function bodyText(event: H3Event, max: number): Promise<string | null> {
+  if (Number(getRequestHeader(event, 'content-length') ?? 0) > max) return null
+  return await readCapped(event.node.req, max)
 }
 
 /**
  * Answer a write with a body: `refused` (from the access step) is sent without reading the
- * body; otherwise `write` gets the body, or the 413 is sent if it is too large.
+ * body; otherwise `write` gets the body, or the 413 is sent if it is over `max` bytes.
  */
-export async function sendWrite(event: H3Event, refused: ApiResult | null, write: (text: string) => ApiResult): Promise<unknown> {
+export async function sendWrite(
+  event: H3Event, refused: ApiResult | null, write: (text: string) => ApiResult | Promise<ApiResult>, max = MAX_BOARD_BYTES
+): Promise<unknown> {
   if (refused) return sendResult(event, refused)
-  const text = await bodyText(event)
+  const text = await bodyText(event, max)
   if (text === null) {
     // The rest of the body is never read; the connection closes after this answer.
     setResponseHeader(event, 'connection', 'close')
-    return sendResult(event, tooLarge())
+    return sendResult(event, tooLarge(max))
   }
-  return sendResult(event, write(text))
+  return sendResult(event, await write(text))
 }
 
 export const boardId = (event: H3Event): string => getRouterParam(event, 'id') ?? ''

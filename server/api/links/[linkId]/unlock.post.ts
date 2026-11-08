@@ -16,7 +16,7 @@ function parse(text: string): { password?: unknown } | null {
 
 /**
  * `POST /api/links/:linkId/unlock` `{ password }`: anyone may try, signed in or not. The
- * right password adds the link to the session's `unlocked` list, which creates a session
+ * right password adds the link's unlock entry (unlockEntry, ruling R5) to the session's `unlocked` list, which creates a session
  * for an anonymous visitor (the one place one gets a cookie).
  */
 export default defineEventHandler(async (event) => {
@@ -31,10 +31,10 @@ export default defineEventHandler(async (event) => {
   }
   const r = await unlockLink(useDb(), linkId, parse(text)?.password, remoteOf(req).address, verifyPassword)
   setResponseStatus(event, r.status)
-  if (r.status === 200 && r.unlock) {
+  if (r.status === 200 && r.entry !== null) {
     // Replaced, not merged: nuxt-auth-utils' merge would concatenate the list.
     const { id: _id, ...data } = await getUserSession(event)
-    await replaceUserSession(event, { ...data, unlocked: withUnlocked((data as { unlocked?: unknown }).unlocked, linkId) })
+    await replaceUserSession(event, { ...data, unlocked: withUnlocked((data as { unlocked?: unknown }).unlocked, r.entry) })
   }
   return r.body
 })

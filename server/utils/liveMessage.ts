@@ -50,8 +50,9 @@ const NOTHING = { undo: 'nothing to undo', redo: 'nothing to redo' } as const
 function command(peer: MessagePeer, room: Room, author: string, d: decoding.Decoder): Received {
   // An empty type 3 is y-websocket's awareness query (sent only over BroadcastChannel): ignore it.
   if (!decoding.hasContent(d)) return { ok: true }
-  // A viewer may not undo or redo: refused before the command is even read.
-  if (room.peerAccess(peer.id)?.role === 'view') return VIEW_ONLY
+  // A viewer (or a peer the room let go) may not undo or redo: refused before the command is even read.
+  const a = room.peerAccess(peer.id)
+  if (!a || a.role === 'view') return VIEW_ONLY
   let parsed: unknown
   try {
     parsed = JSON.parse(decoding.readVarString(d))
