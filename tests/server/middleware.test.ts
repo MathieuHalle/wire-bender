@@ -247,6 +247,46 @@ describe('access middleware, public mode', () => {
     expect(await middleware(publicEvent('POST', '/api/boards'))).toEqual({ error: 'Sign in first.' })
     expect(cleared).not.toHaveBeenCalled()
   })
+
+  it('a pendingDeletion session may restore its account; nobody else reaches the route anonymously (R1)', async () => {
+    const restore = (await import('../../server/api/me/restore.post')).default as unknown as Handler
+    const id = newUser()
+    useDb().update(users).set({ deletedAt: Date.now() }).where(eq(users.id, id)).run()
+    session = {}
+    expect(await middleware(publicEvent('POST', '/api/me/restore'))).toEqual({ error: 'Sign in first.' })
+    session = { user: { id }, pendingDeletion: true, unlocked: ['link-1'] }
+    const e = publicEvent('POST', '/api/me/restore')
+    expect(await middleware(e)).toBeUndefined()
+    expect(await restore(e)).toMatchObject({ user: { id, deletedAt: null } })
+    expect(useDb().select().from(users).where(eq(users.id, id)).get()!.deletedAt).toBeNull()
+    expect(session).toEqual({ user: { id }, unlocked: ['link-1'] })
+    // Restored: a normal session again.
+    const after = publicEvent('POST', '/api/boards')
+    expect(await middleware(after)).toBeUndefined()
+    expect(after.context.who).toMatchObject({ kind: 'user', userId: id })
+  })
+
+  it('DELETE /api/me marks the account deleted and signs out', async () => {
+    const del = (await import('../../server/api/me.delete')).default as unknown as Handler
+    const id = newUser()
+    session = { user: { id } }
+    const e = publicEvent('DELETE', '/api/me')
+    expect(await middleware(e)).toBeUndefined()
+    expect(await del(e)).toMatchObject({ ok: true })
+    expect(useDb().select().from(users).where(eq(users.id, id)).get()!.deletedAt).not.toBeNull()
+    expect(cleared).toHaveBeenCalled()
+    expect(session).toEqual({})
+  })
+})
+
+describe('DELETE /api/me in local mode', () => {
+  it('is 404: the local user has no deletion', async () => {
+    const del = (await import('../../server/api/me.delete')).default as unknown as Handler
+    const e = event('DELETE', '/api/me')
+    expect(await middleware(e)).toBeUndefined()
+    expect(await del(e)).toEqual({ error: 'not found' })
+    expect(e.status).toBe(404)
+  })
 })
 
 describe('board socket', () => {

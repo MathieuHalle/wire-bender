@@ -6,7 +6,7 @@ import { access, recordVisit, type Access } from '../../../utils/boardAccess'
 import { checkMode } from '../../../utils/mode'
 import { authorIdOf, unlockedOf, whoIs, type Who } from '../../../utils/who'
 import { MESSAGE_AWARENESS, MESSAGE_SYNC, handleMessage, message } from '../../../utils/liveMessage'
-import { CLOSE_ACCESS, openRoom, type Received, type Room } from '../../../utils/rooms'
+import { CLOSE_ACCESS, CLOSE_NO_BOARD, openRoom, type Received, type Room } from '../../../utils/rooms'
 import { wsBoardId } from '../../../utils/wsBoardId'
 
 /** The parts of a crossws peer this handler uses. */
@@ -25,7 +25,6 @@ interface WsPeer {
  */
 const CLOSE_REJECTED = 4400
 const CLOSE_UNTRUSTED = 4401
-const CLOSE_NO_BOARD = 4404
 const CLOSE_SERVER_ERROR = 1011
 
 /** The author a viewer's presence goes under; a viewer never writes a revision. */

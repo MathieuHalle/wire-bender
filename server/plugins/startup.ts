@@ -1,4 +1,5 @@
 import { closeDb, dataDir, useDb } from '../db'
+import { schedulePurge } from '../utils/lifecycle'
 import { checkMode, startupSecretProblem } from '../utils/mode'
 
 // The mode is checked before the database is opened: a wrong mode creates nothing.
@@ -19,6 +20,16 @@ export default defineNitroPlugin((nitroApp) => {
     // Shown in the terminal too: under `nuxt dev` the error otherwise only reaches requests.
     console.error(`[wirebender] ${(e as Error).message}`)
     throw e
+  }
+  // Trashed boards and deleted accounts past their 30 days: at start, then once a day (an
+  // unref'd timer: it never keeps the process alive). Never under the test runner.
+  if (!process.env.VITEST) {
+    const stop = schedulePurge(useDb(), {
+      log: (r) => {
+        if (r.boards > 0 || r.users > 0) console.log(`[wirebender] purged ${r.boards} board(s) and ${r.users} account(s)`)
+      }
+    })
+    nitroApp.hooks.hook('close', stop)
   }
   nitroApp.hooks.hook('close', closeDb)
 })

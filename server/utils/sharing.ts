@@ -13,7 +13,7 @@ import { randomUUID } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import type { Db } from '../db'
 import { BOARD_VISIBILITY, boards, type BoardVisibility } from '../db/schema'
-import { accessRefusal, invalid, notFound, parseBody, withAccess, type ApiResult, type BoardRequest } from './api'
+import { invalid, notFound, ownerRefusal, parseBody, withOwner, type ApiResult, type BoardRequest } from './api'
 import { getBoardRow } from './boards'
 import { kickLinkPeers } from './rooms'
 import type { Who } from './who'
@@ -47,13 +47,13 @@ function sharingOf(db: Db, boardId: string, who: Who, base: string): ApiResult {
 
 /** Before a sharing write's body is read: its refusal (not the owner, or no sharing here), or null. */
 export function sharingRefusal(db: Db, req: BoardRequest, base: string | null): ApiResult | null {
-  return base === null ? notFound() : accessRefusal(db, req, 'owner')
+  return base === null ? notFound() : ownerRefusal(db, req)
 }
 
 /** `GET /api/boards/:id/sharing`. */
 export function getSharing(db: Db, req: BoardRequest, base: string | null): ApiResult {
   if (base === null) return notFound()
-  return withAccess(db, req, 'owner', a => sharingOf(db, a.boardId, req.who, base))
+  return withOwner(db, req, a => sharingOf(db, a.boardId, req.who, base))
 }
 
 type Change = { visibility?: BoardVisibility, password?: string | null }
@@ -80,7 +80,7 @@ function changeOf(json: Record<string, unknown>): { ok: true, change: Change } |
 export async function patchSharing(db: Db, req: BoardRequest, text: string, deps: SharingDeps): Promise<ApiResult> {
   const { base } = deps
   if (base === null) return notFound()
-  return await withAccess(db, req, 'owner', async (a) => {
+  return await withOwner(db, req, async (a) => {
     const p = parseBody(text)
     if (!p.ok) return p.result
     const c = changeOf(p.json)
@@ -92,10 +92,12 @@ export async function patchSharing(db: Db, req: BoardRequest, text: string, deps
     if (premiumAsked && !canUsePremium(req.who)) return { status: 403, body: { error: PREMIUM_NEEDED } }
 
     const passwordHash = typeof password === 'string' ? await deps.hash(password) : password
-    const set: Partial<typeof boards.$inferInsert> = {}
-    if (visibility !== undefined && visibility !== before.visibility) set.visibility = visibility
     // Read again after the (slow) hash: compare with what is stored now.
-    if (passwordHash !== undefined && (passwordHash !== null || getBoardRow(db, a.boardId)?.passwordHash !== null)) set.passwordHash = passwordHash
+    const now = getBoardRow(db, a.boardId)
+    if (!now) return notFound()
+    const set: Partial<typeof boards.$inferInsert> = {}
+    if (visibility !== undefined && visibility !== now.visibility) set.visibility = visibility
+    if (passwordHash !== undefined && (passwordHash !== null || now.passwordHash !== null)) set.passwordHash = passwordHash
     if (Object.keys(set).length > 0) {
       db.update(boards).set(set).where(eq(boards.id, a.boardId)).run()
       kickLinkPeers(a.boardId)
@@ -107,7 +109,7 @@ export async function patchSharing(db: Db, req: BoardRequest, text: string, deps
 /** `POST /api/boards/:id/sharing/regenerate`: a new link id; the old link is 404 from now on. */
 export function regenerateLink(db: Db, req: BoardRequest, base: string | null): ApiResult {
   if (base === null) return notFound()
-  return withAccess(db, req, 'owner', (a) => {
+  return withOwner(db, req, (a) => {
     const linkId = randomUUID()
     db.update(boards).set({ linkId }).where(eq(boards.id, a.boardId)).run()
     kickLinkPeers(a.boardId)

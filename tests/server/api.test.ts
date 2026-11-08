@@ -318,7 +318,10 @@ describe('access by key and role', () => {
   it('password link needs unlock, then opens', () => {
     const b = adaBoard({ passwordHash: 'h:secret' })
     const bob = user('Bob')
-    for (const [name, call] of Object.entries(routes({ key: b.linkId, who: bob }))) expect(call(), name).toEqual({ status: 401, body: { password: true } })
+    for (const [name, call] of Object.entries(routes({ key: b.linkId, who: bob }))) {
+      // Rename is owner-only: every refusal there is the plain 404.
+      expect(call(), name).toEqual(name === 'patch' ? { status: 404, body: { error: 'not found' } } : { status: 401, body: { password: true } })
+    }
     expect(api.getBoardResponse(db, { key: b.linkId, who: bob, unlocked: [unlockEntry(b.linkId, 'h:secret')] })).toMatchObject({ status: 200, body: { id: b.linkId } })
     // The owner by board id never needs it.
     expect(api.getBoardResponse(db, { key: b.id, who: b.owner }).status).toBe(200)

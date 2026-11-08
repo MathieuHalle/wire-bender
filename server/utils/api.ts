@@ -6,7 +6,7 @@ import { tickKey } from '../../export/benchHtml'
 import type { Db } from '../db'
 import { benchResponse, fileStem } from './bench'
 import { access, allows, ownerName, recordVisit, type Access, type Role } from './boardAccess'
-import { createBoard, getBoard, getRevision, listBoards, listRevisions } from './boards'
+import { createBoard, getBoard, getBoardRow, getRevision, listBoards, listRevisions } from './boards'
 import { openRoom, type Room } from './rooms'
 import { authorIdOf, type Who } from './who'
 
@@ -107,6 +107,18 @@ function refusalOf(a: Access, need: Role): ApiResult | null {
   return a.signInToEdit && need === 'edit' ? { status: 403, body: { error: 'Sign in to edit.' } } : notFound()
 }
 
+/**
+ * An owner-only route's access step: every refusal (unknown, someone else's, a link, a link
+ * whose password is or isn't entered) is the plain 404 of an unknown board.
+ */
+export function withOwner<R>(db: Db, req: BoardRequest, fn: (a: Granted) => R): R | ApiResult {
+  const a = access(db, req.who, req.key, req.unlocked ?? [])
+  return a.ok && a.role === 'owner' ? fn(a) : notFound()
+}
+
+/** The owner-only access step alone, before a body is read: the plain 404, or null. */
+export const ownerRefusal = (db: Db, req: BoardRequest): ApiResult | null => withOwner(db, req, () => null)
+
 /** The access step alone, for a route that must refuse before it reads a body. */
 export const accessRefusal = (db: Db, req: BoardRequest, need: Role): ApiResult | null =>
   refusalOf(access(db, req.who, req.key, req.unlocked ?? []), need)
@@ -114,7 +126,7 @@ export const accessRefusal = (db: Db, req: BoardRequest, need: Role): ApiResult 
 /** Before a PUT's body is read: its refusal, or null. `putBoard` checks again. */
 export const putRefusal = (db: Db, req: BoardRequest): ApiResult | null => accessRefusal(db, req, 'edit')
 /** Before a PATCH's body is read: its refusal, or null. `renameBoard` checks again. */
-export const renameRefusal = (db: Db, req: BoardRequest): ApiResult | null => accessRefusal(db, req, 'owner')
+export const renameRefusal = ownerRefusal
 
 /** Who a board change is by. Only the owner or a signed-in editor gets this far. */
 const authorOf = (who: Who): string => who.kind === 'anonymous' ? AUTHOR : who.author
@@ -130,9 +142,24 @@ export function getBoardResponse(db: Db, req: BoardRequest): ApiResult {
       id: a.viaLink ? req.key : a.boardId,
       role: a.role,
       signInToEdit: a.signInToEdit,
-      owner: { name: ownerName(db, a.boardId) }
+      owner: { name: ownerName(db, a.boardId) },
+      forkedFrom: a.role === 'owner' ? forkedFrom(db, req, a.boardId) : null
     })
   })
+}
+
+/**
+ * Where the owner's board was forked from, as they may reach it now: their own board by its
+ * id, someone else's by its current share link; null if it is gone, trashed, or no longer
+ * viewable by them (private, its owner deleted, a password they haven't entered).
+ */
+function forkedFrom(db: Db, req: BoardRequest, boardId: string): { key: string, name: string } | null {
+  const sourceId = getBoardRow(db, boardId)?.forkedFrom
+  const source = sourceId ? getBoardRow(db, sourceId) : undefined
+  if (!source || source.trashedAt !== null) return null
+  const own = access(db, req.who, source.id, [])
+  if (own.ok) return { key: source.id, name: source.name }
+  return access(db, req.who, source.linkId, req.unlocked ?? []).ok ? { key: source.linkId, name: source.name } : null
 }
 
 function foundOr404(body: unknown): ApiResult {
@@ -168,7 +195,7 @@ export function putBoard(db: Db, req: BoardRequest, text: string): ApiResult {
 
 /** `PATCH /api/boards/:id`: `{ name }`, a board change like any other; the owner's only. */
 export function renameBoard(db: Db, req: BoardRequest, text: string): ApiResult {
-  return withAccess(db, req, 'owner', (a) => {
+  return withOwner(db, req, (a) => {
     const p = parseBody(text)
     if (!p.ok) return p.result
     const name = typeof p.json.name === 'string' ? p.json.name.trim() : ''

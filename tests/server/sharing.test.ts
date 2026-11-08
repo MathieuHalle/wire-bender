@@ -138,6 +138,19 @@ describe('PATCH sharing', () => {
     expect(getBoardRow(db, b.id)).toMatchObject({ visibility: 'view', passwordHash: `h:${'x'.repeat(100)}` })
   })
 
+  it('compares with the board as stored after the (slow) password hash', async () => {
+    const pam = user('Pam', true)
+    const b = board(pam.userId)
+    // While the hash runs, another request makes the board private and sets a password.
+    const slowHash = async (plain: string) => {
+      db.update(boards).set({ visibility: 'private', passwordHash: 'h:other' }).where(eq(boards.id, b.id)).run()
+      return `h:${plain}`
+    }
+    const r = await patchSharing(db, { key: b.id, who: pam }, JSON.stringify({ visibility: 'view', password: 'mine' }), { base: BASE, hash: slowHash })
+    expect(r).toMatchObject({ status: 200, body: { visibility: 'view', hasPassword: true } })
+    expect(getBoardRow(db, b.id)).toMatchObject({ visibility: 'view', passwordHash: 'h:mine' })
+  })
+
   it('lowering edit to view closes link peers', async () => {
     const ada = user('Ada')
     const b = board(ada.userId, { visibility: 'edit' })

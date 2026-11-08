@@ -23,14 +23,17 @@ function revisionBoard(db: Db, id: string, n: number): BoardFile | null {
   return row ? withRevision(JSON.parse(row.board) as BoardFile, n) : null
 }
 
+/** A fork's revision 1: its summary, and the board it was forked from. */
+export interface ForkOf { summary: string, forkedFrom: string }
+
 /** Insert a new board with revision 1. */
-export function createBoard(db: Db, board: BoardFile, how: 'create' | 'import', author: string, ownerId = 'local', authorId?: string | null): { id: string, head: 1 } {
+export function createBoard(db: Db, board: BoardFile, how: 'create' | 'import' | 'fork', author: string, ownerId = 'local', authorId?: string | null, fork?: ForkOf): { id: string, head: 1 } {
   const id = randomUUID()
   const now = Date.now()
   const stored = JSON.stringify(withRevision(board, 1))
   db.transaction((tx) => {
-    tx.insert(boards).values({ id, name: board.name, createdAt: now, updatedAt: now, current: stored, head: 1, ownerId, linkId: randomUUID() }).run()
-    tx.insert(revisions).values({ boardId: id, n: 1, createdAt: now, author, how, target: null, summary: summarize(null, board), board: stored, authorId: authorId ?? null }).run()
+    tx.insert(boards).values({ id, name: board.name, createdAt: now, updatedAt: now, current: stored, head: 1, ownerId, linkId: randomUUID(), forkedFrom: fork?.forkedFrom ?? null }).run()
+    tx.insert(revisions).values({ boardId: id, n: 1, createdAt: now, author, how, target: null, summary: fork?.summary ?? summarize(null, board), board: stored, authorId: authorId ?? null }).run()
   })
   return { id, head: 1 }
 }

@@ -214,8 +214,8 @@ function anonymousRead(pathname: string): boolean {
 /**
  * Public mode (spec §3): anyone may load pages, `GET /api/me`, sign-in (`/auth/*`) and the
  * board read routes; everything else needs a signed-in user. A session of a deleted
- * account waiting for its restore (ruling R1) is sent to /account for every page.
- * Signing out is always allowed.
+ * account waiting for its restore (ruling R1) is sent to /account for every page, and may
+ * send `POST /api/me/restore`. Signing out is always allowed.
  */
 export function publicGate(method: string, path: string, signedIn: boolean, pendingDeletion = false): PublicGate {
   const pathname = path.split('?')[0]!
@@ -225,6 +225,8 @@ export function publicGate(method: string, path: string, signedIn: boolean, pend
   if (PAIRING.test(pathname)) return 'not-found'
   if (method === 'DELETE' && pathname === '/api/_auth/session') return 'pass'
   if (signedIn) return 'pass'
+  // R1: the one write a deleted account's session may send (its route reads the session itself).
+  if (pendingDeletion && method === 'POST' && pathname === '/api/me/restore') return 'pass'
   // The board's own route decides these per board: 404, or 403 "Sign in to edit." on an edit link.
   if (anonymousWrite(method, pathname)) return 'pass'
   const get = method === 'GET' || method === 'HEAD'

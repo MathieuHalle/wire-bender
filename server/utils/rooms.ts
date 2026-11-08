@@ -131,6 +131,32 @@ export function kickLinkPeers(boardId: string): void {
   rooms.get(boardId)?.kickLinkPeers()
 }
 
+/** The board went to or came back from the trash: every peer but the owner (by board id) is closed with CLOSE_ACCESS. */
+export function kickNonOwnerPeers(boardId: string): void {
+  rooms.get(boardId)?.kickPeers(access => access.role !== 'owner')
+}
+
+/**
+ * An account was deleted: in every open room, its own peers are closed with CLOSE_ACCESS,
+ * and in its boards' rooms every peer is (the owner is signed out, the links are 404).
+ */
+export function kickAccount(userId: string, boardIds: ReadonlySet<string>): void {
+  for (const room of [...rooms.values()]) {
+    room.kickPeers((_, authorId) => boardIds.has(room.id) || authorId === userId)
+  }
+}
+
+/** Close code for a board that no longer exists. */
+export const CLOSE_NO_BOARD = 4404
+
+/**
+ * The board is deleted for good (or purged): its room closes every peer with CLOSE_NO_BOARD
+ * and is dropped without saving or committing anything. Call before the rows are deleted.
+ */
+export function closeRoom(boardId: string): void {
+  rooms.get(boardId)?.discard()
+}
+
 /** One open board: its Yjs doc, the peers editing it, and each author's open revision group. */
 export class Room {
   readonly doc = new Y.Doc()
@@ -271,11 +297,30 @@ export class Room {
 
   /** See the module-level kickLinkPeers. */
   kickLinkPeers(): void {
+    this.kickPeers(access => access.viaLink)
+  }
+
+  /** Every peer `which` picks leaves at once and is closed with CLOSE_ACCESS. */
+  kickPeers(which: (access: PeerAccess, authorId: string | null) => boolean): void {
     for (const [peerId, peer] of [...this.peers]) {
-      if (!peer.access.viaLink) continue
+      if (!which(peer.access, peer.authorId)) continue
       this.leave(peerId)
       safely(() => peer.link.close?.(CLOSE_ACCESS, 'access changed'))
     }
+  }
+
+  /** See the module-level closeRoom. */
+  discard(): void {
+    if (this.closed) return
+    const peers = [...this.peers.values()]
+    this.peers.clear()
+    for (const g of this.groups.values()) clearTimeout(g.timer)
+    this.groups.clear()
+    this.closed = true
+    if (rooms.get(this.id) === this) rooms.delete(this.id)
+    for (const peer of peers) safely(() => peer.link.close?.(CLOSE_NO_BOARD, 'no such board'))
+    this.awareness.destroy()
+    this.doc.destroy()
   }
 
   /** True when applying `update` would change the doc. */
