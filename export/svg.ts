@@ -9,7 +9,7 @@ import { wireCards, type WireCard } from '../core/bench/cards'
 import type { LegFoldRow } from '../core/bench/sheet'
 import type { BoardFile, Side } from '../core/schema'
 import { safeColor } from '../core/color'
-import { ghostWires, sideMap, type Flip } from '../core/sideView'
+import { ghostWires, sideMap, type Flip, type SideMap } from '../core/sideView'
 
 export { safeColor }
 
@@ -430,8 +430,9 @@ class Placer {
 /** A straight piece of a wire in drawing mm; a long segment may be cut into several pieces. */
 interface Piece { a: Pt, b: Pt, ha: Hole, hb: Hole, bare: boolean }
 
-function sideLabel(side: Side): string {
-  return side === 'bottom' ? 'seen from the solder side (board turned over)' : 'seen from the parts side'
+function sideLabel(side: Side, flip: Flip = 'lr'): string {
+  if (side !== 'bottom') return 'seen from the parts side'
+  return `seen from the solder side (board turned over${flip === 'tb' ? ', mirrored top↔bottom' : ''})`
 }
 
 const unit = (a: Pt, b: Pt): Pt => {
@@ -447,6 +448,8 @@ interface RowCtx {
   lastRow: boolean
   rowIndex: number
   rowCount: number
+  /** How the bottom is turned over; only the bottom side follows it. */
+  flip: Flip
   /** Dashed 1:1 lead stubs, mm: `start` on the first row, `end` (lead + spare + rounding) on the last. */
   leads: { start: number, end: number }
 }
@@ -592,9 +595,9 @@ function rowScene(pieces: Piece[], ctx: RowCtx, bendOf: (i: number) => RowBend |
   // header
   const b = s.bounds()
   const rowTag = ctx.rowCount > 1 ? ` (row ${ctx.rowIndex + 1} of ${ctx.rowCount})` : ''
-  // bottom drawings are mirrored: the header hangs from the right, where the board's column 1 is
-  const right = card.side === 'bottom'
-  s.text({ x: right ? b.x1 : b.x0, y: b.y0 - 1.6 }, `${card.id}${rowTag} — ${sideLabel(card.side)}`, 2.6, right ? 'end' : 'start', `font-weight="700"`)
+  // bottom drawings turned left-right are mirrored: the header hangs from the right, where the board's column 1 is
+  const right = card.side === 'bottom' && ctx.flip === 'lr'
+  s.text({ x: right ? b.x1 : b.x0, y: b.y0 - 1.6 }, `${card.id}${rowTag} — ${sideLabel(card.side, ctx.flip)}`, 2.6, right ? 'end' : 'start', `font-weight="700"`)
   return s
 }
 
@@ -605,11 +608,15 @@ type RowBend = WireCard['bends'][number] & { incoming: Pt }
  * A long wire is split into rows at a bend when that fits, else at a hole along a long run;
  * each split is marked "continues ▸" / "◂ continued". Flying wires have no drawing ([]).
  */
-export function bendSvgs(card: WireCard, maxWidthMm = 180): string[] {
+export function bendSvgs(card: WireCard, maxWidthMm = 180, map?: SideMap): string[] {
   if (card.kind === 'flying' || card.segments.length === 0) return []
   const color = safeColor(card.color, INSULATED_FALLBACK)
+  // Only `tb` goes through the side map; `lr` (also with no map) keeps the left-right mirror, which
+  // is the same geometry up to a shift the drawing's fit removes. The top is never mirrored.
+  const flip: Flip = card.side === 'bottom' && map?.mirror === 'tb' ? 'tb' : 'lr'
   const mirror = card.side === 'bottom' ? -1 : 1
   const draw = (h: Hole): Pt => {
+    if (flip === 'tb') return map!.pt(h)
     const m = holeMm(h, card.pitchMm)
     return { x: mirror * m.x, y: m.y }
   }
@@ -634,7 +641,7 @@ export function bendSvgs(card: WireCard, maxWidthMm = 180): string[] {
   const lastSeg = segs.length - 1
   /** `final`: the row ends at the wire's end, so it carries the end lead. */
   const fits = (row: P[], rowIndex: number, final: boolean) => {
-    const sc = rowScene(row, { card, color, firstRow: rowIndex === 0, lastRow: final, rowIndex, rowCount: 2, leads }, i => row[i]!.bend)
+    const sc = rowScene(row, { card, color, flip, firstRow: rowIndex === 0, lastRow: final, rowIndex, rowCount: 2, leads }, i => row[i]!.bend)
     const b = sc.bounds()
     return b.x1 - b.x0 + 2 <= maxWidthMm && b.y1 - b.y0 + 2 <= MAX_ROW_HEIGHT_MM
   }
@@ -678,10 +685,10 @@ export function bendSvgs(card: WireCard, maxWidthMm = 180): string[] {
 
   return rows.map((row, r) => {
     const sc = rowScene(row, {
-      card, color, firstRow: r === 0, lastRow: r === rows.length - 1, rowIndex: r, rowCount: rows.length, leads
+      card, color, flip, firstRow: r === 0, lastRow: r === rows.length - 1, rowIndex: r, rowCount: rows.length, leads
     }, i => row[i]!.bend)
     const tag = rows.length > 1 ? `, row ${r + 1} of ${rows.length}` : ''
-    return sc.fit(1, `${card.id} bend drawing at 1:1${tag}, ${sideLabel(card.side)}`)
+    return sc.fit(1, `${card.id} bend drawing at 1:1${tag}, ${sideLabel(card.side, flip)}`)
   })
 }
 
@@ -758,7 +765,7 @@ const FOLD_SCALE = 3
  * A 3 x 2 pad sketch (3x scale), solder side, mirrored like the bottom view: the lead
  * leaves its hole and lies flat on the target pad, soldered at both.
  */
-export function legFoldSvg(row: LegFoldRow, pitchMm: number): string {
+export function legFoldSvg(row: LegFoldRow, pitchMm: number, map?: SideMap): string {
   const s = new Scene()
   const from = parseHole(row.from)
   const to = parseHole(row.to)
@@ -777,7 +784,14 @@ export function legFoldSvg(row: LegFoldRow, pitchMm: number): string {
   const [c0, c1] = horizontal ? along(from.col, to.col) : across(from.col)
   const [r0, r1] = horizontal ? across(from.row) : along(from.row, to.row)
   const P = pitchMm * FOLD_SCALE
-  const pt = (h: Hole): Pt => ({ x: -(h.col - c0) * P, y: (h.row - r0) * P }) // mirrored: solder side
+  // mirrored: solder side. Without a map, left-right; with one, as the board's bottom view is drawn.
+  const flip: Flip = map?.mirror === 'tb' ? 'tb' : 'lr'
+  const pt = (h: Hole): Pt => {
+    if (flip === 'lr' || !map) return { x: -(h.col - c0) * P, y: (h.row - r0) * P }
+    const o = map.pt({ col: c0, row: r0 })
+    const q = map.pt(h)
+    return { x: (q.x - o.x) * FOLD_SCALE, y: (q.y - o.y) * FOLD_SCALE }
+  }
 
   const names: { c: Pt, name: string }[] = []
   for (let row = r0; row <= r1; row++)
@@ -803,6 +817,6 @@ export function legFoldSvg(row: LegFoldRow, pitchMm: number): string {
   }
   const bx = s.bounds()
   s.text({ x: bx.x0, y: bx.y0 - 4.4 }, `${row.lead}: fold ${row.from} → ${row.to}`, 2.6, 'start', 'font-weight="700"')
-  s.text({ x: bx.x0, y: bx.y0 - 1.2 }, 'solder side (board turned over), sketch 3×', MIN_FONT, 'start', `fill="${MUTED}"`)
+  s.text({ x: bx.x0, y: bx.y0 - 1.2 }, `solder side (board turned over${flip === 'tb' ? ', mirrored top↔bottom' : ''}), sketch 3×`, MIN_FONT, 'start', `fill="${MUTED}"`)
   return s.fit(1, `leg-fold ${row.lead} from ${row.from} to ${row.to}, solder side sketch`)
 }

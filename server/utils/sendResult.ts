@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
-import { MAX_BOARD_BYTES, tooLarge, type ApiResult, type BoardRequest } from './api'
+import { tooLarge, type ApiResult, type BoardRequest } from './api'
+import { MAX_BOARD_BYTES } from './boards'
 import { readCapped } from './readCapped'
 import { unlockedOf, type Who } from './who'
 

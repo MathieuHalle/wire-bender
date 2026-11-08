@@ -1,16 +1,17 @@
 // WireBender CLI.
 //   wirebender check <file> [--all] [--json]
-//   wirebender export <file> [-o out.html]
+//   wirebender export <file> [-o out.html] [--flip lr|tb]
 // Exit codes: 0 no errors (export: written), 1 errors found, 2 file invalid or unreadable.
 import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join, resolve } from 'node:path'
 import { parseBoard, type BoardFile } from '~core/schema'
 import { runCheck } from '~core/check'
+import { parseFlip, type Flip } from '~core/sideView'
 import { benchHtml, tickKey } from '../export/benchHtml'
 import { ADVISORY, formatCheck } from './format'
 
-const USAGE = 'usage: wirebender check <file> [--all] [--json]\n       wirebender export <file> [-o out.html]'
+const USAGE = 'usage: wirebender check <file> [--all] [--json]\n       wirebender export <file> [-o out.html] [--flip lr|tb]'
 
 /** Read and validate a board file; on failure print why (and the advisory) and return null. */
 function loadBoard(file: string): { board: BoardFile, text: string } | null {
@@ -57,6 +58,7 @@ function check(args: string[]): number {
 function exportCmd(args: string[]): number {
   const files: string[] = []
   let out: string | undefined
+  let flip: Flip = 'lr'
   for (let i = 0; i < args.length; i++) {
     const a = args[i]!
     if (a === '-o' || a === '--out') {
@@ -65,6 +67,18 @@ function exportCmd(args: string[]): number {
         console.error(`${a} needs a file name\n${USAGE}`)
         return 2
       }
+    } else if (a === '--flip') {
+      const v = args[++i]
+      if (v === undefined) {
+        console.error(`--flip needs lr or tb\n${USAGE}`)
+        return 2
+      }
+      const f = parseFlip(v)
+      if (!f) {
+        console.error(`--flip must be lr or tb, not "${v}"\n${USAGE}`)
+        return 2
+      }
+      flip = f
     } else if (a.startsWith('-')) {
       console.error(`unknown option: ${a}\n${USAGE}`)
       return 2
@@ -84,7 +98,7 @@ function exportCmd(args: string[]): number {
   }
   const hash = tickKey(createHash('sha256').update(loaded.text).digest('hex'))
   try {
-    writeFileSync(target, benchHtml(loaded.board, { hash }))
+    writeFileSync(target, benchHtml(loaded.board, { hash, flip }))
   } catch (e) {
     console.error(`${target}: ${e instanceof Error ? e.message : String(e)}`)
     return 2

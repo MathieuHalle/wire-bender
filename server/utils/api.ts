@@ -13,7 +13,6 @@ import { openRoom, type Room } from './rooms'
 import { authorIdOf, type Who } from './who'
 
 /** The largest request body, in bytes, that the API accepts (also the live board's cap). */
-export { MAX_BOARD_BYTES }
 
 /** The author of a create or import when a caller passes none (tests); routes pass the request's. */
 const AUTHOR = 'Local'
