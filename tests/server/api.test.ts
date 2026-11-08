@@ -318,6 +318,20 @@ describe('access by key and role', () => {
     expect(api.renameBoard(db, { key: b.id, who: b.owner }, JSON.stringify({ name: 'X' })).status).toBe(200)
   })
 
+  it('edit-link PUT can\'t rename: the board keeps the owner\'s name, the rest is saved', () => {
+    const b = adaBoard({ visibility: 'edit' })
+    const bob = user('Bob')
+    const moved = { ...fixture, name: 'Renamed by Bob', trails: fixture.trails.slice(1) }
+    expect(api.putBoard(db, { key: b.linkId, who: bob }, JSON.stringify({ board: moved }))).toEqual({ status: 200, body: { revision: 3 } })
+    expect(getBoardRow(db, b.id)!.name).toBe('B')
+    const stored = getBoard(db, b.id)!.board
+    expect(stored.name).toBe('B')
+    expect(stored.trails).toHaveLength(fixture.trails.length - 1)
+    // The owner still renames by PUT.
+    expect(api.putBoard(db, { key: b.id, who: b.owner }, JSON.stringify({ board: { ...fixture, name: 'Mine' } })).status).toBe(200)
+    expect(getBoardRow(db, b.id)!.name).toBe('Mine')
+  })
+
   it('password link needs unlock, then opens', () => {
     const b = adaBoard({ passwordHash: 'h:secret' })
     const bob = user('Bob')

@@ -37,6 +37,8 @@ export interface JoinOptions extends PeerAccess { authorId?: string | null, pres
 export const CLOSE_ACCESS = 4403
 export const VIEW_ONLY: Received = { ok: false, reason: 'view only', code: CLOSE_ACCESS }
 const NOT_JOINED: Received = { ok: false, reason: 'not in this room', code: CLOSE_ACCESS }
+/** An edit-link peer's update that changes the board's name (spec §5: only the owner renames). */
+export const OWNER_RENAMES = 'Only the owner can rename the board.'
 
 /** `authorId`: the account the revision is by ('local' for the local user), null for none. */
 export interface WriteMeta { author: string, how: string, target?: number, authorId?: string | null }
@@ -234,13 +236,13 @@ export class Room {
   /**
    * Validate a client's update on a copy of the doc; apply, broadcast and save it only if the
    * board stays valid. A view peer's update is refused unless it changes nothing (its sync
-   * step 2 on connecting).
+   * step 2 on connecting); anyone but the owner's is refused if it renames the board.
    */
   receive(peerId: string, author: string, update: Uint8Array): Received {
     const peer = this.peers.get(peerId)
     if (!peer) return NOT_JOINED
     if (peer.access.role === 'view') return this.changes(update) ? VIEW_ONLY : { ok: true }
-    const checked = this.check(update)
+    const checked = this.check(update, peer.access.role)
     if (!checked.ok) return checked
     let changed = false
     const mark = () => {
@@ -362,7 +364,7 @@ export class Room {
     }
   }
 
-  private check(update: Uint8Array): { ok: true, board: BoardFile, keys: Set<string> } | { ok: false, reason: string } {
+  private check(update: Uint8Array, role: Role): { ok: true, board: BoardFile, keys: Set<string> } | { ok: false, reason: string } {
     const copy = new Y.Doc()
     try {
       Y.applyUpdate(copy, Y.encodeStateAsUpdate(this.doc))
@@ -389,6 +391,7 @@ export class Room {
       if (collision !== null) return { ok: false, reason: `${collision} was just created by someone else; draw it again` }
       const parsed = docToBoard(copy, this.head)
       if (!parsed.ok) return { ok: false, reason: parsed.errors.join('; ') }
+      if (role !== 'owner' && parsed.board.name !== this.board.name) return { ok: false, reason: OWNER_RENAMES }
       return { ok: true, board: parsed.board, keys }
     } catch (e) {
       return { ok: false, reason: `malformed update: ${(e as Error).message}` }

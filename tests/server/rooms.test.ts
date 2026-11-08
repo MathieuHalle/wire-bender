@@ -610,6 +610,28 @@ describe('rooms', () => {
     room.leave(editor.id)
   })
 
+  it('edit-link live update can\'t rename; the same peer\'s other edits still work, and the owner renames', () => {
+    const room = openRoom(db, id)!
+    room.join('e1', 'Bob', { update: () => {}, awareness: () => {} }, { role: 'edit', viaLink: true })
+    room.join('o1', 'Ada', { update: () => {}, awareness: () => {} }, { role: 'owner', viaLink: false })
+    const name = fixture().name
+    const refused = room.receive('e1', 'Bob', captured(detached(room), b => ({ ...b, name: 'Renamed by Bob' })))
+    expect(refused).toEqual({ ok: false, reason: 'Only the owner can rename the board.' })
+    expect(boardOf(room.doc).name).toBe(name)
+    // A rename hidden in a bigger edit is refused whole.
+    expect(room.receive('e1', 'Bob', captured(detached(room), b => ({ ...moveT7('L3')(b), name: 'Sneaky' }))).ok).toBe(false)
+    expect(t7(boardOf(room.doc))).toEqual(['K3', 'M3'])
+    // The editor's next, ordinary edit is accepted.
+    expect(room.receive('e1', 'Bob', captured(detached(room), moveT7('L3')))).toEqual({ ok: true })
+    expect(t7(boardOf(room.doc))).toEqual(['K3', 'L3'])
+    // The owner renames live; the editor's edits after that keep the new name.
+    expect(room.receive('o1', 'Ada', captured(detached(room), b => ({ ...b, name: 'By Ada' })))).toEqual({ ok: true })
+    expect(room.receive('e1', 'Bob', captured(detached(room), moveT7('M3')))).toEqual({ ok: true })
+    expect(getBoard(db, id)!.board.name).toBe('By Ada')
+    room.leave('e1')
+    room.leave('o1')
+  })
+
   it('a peer joined without access is the owner (step 1 callers)', () => {
     const room = openRoom(db, id)!
     room.join('o', 'Local', { update: () => {}, awareness: () => {} })

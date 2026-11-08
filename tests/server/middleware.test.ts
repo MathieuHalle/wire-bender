@@ -309,8 +309,8 @@ describe('board socket', () => {
   const signedIn = (url: string) => upgradeRequest(url, '203.0.113.9', { ...PUBLIC_HEADERS, cookie: SESSION_COOKIE })
   const anonymous = (url: string) => upgradeRequest(url, '203.0.113.9', PUBLIC_HEADERS)
 
-  /** A sync update message that moves the board's first part. */
-  function editMessage(): Uint8Array {
+  /** A sync update message that renames the board, or makes `change`. */
+  function editMessage(change: (b: BoardFile) => BoardFile = b => ({ ...b, name: 'edited by a viewer' })): Uint8Array {
     const room = openRoom(useDb(), getBoardRow(useDb(), joinedId)!.id)!
     const doc = new Y.Doc()
     Y.applyUpdate(doc, Y.encodeStateAsUpdate(room.doc))
@@ -320,7 +320,7 @@ describe('board socket', () => {
     })
     const before = docToBoard(doc, 0)
     if (!before.ok) throw new Error(before.errors.join())
-    writeBoard(doc, before.board, { ...before.board, name: 'edited by a viewer' })
+    writeBoard(doc, before.board, change(structuredClone(before.board)))
     const e = encoding.createEncoder()
     encoding.writeVarUint(e, 0)
     syncProtocol.writeUpdate(e, update!)
@@ -398,9 +398,13 @@ describe('board socket', () => {
     const q = peer(signed, 'p2')
     ws.open(q.peer)
     expect(openRoom(useDb(), b.id)!.peerAccess('p2')).toEqual({ role: 'edit', viaLink: true })
-    ws.message(q.peer, { uint8Array: () => editMessage() })
+    ws.message(q.peer, { uint8Array: () => editMessage(x => ({ ...x, trails: x.trails.slice(1) })) })
     expect(q.closed).toEqual([])
     expect(useDb().select().from(linkVisits).all()).toMatchObject([{ userId: bob, boardId: b.id, linkId: b.linkId }])
+    // But not rename it: the socket closes like any refused update.
+    ws.message(q.peer, { uint8Array: () => editMessage() })
+    expect(q.closed).toEqual([{ code: 4400, reason: 'Only the owner can rename the board.' }])
+    expect(getBoardRow(useDb(), b.id)!.name).toBe(fixture.name)
     ws.close(q.peer)
   })
 

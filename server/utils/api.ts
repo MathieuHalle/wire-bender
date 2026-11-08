@@ -175,7 +175,7 @@ function withRoom(db: Db, id: string, fn: (room: Room) => ApiResult): ApiResult 
   return room ? fn(room) : notFound()
 }
 
-/** `PUT /api/boards/:key`: `{ board, baseRevision? }`. */
+/** `PUT /api/boards/:key`: `{ board, baseRevision? }`. A non-owner's board keeps its current name. */
 export function putBoard(db: Db, req: BoardRequest, text: string): ApiResult {
   return withAccess(db, req, 'edit', (a) => {
     const p = parseBody(text)
@@ -191,7 +191,9 @@ export function putBoard(db: Db, req: BoardRequest, text: string): ApiResult {
         room.dropIfEmpty()
         return { status: 409, body: { current: head } }
       }
-      return ok({ revision: room.serverWrite(parsed.board, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who) }) })
+      // Only the owner renames (spec §5): anyone else's board keeps the name it has now.
+      const next = a.role === 'owner' ? parsed.board : { ...parsed.board, name: getBoard(db, a.boardId)!.board.name }
+      return ok({ revision: room.serverWrite(next, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who) }) })
     })
   })
 }
