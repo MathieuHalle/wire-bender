@@ -608,3 +608,79 @@ describe('sharing routes', () => {
     expect((await ws.upgrade(upgradeRequest(`/_ws/board/${linkId}`, '203.0.113.9', { host: 'wire.example.org', origin: 'https://wire.example.org', cookie: SESSION_COOKIE })))?.status).toBe(404)
   })
 })
+
+describe('session cookie Secure only over https', () => {
+  /** The parts of a Node response the cookie rule touches. */
+  class FakeRes {
+    readonly headers = new Map<string, number | string | string[]>()
+    setHeader(name: string, value: number | string | string[]) {
+      this.headers.set(name.toLowerCase(), value)
+      return this
+    }
+
+    getHeader(name: string) {
+      return this.headers.get(name.toLowerCase())
+    }
+
+    appendHeader(name: string, value: string | string[]) {
+      const had = this.headers.get(name.toLowerCase())
+      const list = had === undefined ? [] : Array.isArray(had) ? had : [String(had)]
+      this.headers.set(name.toLowerCase(), [...list, ...(Array.isArray(value) ? value : [value])])
+      return this
+    }
+
+    cookies(): string[] {
+      const v = this.headers.get('set-cookie')
+      return v === undefined ? [] : Array.isArray(v) ? v : [String(v)]
+    }
+  }
+
+  const SEALED = 'nuxt-auth-session=Fe26.2**new; Max-Age=2592000; Path=/; HttpOnly; Secure; SameSite=Lax'
+  const STATE = 'nuxt-auth-state=abc; Max-Age=600; Path=/; HttpOnly; Secure; SameSite=Lax'
+  const DEVICE = 'wb_device=x; Path=/; HttpOnly; SameSite=Lax'
+
+  /** The middleware runs on `e`, then a route writes the session and an OAuth cookie, as nuxt-auth-utils does. */
+  async function cookiesAfter(e: FakeEvent) {
+    const res = new FakeRes()
+    ;(e.node as { res?: FakeRes }).res = res
+    await middleware(e)
+    res.setHeader('Set-Cookie', [SEALED])
+    res.appendHeader('set-cookie', STATE)
+    res.appendHeader('set-cookie', DEVICE)
+    return res.cookies()
+  }
+  const secure = (cookie: string) => /;\s*secure\s*(;|$)/i.test(cookie)
+
+  it('public mode with WIREBENDER_URL on https: the session and OAuth cookies are Secure', async () => {
+    publicMode()
+    const [session, state, device] = await cookiesAfter(publicEvent('GET', '/auth/github'))
+    expect(secure(session!)).toBe(true)
+    expect(secure(state!)).toBe(true)
+    expect(device).toBe(DEVICE)
+  })
+
+  it('public mode with WIREBENDER_URL on http: no Secure', async () => {
+    publicMode()
+    vi.stubEnv('WIREBENDER_URL', 'http://wire.example.org')
+    const [session, state, device] = await cookiesAfter(publicEvent('DELETE', '/api/_auth/session'))
+    expect(session).toBe('nuxt-auth-session=Fe26.2**new; Max-Age=2592000; Path=/; HttpOnly; SameSite=Lax')
+    expect(secure(state!)).toBe(false)
+    expect(device).toBe(DEVICE)
+  })
+
+  it('local mode over http: no Secure', async () => {
+    const [session, state] = await cookiesAfter(event('GET', '/'))
+    expect(secure(session!)).toBe(false)
+    expect(secure(state!)).toBe(false)
+  })
+
+  it('NUXT_SESSION_COOKIE_SECURE wins when it is set', async () => {
+    publicMode()
+    vi.stubEnv('NUXT_SESSION_COOKIE_SECURE', 'false')
+    expect((await cookiesAfter(publicEvent('GET', '/'))).some(secure)).toBe(false)
+    vi.stubEnv('WIREBENDER_URL', 'http://wire.example.org')
+    vi.stubEnv('NUXT_SESSION_COOKIE_SECURE', 'true')
+    const [session] = await cookiesAfter(publicEvent('GET', '/'))
+    expect(secure(session!)).toBe(true)
+  })
+})

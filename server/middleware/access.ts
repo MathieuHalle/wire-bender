@@ -1,7 +1,8 @@
 import type { H3Event } from 'h3'
 import { gate, publicGate, refusal, trust } from '../utils/access'
-import { checkMode } from '../utils/mode'
-import { resolveSession, type Who } from '../utils/who'
+import { cookieSecure, enforceCookieSecure, type CookieRes } from '../utils/cookieSecure'
+import { checkMode, type Mode } from '../utils/mode'
+import { resolveSession, sessionCookieName, type Who } from '../utils/who'
 
 // Every request. First a request naming another site (DNS rebinding, a cross-site write)
 // is refused with 403, whoever sends it. WebSocket upgrades do not pass here; the board
@@ -44,10 +45,20 @@ async function signedIn(event: H3Event) {
   return { error: 'Sign in first.' }
 }
 
+/** The session and OAuth cookies of this response are Secure exactly over https (server/utils/cookieSecure.ts). */
+function cookieRule(event: H3Event, mode: Mode) {
+  const res = (event.node as { res?: CookieRes }).res
+  if (!res) return
+  const encrypted = (event.node.req.socket as { encrypted?: boolean } | null | undefined)?.encrypted === true
+  enforceCookieSecure(res, cookieSecure(mode, process.env, encrypted), sessionCookieName())
+}
+
 export default defineEventHandler((event) => {
+  const mode = checkMode()
+  cookieRule(event, mode)
   if (refusal(event)) {
     setResponseStatus(event, 403)
     return { error: 'This request names another site.' }
   }
-  return checkMode() === 'local' ? local(event) : signedIn(event)
+  return mode === 'local' ? local(event) : signedIn(event)
 })

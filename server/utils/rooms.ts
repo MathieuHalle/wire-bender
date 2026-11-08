@@ -185,7 +185,9 @@ export class Room {
     this.awareness.on('update', ({ added, updated, removed }: Record<'added' | 'updated' | 'removed', number[]>, origin: unknown) => {
       const from = typeof origin === 'string' ? this.peers.get(origin) : undefined
       if (from) {
-        for (const c of added) from.clients.add(c)
+        // Updated too: a peer that writes another client's state owns it from then on, so it
+        // goes when that peer leaves.
+        for (const c of [...added, ...updated]) from.clients.add(c)
         for (const c of removed) from.clients.delete(c)
         // A stamped peer's name and avatar are the server's, whatever it sent and under
         // whichever client id (a forged one shows the sender's own name).

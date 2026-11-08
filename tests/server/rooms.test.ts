@@ -340,6 +340,23 @@ describe('rooms', () => {
     expect(connect('c').awareness.getStates().get(guest.doc.clientID)).toEqual({ user: { name: 'Guest', color: '#123456' } })
   })
 
+  it('a client another peer updates goes with that peer when it leaves', () => {
+    const a = connect('a')
+    const g = connect('g', 'Visitor', null, { name: 'Guest' })
+    const c = connect('c')
+    a.awareness.setLocalState({ user: { name: 'Local · Tablet' } })
+    a.room.receiveAwareness('a', encodeAwarenessUpdate(a.awareness, [a.doc.clientID]))
+    // g sends a newer state under a's client id: an update, not an add.
+    const forged = new Awareness(new Y.Doc())
+    forged.clientID = a.doc.clientID
+    // A higher clock than a's own state, so the room takes it.
+    for (let i = 0; i < 5; i++) forged.setLocalState({ user: { name: 'Ada' } })
+    g.room.receiveAwareness('g', encodeAwarenessUpdate(forged, [a.doc.clientID]))
+    expect(c.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Guest' } })
+    leave(g)
+    expect(c.awareness.getStates().has(a.doc.clientID)).toBe(false)
+  })
+
   it('a signed-in peer that claims another name arrives under its account name and avatar', () => {
     const bob = connect('bob', 'Bob', 'u-bob', { name: 'Bob', avatar: 'https://avatars.githubusercontent.com/u/2' })
     const b = connect('b')
