@@ -1,6 +1,8 @@
+import { eq } from 'drizzle-orm'
 import { useDb } from '../../db'
+import { users } from '../../db/schema'
 import { meBody } from '../../utils/accounts'
-import { restoreAccount } from '../../utils/lifecycle'
+import { restoreSession } from '../../utils/lifecycle'
 import { checkMode, configuredProviders } from '../../utils/mode'
 import { resolveSession, unlockedOf } from '../../utils/who'
 
@@ -20,15 +22,17 @@ export default defineEventHandler(async (event) => {
   const state = await resolveSession(event, { mode })
   // Already restored (from another tab): nothing to do.
   if (state.who.kind === 'user') return meBody(db, mode, state, configuredProviders())
-  const account = state.account
-  if (!state.pendingDeletion || !account) {
+  const r = restoreSession(db, state)
+  if (r.kind !== 'restored') {
+    // Gone (purged meanwhile): the session names no one, so it goes.
+    if (r.kind === 'gone') await clearUserSession(event)
     setResponseStatus(event, 401)
     return { error: 'Sign in first.' }
   }
-  restoreAccount(db, account.id)
   // Replaced, not merged: R1's flag goes; the share links already unlocked stay.
   const unlocked = await unlockedOf(event)
-  await replaceUserSession(event, unlocked.length > 0 ? { user: { id: account.id }, unlocked } : { user: { id: account.id } })
+  await replaceUserSession(event, unlocked.length > 0 ? { user: { id: r.userId }, unlocked } : { user: { id: r.userId } })
+  const account = db.select().from(users).where(eq(users.id, r.userId)).get()!
   const who = { kind: 'user' as const, userId: account.id, author: account.name, isAdmin: account.isAdmin === 1, isPremium: account.isPremium === 1 }
-  return meBody(db, mode, { who, account: { ...account, deletedAt: null }, pendingDeletion: false }, configuredProviders())
+  return meBody(db, mode, { who, account, pendingDeletion: false }, configuredProviders())
 })

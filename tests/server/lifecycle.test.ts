@@ -12,7 +12,7 @@ import { recordVisit, unlockEntry } from '../../server/utils/boardAccess'
 import { createBoard, getBoardRow, listRevisions } from '../../server/utils/boards'
 import {
   CREATES_PER_MINUTE, FREE_BOARD_LIMIT, PREMIUM_BOARD_LIMIT, TRASH_DAYS,
-  PURGE_EVERY_MS, deleteAccount, deleteBoardForGood, fork, purge, resetCreateRate, restoreAccount, schedulePurge, trashBoard, untrashBoard, withCreateLimit
+  PURGE_EVERY_MS, deleteAccount, deleteBoardForGood, fork, purge, resetCreateRate, restoreAccount, restoreSession, schedulePurge, trashBoard, untrashBoard, withCreateLimit
 } from '../../server/utils/lifecycle'
 import { openRoom, type PeerLink } from '../../server/utils/rooms'
 import { getSharing, patchSharing } from '../../server/utils/sharing'
@@ -137,6 +137,27 @@ describe('purge', () => {
     }
   })
 
+  it('an account\'s purge is all or nothing', () => {
+    const ada = user('Ada')
+    const bob = user('Bob')
+    const now = Date.now()
+    const b = board(ada)
+    const trashed = board(bob, { trashedAt: now - 31 * DAY })
+    db.update(users).set({ deletedAt: now - 31 * DAY }).where(eq(users.id, ada.userId)).run()
+    db.$client.exec('CREATE TRIGGER no_user_delete BEFORE DELETE ON users BEGIN SELECT RAISE(ABORT, \'boom\'); END')
+    expect(() => purge(db, now)).toThrow('boom')
+    // Nothing of Ada's went: her board, its history, her identity and her row are all there.
+    expect(getBoardRow(db, b.id)).toBeDefined()
+    expect(listRevisions(db, b.id)).toHaveLength(2)
+    expect(db.select().from(identities).where(eq(identities.userId, ada.userId)).all()).toHaveLength(1)
+    expect(db.select().from(users).where(eq(users.id, ada.userId)).get()).toBeDefined()
+    // A board-only purge is its own transaction: Bob's trashed board went before.
+    expect(getBoardRow(db, trashed.id)).toBeUndefined()
+    db.$client.exec('DROP TRIGGER no_user_delete')
+    expect(purge(db, now)).toEqual({ boards: 1, users: 1 })
+    expect(getBoardRow(db, b.id)).toBeUndefined()
+  })
+
   it('after a purge the same GitHub account signs in as a new account, not "taken"', () => {
     const ada = user('Ada')
     db.update(users).set({ deletedAt: Date.now() - 31 * DAY }).where(eq(users.id, ada.userId)).run()
@@ -247,6 +268,19 @@ describe('delete for good', () => {
     expect(getBoardRow(db, b.id)).toBeUndefined()
     expect(db.select().from(revisions).where(eq(revisions.boardId, b.id)).all()).toEqual([])
     expect(api.getBoardResponse(db, { key: b.id, who: ada })).toEqual(NOT_FOUND)
+  })
+
+  it('confirms with the live name, as the board shows it', () => {
+    const ada = user('Ada')
+    const b = board(ada)
+    trashBoard(db, { key: b.id, who: ada })
+    // A rename by a live edit: in the current board at once, in the name column only when its group commits.
+    db.update(boards).set({ current: JSON.stringify({ ...fixture, name: 'Live' }) }).where(eq(boards.id, b.id)).run()
+    const stale = deleteBoardForGood(db, { key: b.id, who: ada }, deleteBody('Second'))
+    expect(stale.status).toBe(422)
+    expect((stale.body as { errors: string[] }).errors[0]).toContain('"Live"')
+    expect(deleteBoardForGood(db, { key: b.id, who: ada }, deleteBody('Live'))).toEqual({ status: 200, body: { ok: true } })
+    expect(getBoardRow(db, b.id)).toBeUndefined()
   })
 
   it('works for the local user', () => {
@@ -367,6 +401,22 @@ describe('account deletion', () => {
     expect(api.getBoardResponse(db, { key: b.linkId, who: bob }).status).toBe(200)
     expect(listRevisions(db, b.id)).toHaveLength(2)
     expect(signIn(db, 'github', { id: 'gh-Ada', name: 'Ada' })).toEqual({ ok: true, userId: ada.userId })
+  })
+
+  it('restoreSession restores a pendingDeletion session, and says gone when the row went meanwhile', () => {
+    const ada = user('Ada')
+    deleteAccount(db, ada.userId, 1000)
+    const row = db.select().from(users).where(eq(users.id, ada.userId)).get()!
+    const pending = { who: ANON, account: row, pendingDeletion: true }
+    expect(restoreSession(db, pending)).toEqual({ kind: 'restored', userId: ada.userId })
+    expect(db.select().from(users).where(eq(users.id, ada.userId)).get()!.deletedAt).toBeNull()
+    // Restored already (another tab): still the account, nothing changed.
+    expect(restoreSession(db, pending)).toEqual({ kind: 'restored', userId: ada.userId })
+    expect(restoreSession(db, { who: ANON, account: null, pendingDeletion: false })).toEqual({ kind: 'anonymous' })
+    // Purged between reading the session and the restore.
+    deleteAccount(db, ada.userId, 1000)
+    db.delete(users).where(eq(users.id, ada.userId)).run()
+    expect(restoreSession(db, pending)).toEqual({ kind: 'gone' })
   })
 
   it('deleting twice keeps the first date; the local user has no deletion', () => {

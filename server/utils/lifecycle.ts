@@ -13,7 +13,7 @@ import { boards, identities, linkVisits, revisions, users } from '../db/schema'
 import { invalid, notFound, parseBody, withAccess, withOwner, type ApiResult, type BoardRequest } from './api'
 import { createBoard, getBoard, getBoardRow } from './boards'
 import { closeRoom, kickAccount, kickNonOwnerPeers } from './rooms'
-import type { Who } from './who'
+import type { SessionState, Who } from './who'
 
 export const TRASH_DAYS = 30
 const DAY_MS = 24 * 3600_000
@@ -134,16 +134,21 @@ function chunks<T>(list: readonly T[]): T[][] {
   return out
 }
 
-/** Delete boards with their revisions and link visits; their live rooms close first. */
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0]
+
+/** Delete boards' rows: revisions, link visits, the boards. Inside the caller's transaction; their rooms must be closed first. */
+function deleteBoardRows(tx: Tx, ids: readonly string[]): void {
+  for (const part of chunks(ids)) {
+    tx.delete(revisions).where(inArray(revisions.boardId, part)).run()
+    tx.delete(linkVisits).where(inArray(linkVisits.boardId, part)).run()
+    tx.delete(boards).where(inArray(boards.id, part)).run()
+  }
+}
+
+/** Delete boards with their revisions and link visits, in one transaction; their live rooms close first. */
 function removeBoards(db: Db, ids: readonly string[]): void {
   for (const id of ids) closeRoom(id)
-  db.transaction((tx) => {
-    for (const part of chunks(ids)) {
-      tx.delete(revisions).where(inArray(revisions.boardId, part)).run()
-      tx.delete(linkVisits).where(inArray(linkVisits.boardId, part)).run()
-      tx.delete(boards).where(inArray(boards.id, part)).run()
-    }
-  })
+  db.transaction(tx => deleteBoardRows(tx, ids))
 }
 
 /**
@@ -153,11 +158,14 @@ function removeBoards(db: Db, ids: readonly string[]): void {
 export function deleteBoardForGood(db: Db, req: BoardRequest, text: string): ApiResult {
   return withOwner(db, req, (a) => {
     const row = getBoardRow(db, a.boardId)
-    if (!row) return notFound()
+    const stored = getBoard(db, a.boardId)
+    if (!row || !stored) return notFound()
     if (row.trashedAt === null) return { status: 409, body: { error: 'Move the board to the trash first.' } }
     const p = parseBody(text)
     if (!p.ok) return p.result
-    if (p.json.confirm !== row.name) return invalid(`confirm: must be the board's name exactly, "${row.name}", to delete it for good`)
+    // The live name, as the board shows it: a rename still grouping is not yet in the row.
+    const name = stored.board.name
+    if (p.json.confirm !== name) return invalid(`confirm: must be the board's name exactly, "${name}", to delete it for good`)
     removeBoards(db, [row.id])
     return { status: 200, body: { ok: true } }
   })
@@ -185,6 +193,20 @@ export function restoreAccount(db: Db, userId: string): boolean {
   return db.update(users).set({ deletedAt: null }).where(and(eq(users.id, userId), isNotNull(users.deletedAt))).run().changes === 1
 }
 
+export type RestoreOutcome = { kind: 'restored', userId: string } | { kind: 'anonymous' } | { kind: 'gone' }
+
+/**
+ * `POST /api/me/restore` for a session: a signed-in account (restored already) or a
+ * pendingDeletion one (ruling R1) is restored; `gone` if its row went since the session was
+ * read (the route then clears the session); `anonymous` otherwise.
+ */
+export function restoreSession(db: Db, state: SessionState): RestoreOutcome {
+  const userId = state.who.kind === 'user' ? state.who.userId : state.pendingDeletion ? state.account?.id : undefined
+  if (userId === undefined) return { kind: 'anonymous' }
+  if (!restoreAccount(db, userId) && db.select({ id: users.id }).from(users).where(eq(users.id, userId)).get() === undefined) return { kind: 'gone' }
+  return { kind: 'restored', userId }
+}
+
 /**
  * Delete what is due at `now`: boards trashed more than TRASH_DAYS ago, and accounts deleted
  * more than TRASH_DAYS ago with all their boards, identities (so the same provider account
@@ -194,20 +216,26 @@ export function purge(db: Db, now = Date.now()): { boards: number, users: number
   const cutoff = now - TRASH_DAYS * DAY_MS
   const dueUsers = db.select({ id: users.id }).from(users)
     .where(and(isNotNull(users.deletedAt), lt(users.deletedAt, cutoff), ne(users.id, 'local'))).all().map(u => u.id)
-  const dueBoards = new Set(db.select({ id: boards.id }).from(boards)
-    .where(and(isNotNull(boards.trashedAt), lt(boards.trashedAt, cutoff))).all().map(b => b.id))
-  for (const part of chunks(dueUsers)) {
-    for (const b of db.select({ id: boards.id }).from(boards).where(inArray(boards.ownerId, part)).all()) dueBoards.add(b.id)
+  const due = new Set(dueUsers)
+  // Trashed boards of accounts not being purged: their own transaction.
+  const trashed = db.select({ id: boards.id, ownerId: boards.ownerId }).from(boards)
+    .where(and(isNotNull(boards.trashedAt), lt(boards.trashedAt, cutoff))).all()
+    .filter(b => !due.has(b.ownerId)).map(b => b.id)
+  if (trashed.length > 0) removeBoards(db, trashed)
+  let boardCount = trashed.length
+  // Each account with everything of it in one transaction, its rooms closed first.
+  for (const userId of dueUsers) {
+    const owned = db.select({ id: boards.id }).from(boards).where(eq(boards.ownerId, userId)).all().map(b => b.id)
+    for (const id of owned) closeRoom(id)
+    db.transaction((tx) => {
+      deleteBoardRows(tx, owned)
+      tx.delete(identities).where(eq(identities.userId, userId)).run()
+      tx.delete(linkVisits).where(eq(linkVisits.userId, userId)).run()
+      tx.delete(users).where(eq(users.id, userId)).run()
+    })
+    boardCount += owned.length
   }
-  removeBoards(db, [...dueBoards])
-  db.transaction((tx) => {
-    for (const part of chunks(dueUsers)) {
-      tx.delete(identities).where(inArray(identities.userId, part)).run()
-      tx.delete(linkVisits).where(inArray(linkVisits.userId, part)).run()
-      tx.delete(users).where(inArray(users.id, part)).run()
-    }
-  })
-  return { boards: dueBoards.size, users: dueUsers.length }
+  return { boards: boardCount, users: dueUsers.length }
 }
 
 export const PURGE_EVERY_MS = DAY_MS
