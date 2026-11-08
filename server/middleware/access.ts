@@ -9,12 +9,19 @@ import { resolveSession, sessionCookieName, type Who } from '../utils/who'
 // socket checks them itself, the same way.
 //
 // Local mode: the machine itself and paired devices pass (their author is kept for the
-// API's revisions); others get 401 from the API and the pairing page for pages.
+// API's revisions); others get 401 from the API and the pairing page for pages. No session
+// is ever read: /api/_auth/* is 404.
 //
 // Public mode: who is asking comes from the session alone (never loopback or a device
 // cookie). Anonymous visitors may read; writes need a signed-in user (server/utils/access.ts
 // `publicGate`); the pairing routes do not exist.
 function local(event: H3Event) {
+  // nuxt-auth-utils' own session routes: local mode has no sessions, and reading one would
+  // reseal (or, in a build without a secret, throw on) another server's cookie.
+  if (/^\/api\/_auth(\/|$)/.test(event.path.split('?')[0]!)) {
+    setResponseStatus(event, 404)
+    return { error: 'not found' }
+  }
   const t = trust(event)
   if (t.ok) {
     event.context.author = t.author

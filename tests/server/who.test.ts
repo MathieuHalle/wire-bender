@@ -9,7 +9,7 @@ import { refusal } from '../../server/utils/access'
 import type { NodeReqLike } from '../../server/utils/peerAddress'
 import { signIn } from '../../server/utils/accounts'
 import { checkMode, configuredProviders, devAppSecret, MODE_ERRORS, resolveSessionSecret, sessionSecret, startupSecretProblem } from '../../server/utils/mode'
-import { presenceOf, resolveSession, whoIs, type SessionData } from '../../server/utils/who'
+import { presenceOf, resolveSession, setupOkOf, unlockedOf, whoIs, type SessionData } from '../../server/utils/who'
 
 let dir: string
 let db: Db
@@ -108,6 +108,18 @@ describe('whoIs', () => {
     expect(a.clear).not.toHaveBeenCalled()
     await whoIs(signedIn(), a.deps('public'))
     expect(a.read).toHaveBeenCalledOnce()
+  })
+
+  it('local mode never reads the session, even with a session cookie', async () => {
+    const a = asker({ user: { id: 'anyone' }, unlocked: ['link-1'], setupOk: 'tag' })
+    const cookie = event('127.0.0.1', { cookie: 'nuxt-auth-session=Fe26.2**from-another-port' })
+    expect(await unlockedOf(cookie, a.deps('local'))).toEqual([])
+    expect(await setupOkOf(cookie, a.deps('local'))).toBeNull()
+    expect(await whoIs(cookie, a.deps('local'))).toMatchObject({ kind: 'local' })
+    expect(a.read).not.toHaveBeenCalled()
+    expect(a.clear).not.toHaveBeenCalled()
+    // Public mode does read it.
+    expect(await unlockedOf(cookie, a.deps('public'))).toEqual(['link-1'])
   })
 
   it('public mode: the session user, loaded from the db', async () => {

@@ -1,5 +1,6 @@
 import { useDb } from '../../../db'
 import { unlockLink, withUnlocked } from '../../../utils/boardAccess'
+import { checkMode } from '../../../utils/mode'
 import { remoteOf } from '../../../utils/peerAddress'
 import { readCapped } from '../../../utils/readCapped'
 
@@ -17,9 +18,14 @@ function parse(text: string): { password?: unknown } | null {
 /**
  * `POST /api/links/:linkId/unlock` `{ password }`: anyone may try, signed in or not. The
  * right password adds the link's unlock entry (unlockEntry, ruling R5) to the session's `unlocked` list, which creates a session
- * for an anonymous visitor (the one place one gets a cookie).
+ * for an anonymous visitor (the one place one gets a cookie). Local mode: 404.
  */
 export default defineEventHandler(async (event) => {
+  // Local mode has no share links to unlock, and never touches a session.
+  if (checkMode() === 'local') {
+    setResponseStatus(event, 404)
+    return { error: 'not found' }
+  }
   const linkId = getRouterParam(event, 'linkId') ?? ''
   // Anyone may call this: never buffer more than a few KB of it.
   const req = event.node.req

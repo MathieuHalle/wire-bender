@@ -37,7 +37,8 @@ vi.stubGlobal('setResponseStatus', (event: FakeEvent, status: number) => {
   event.status = status
 })
 vi.stubGlobal('sendRedirect', (_event: FakeEvent, location: string, status: number) => ({ redirect: location, status }))
-vi.stubGlobal('getUserSession', async () => session)
+const readSession = vi.fn(async () => session)
+vi.stubGlobal('getUserSession', readSession)
 vi.stubGlobal('useRuntimeConfig', () => ({ session: { name: 'nuxt-auth-session' } }))
 vi.stubGlobal('replaceUserSession', async (_event: unknown, data: SessionData) => {
   session = data
@@ -276,6 +277,41 @@ describe('access middleware, public mode', () => {
     expect(useDb().select().from(users).where(eq(users.id, id)).get()!.deletedAt).not.toBeNull()
     expect(cleared).toHaveBeenCalled()
     expect(session).toEqual({})
+  })
+})
+
+describe('local mode and a stray session cookie', () => {
+  it('a board GET, the socket upgrade and /api/_auth/* never read or write the session', async () => {
+    // As in a build without a secret: reading the session would throw (and in dev it would
+    // reseal the cookie, signing the browser out of the public server on another port).
+    readSession.mockClear()
+    readSession.mockImplementation(async () => {
+      throw new Error('Builds do not generate a secret')
+    })
+    const headers: string[] = []
+    vi.stubGlobal('setResponseHeader', (_e: unknown, name: string) => {
+      headers.push(name)
+    })
+    try {
+      const get = (await import('../../server/api/boards/[id].get')).default as unknown as Handler
+      const { id } = createBoard(useDb(), fixture, 'import', 'x', 'local')
+      const e = { ...event('GET', `/api/boards/${id}`, '127.0.0.1', { host: 'localhost:3002', cookie: SESSION_COOKIE }), context: { params: { id } } }
+      expect(await middleware(e)).toBeUndefined()
+      expect(await get(e)).toMatchObject({ id, role: 'owner' })
+      const up = upgradeRequest(`/_ws/board/${id}`, '127.0.0.1', { host: 'localhost:3002', cookie: SESSION_COOKIE })
+      expect(await ws.upgrade(up)).toBeUndefined()
+      expect(up.context.unlocked).toEqual([])
+      // nuxt-auth-utils' own session route is not there in local mode.
+      const auth = event('GET', '/api/_auth/session', '127.0.0.1', { host: 'localhost:3002', cookie: SESSION_COOKIE })
+      expect(await middleware(auth)).toEqual({ error: 'not found' })
+      expect(auth.status).toBe(404)
+      expect(readSession).not.toHaveBeenCalled()
+      expect(cleared).not.toHaveBeenCalled()
+      expect(headers.map(h => h.toLowerCase())).not.toContain('set-cookie')
+    } finally {
+      readSession.mockImplementation(async () => session)
+      vi.stubGlobal('setResponseHeader', () => {})
+    }
   })
 })
 

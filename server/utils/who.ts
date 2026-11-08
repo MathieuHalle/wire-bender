@@ -108,21 +108,33 @@ export async function whoIs(source: TrustSource, deps: WhoDeps = {}): Promise<Wh
 }
 
 /**
- * The share link ids whose password this request's session has entered (any mode, signed in
- * or not); none without a session cookie, so nothing is read or sealed for a cookieless visitor.
+ * Whether the session may be read for `source`: public mode only, and only with a session
+ * cookie. Local mode reads no session: a cookie a public server on another port of the same
+ * host set would be resealed (signing that browser out there), or throw in a build without
+ * a secret. Without a cookie nothing is read or sealed for a cookieless visitor.
+ */
+function sessionReadable(source: TrustSource, deps: WhoDeps): boolean {
+  if ((deps.mode ?? checkMode()) === 'local') return false
+  return cookieOf(source, deps.sessionCookie ?? sessionCookieName()) !== undefined
+}
+
+/**
+ * The share link ids whose password this request's session has entered (public mode, signed
+ * in or not); none in local mode or without a session cookie (sessionReadable).
  */
 export async function unlockedOf(source: TrustSource, deps: WhoDeps = {}): Promise<string[]> {
-  if (cookieOf(source, deps.sessionCookie ?? sessionCookieName()) === undefined) return []
+  if (!sessionReadable(source, deps)) return []
   const list = (await (deps.readSession ?? defaultRead)(source)).unlocked
   return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : []
 }
 
 /**
  * The tag of the setup code this request's session entered (POST /api/setup) and has not
- * signed in since; null for none. claimSetup checks it against the current code (R11).
+ * signed in since; null for none (always in local mode). claimSetup checks it against the
+ * current code (R11).
  */
 export async function setupOkOf(source: TrustSource, deps: WhoDeps = {}): Promise<string | null> {
-  if (cookieOf(source, deps.sessionCookie ?? sessionCookieName()) === undefined) return null
+  if (!sessionReadable(source, deps)) return null
   const tag = (await (deps.readSession ?? defaultRead)(source)).setupOk
   return typeof tag === 'string' && tag !== '' ? tag : null
 }
