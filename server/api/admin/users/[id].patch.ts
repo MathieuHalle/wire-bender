@@ -7,9 +7,10 @@ import { whoIs } from '../../../utils/who'
 const MAX_BODY = 4096
 
 /**
- * `PATCH /api/admin/users/:id` `{ premium?, suspended? }` (public mode, the admin only;
- * anyone else gets the plain 404 before the body is read). An admin can't suspend
- * themselves (400). Suspending closes the account's live sockets.
+ * `PATCH /api/admin/users/:id` `{ premium?, suspended?, admin? }` (public mode, the admin
+ * only; anyone else gets the plain 404 before the body is read). An admin can't suspend
+ * themselves (400), nor drop their own admin flag as the last admin (409, R13). Suspending
+ * closes the account's live sockets.
  */
 export default defineEventHandler(async (event) => {
   setResponseHeader(event, 'cache-control', 'no-store')

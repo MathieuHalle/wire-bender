@@ -1,5 +1,6 @@
 <script setup lang="ts">
-// The admin page (spec §3): every account, with its premium flag and Suspend/Unsuspend.
+// The admin page (spec §3): every account, with its premium and admin flags and
+// Suspend/Unsuspend. The last admin can't drop their own flag (the server says so, R13).
 // Nothing else: the admin sees how many boards an account has, never the boards. For anyone
 // but the admin the API answers 404, and so does this page.
 import type { Provider } from '~/composables/useMe'
@@ -33,7 +34,7 @@ const toast = useToast()
 
 const day = (t: number) => new Date(t).toLocaleDateString(undefined, { dateStyle: 'medium' })
 
-async function change(a: Account, body: { premium?: boolean, suspended?: boolean }) {
+async function change(a: Account, body: { premium?: boolean, suspended?: boolean, admin?: boolean }) {
   busy.value = a.id
   try {
     const updated = await $fetch<Account>(`/api/admin/users/${encodeURIComponent(a.id)}`, { method: 'PATCH', body })
@@ -121,6 +122,9 @@ async function change(a: Account, body: { premium?: boolean, suspended?: boolean
               Premium
             </th>
             <th class="px-3 py-2 font-medium">
+              Admin
+            </th>
+            <th class="px-3 py-2 font-medium">
               Status
             </th>
             <th class="px-3 py-2">
@@ -170,12 +174,15 @@ async function change(a: Account, body: { premium?: boolean, suspended?: boolean
               />
             </td>
             <td class="px-3 py-2">
+              <USwitch
+                :model-value="a.isAdmin"
+                :disabled="busy === a.id"
+                :aria-label="`Admin for ${a.name}`"
+                @update:model-value="(v: boolean) => change(a, { admin: v })"
+              />
+            </td>
+            <td class="px-3 py-2">
               <div class="flex flex-wrap gap-1">
-                <UBadge
-                  v-if="a.isAdmin"
-                  label="Admin"
-                  variant="subtle"
-                />
                 <UBadge
                   v-if="a.suspendedAt"
                   :label="`Suspended ${day(a.suspendedAt)}`"
@@ -189,7 +196,7 @@ async function change(a: Account, body: { premium?: boolean, suspended?: boolean
                   variant="subtle"
                 />
                 <span
-                  v-if="!a.isAdmin && !a.suspendedAt && !a.deletedAt"
+                  v-if="!a.suspendedAt && !a.deletedAt"
                   class="text-muted"
                 >Active</span>
               </div>

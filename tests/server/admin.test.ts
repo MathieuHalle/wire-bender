@@ -151,7 +151,7 @@ describe('admin routes', () => {
     }
     // Nothing of a refused body was applied.
     expect(row(bob)).toMatchObject({ isAdmin: 0, isPremium: 0 })
-    expect(await patchAs(admin, bob, { isAdmin: true }).result).toEqual({ errors: ['isAdmin: not something an admin can change (premium, suspended)'] })
+    expect(await patchAs(admin, bob, { isAdmin: true }).result).toEqual({ errors: ['isAdmin: not something an admin can change (premium, suspended, admin)'] })
     for (const id of ['nobody', 'local']) {
       const p = patchAs(admin, id, { premium: true })
       expect(await p.result).toEqual({ error: 'not found' })
@@ -220,5 +220,56 @@ describe('admin routes', () => {
     expect(row(admin).suspendedAt).toBeNull()
     // Their own premium flag is theirs to change.
     expect(await patchAs(admin, admin, { premium: false }).result).toMatchObject({ isPremium: false })
+  })
+
+  it('an admin makes another account admin, and the new admin reaches the admin routes', async () => {
+    const admin = account('Admin', 1, true)
+    const bob = account('Bob', 2)
+    expect(await patchAs(admin, bob, { admin: true }).result).toMatchObject({ id: bob, isAdmin: true })
+    expect(row(bob).isAdmin).toBe(1)
+    const e = call('GET', '/api/admin/users', bob)
+    expect(await list(e)).toHaveLength(2)
+    // And takes it away again.
+    expect(await patchAs(bob, admin, { admin: false }).result).toMatchObject({ id: admin, isAdmin: false })
+    expect(row(admin).isAdmin).toBe(0)
+    const p = patchAs(bob, bob, { admin: 'yes' })
+    expect(await p.result).toEqual({ errors: ['admin: must be true or false'] })
+    expect(p.e.status).toBe(422)
+  })
+
+  it('the last admin can\'t drop their own admin flag (R13)', async () => {
+    const ONLY = 'You are the only admin. Make another account admin first.'
+    const admin = account('Admin', 1, true)
+    const bob = account('Bob', 2)
+    const p = patchAs(admin, admin, { admin: false })
+    expect(await p.result).toEqual({ error: 'You are the only admin. Make another account admin first.' })
+    expect(p.e.status).toBe(409)
+    expect(row(admin).isAdmin).toBe(1)
+    // A deleted or suspended admin doesn't count.
+    useDb().update(users).set({ isAdmin: 1, deletedAt: Date.now() }).where(eq(users.id, bob)).run()
+    expect(await patchAs(admin, admin, { admin: false }).result).toEqual({ error: ONLY })
+    useDb().update(users).set({ deletedAt: null, suspendedAt: Date.now() }).where(eq(users.id, bob)).run()
+    expect(await patchAs(admin, admin, { admin: false }).result).toEqual({ error: ONLY })
+    useDb().update(users).set({ suspendedAt: null }).where(eq(users.id, bob)).run()
+    expect(await patchAs(admin, admin, { admin: false }).result).toMatchObject({ isAdmin: false })
+  })
+
+  it('DELETE /api/me from the only admin is 409 until another account is admin (R13)', async () => {
+    const del = (await import('../../server/api/me.delete')).default as unknown as Handler
+    const admin = account('Admin', 1, true)
+    const bob = account('Bob', 2)
+    const e = call('DELETE', '/api/me', admin)
+    expect(await del(e)).toEqual({ error: 'You are the only admin. Make another account admin first.' })
+    expect(e.status).toBe(409)
+    expect(row(admin).deletedAt).toBeNull()
+    expect(session).toEqual({ user: { id: admin } })
+    await patchAs(admin, bob, { admin: true }).result
+    const again = call('DELETE', '/api/me', admin)
+    expect(await del(again)).toEqual({ ok: true })
+    expect(row(admin).deletedAt).not.toBeNull()
+    // Bob is now the only active admin.
+    const last = call('DELETE', '/api/me', bob)
+    expect(await del(last)).toEqual({ error: 'You are the only admin. Make another account admin first.' })
+    expect(last.status).toBe(409)
   })
 })

@@ -309,18 +309,32 @@ export function listAccounts(db: Db): AccountRow[] {
 }
 
 /** The only keys `PATCH /api/admin/users/:id` takes. */
-const PATCHABLE = ['premium', 'suspended'] as const
+const PATCHABLE = ['premium', 'suspended', 'admin'] as const
 
 export type PatchAccountResult
   = | { status: 200, body: AccountRow }
-    | { status: 400 | 404, body: { error: string } }
+    | { status: 400 | 404 | 409, body: { error: string } }
     | { status: 422, body: { errors: string[] } }
 
+/** R13: why the last admin may not delete their account or drop their admin flag. */
+export const ONLY_ADMIN = 'You are the only admin. Make another account admin first.'
+
 /**
- * `PATCH /api/admin/users/:id` `{ premium?, suspended? }` by the admin `adminId`, and no
- * other key (422). Suspending keeps the first date; the account's sessions count as signed
+ * True when `userId` is an active admin and no other account is (R13). Active: not deleted
+ * and not suspended, so one who can still sign in and run the server.
+ */
+export function isOnlyAdmin(db: Pick<Db, 'select'>, userId: string): boolean {
+  const active = db.select({ id: users.id }).from(users)
+    .where(and(eq(users.isAdmin, 1), ne(users.id, 'local'), isNull(users.deletedAt), isNull(users.suspendedAt))).all()
+  return active.length === 1 && active[0]!.id === userId
+}
+
+/**
+ * `PATCH /api/admin/users/:id` `{ premium?, suspended?, admin? }` by the admin `adminId`, and
+ * no other key (422). Suspending keeps the first date; the account's sessions count as signed
  * out from their next request (whoIs reads the row every time), and its boards behave like
- * a deleted owner's (ruling R10). An admin can't suspend their own account.
+ * a deleted owner's (ruling R10). An admin can't suspend their own account, nor drop their
+ * own admin flag while no other active account is admin (409, R13).
  */
 export function patchAccount(db: Db, adminId: string, id: string, body: unknown, now = Date.now()): PatchAccountResult {
   const target = id === 'local' ? undefined : userRow(db, id)
@@ -329,20 +343,26 @@ export function patchAccount(db: Db, adminId: string, id: string, body: unknown,
   if (!json) return { status: 422, body: { errors: ['the body must be a JSON object'] } }
   // Anything else (isAdmin, name…) is refused, not ignored: a caller must not think it took.
   const unknownKeys = Object.keys(json).filter(k => !(PATCHABLE as readonly string[]).includes(k))
-  if (unknownKeys.length > 0) return { status: 422, body: { errors: unknownKeys.map(k => `${k}: not something an admin can change (premium, suspended)`) } }
+  if (unknownKeys.length > 0) return { status: 422, body: { errors: unknownKeys.map(k => `${k}: not something an admin can change (premium, suspended, admin)`) } }
   const errors: string[] = []
   for (const k of PATCHABLE) if (k in json && typeof json[k] !== 'boolean') errors.push(`${k}: must be true or false`)
-  if (!('premium' in json) && !('suspended' in json)) errors.push('give premium or suspended')
+  if (!PATCHABLE.some(k => k in json)) errors.push('give premium, suspended or admin')
   if (errors.length > 0) return { status: 422, body: { errors } }
   const premium = json.premium as boolean | undefined
   const suspended = json.suspended as boolean | undefined
+  const admin = json.admin as boolean | undefined
   if (suspended === true && id === adminId) return { status: 400, body: { error: 'You can\'t suspend your own account.' } }
 
-  db.transaction((tx) => {
+  const refused = db.transaction((tx) => {
+    // Checked in the transaction: two admins dropping their flags at once leave one.
+    if (admin === false && id === adminId && isOnlyAdmin(tx, id)) return true
+    if (admin !== undefined) tx.update(users).set({ isAdmin: admin ? 1 : 0 }).where(eq(users.id, id)).run()
     if (premium !== undefined) tx.update(users).set({ isPremium: premium ? 1 : 0 }).where(eq(users.id, id)).run()
     if (suspended === true) tx.update(users).set({ suspendedAt: now }).where(and(eq(users.id, id), isNull(users.suspendedAt))).run()
     if (suspended === false) tx.update(users).set({ suspendedAt: null }).where(eq(users.id, id)).run()
+    return false
   })
+  if (refused) return { status: 409, body: { error: ONLY_ADMIN } }
   // R10: its own sockets in every room, and every socket on its boards (their links are 404
   // now). Unsuspending only clears the column: the links answer again from the next request.
   if (suspended === true) {
