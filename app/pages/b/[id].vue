@@ -11,6 +11,10 @@ import { NO_ACCESS } from '~/composables/useLiveBoard'
 import { fallbackAlert } from '~/utils/board3dFallback'
 import { defaultPanel, loadPanel, savePanel, type PanelState } from '~/utils/sidePanel'
 import { ALL_LAYERS } from '~/utils/layers'
+import {
+  boardItems, drawnBoard, editTarget, hiddenCount, isShown, itemLit, itemNets, itemsAtFinding, loadHidden, pruneHidden,
+  saveHidden, setShown, type BoardItems, type ViewState
+} from '~/utils/hiddenItems'
 import { benchUrl, loadFlip, saveFlip } from '~/utils/bottomFlip'
 import type { Flip, Mirror } from '~core/sideView'
 
@@ -135,7 +139,11 @@ const highlight = computed(() => {
  * the 3D highlight uses (core, so the 2D page doesn't import three.js).
  */
 const hoverTag = ref<Tag | null>(null)
-const highlightNets = computed(() => tagNets(hoverTag.value))
+/** The item hovered in the Layers tab: lit alone, on both views, while it is drawn. */
+const hoverItem = ref<string | null>(null)
+const highlightNets = computed(() => (hoverItem.value && conn.value
+  ? (litItem.value ? itemNets(conn.value, hoverItem.value) : [])
+  : tagNets(hoverTag.value)))
 
 /**
  * The side panel: open or collapsed, its tab, and the view layers. Read once mounted (no
@@ -157,14 +165,86 @@ onMounted(() => {
 })
 /** The layers the views draw: the stored ones once loaded. */
 const layers = computed(() => (loaded.value ? panel.value.layers : ALL_LAYERS))
+
+/**
+ * This board's hidden items (the Layers tab): this viewer's, in this browser, stored per
+ * board key. Never in the board: the views draw `drawnBoard`, the check, history and
+ * printouts see the board as it is. Without storage nothing is hidden.
+ */
+const hidden = ref<string[]>([])
+onMounted(() => {
+  hidden.value = loadHidden(id.value, storage)
+  watch(id, k => (hidden.value = loadHidden(k, storage)))
+  watch(hidden, h => saveHidden(id.value, h, storage))
+})
+// A deleted item's flag is dropped (against the live board, not a previewed revision).
+watch([live.board, loaded], ([b, ok]) => {
+  if (!b || !ok) return
+  const kept = pruneHidden(hidden.value, b)
+  if (kept !== hidden.value) hidden.value = kept
+})
+const hiddenSet = computed(() => new Set(loaded.value ? hidden.value : []))
+const NO_ITEMS: BoardItems = { part: [], wire: [], trail: [] }
+const items = computed(() => (board.value ? boardItems(board.value) : NO_ITEMS))
+const allItems = computed(() => [...items.value.part, ...items.value.wire, ...items.value.trail])
+// A row can vanish under the pointer (filter, collapse): the hover ends with the panel.
+watch(() => [panel.value.open, panel.value.tab], () => (hoverItem.value = null))
+const viewState = computed<ViewState>(() => ({ layers: panel.value.layers, hidden: hidden.value }))
+function setView(s: ViewState) {
+  panel.value.layers = s.layers
+  hidden.value = s.hidden
+}
+/** Items not drawn, by layer or one by one: the header's "N hidden". */
+const hiddenN = computed(() => (loaded.value ? hiddenCount(items.value, viewState.value) : 0))
+function openLayers() {
+  panel.value.open = true
+  panel.value.tab = 'layers'
+}
+/** What the 3D view draws (the 2D sides filter the same set themselves). */
+const drawn = computed(() => (board.value ? drawnBoard(board.value, hiddenSet.value) : null))
+/** The hovered item, lit on its own; nothing while it is not drawn. */
+const litItem = computed(() => {
+  const k = hoverItem.value
+  const b = board.value
+  if (!k || !b) return null
+  const item = allItems.value.find(i => i.key === k)
+  return item && isShown(item, viewState.value, hiddenSet.value) ? itemLit(b, k) : null
+})
 /** Run once here: the Findings tab lists it and its icon counts the errors. */
 const check = computed(() => (board.value ? runCheck(board.value) : null))
 const badges = computed(() => ({ findings: check.value?.stats.errors ?? 0 }))
 
 /** The finding picked in the panel; its holes are ringed on both sides. */
 const picked = ref<Finding | null>(null)
+/** The item picked in the Layers tab; its holes are ringed the same way. One pick at a time. */
+const pickedItem = ref<string | null>(null)
 /** Names that don't parse are skipped: a finding never breaks the drawing. */
-const markHoles = computed(() => picked.value?.holes.flatMap(n => tryParseHole(n) ?? []) ?? [])
+const markHoles = computed(() => {
+  if (picked.value) return picked.value.holes.flatMap(n => tryParseHole(n) ?? [])
+  const k = pickedItem.value
+  return k ? allItems.value.find(i => i.key === k)?.holes ?? [] : []
+})
+/**
+ * Picking a finding shows again the hidden items it points at. Only on a new pick: the
+ * panel re-picks the same finding after every edit, which must not undo a later hide.
+ */
+let revealedFor: string | null = null
+watch(picked, (f) => {
+  const k = f && `${f.rule}|${f.holes.join(',')}|${f.message}`
+  if (f) pickedItem.value = null
+  if (!f || !board.value || k === revealedFor) {
+    revealedFor = k
+    return
+  }
+  revealedFor = k
+  const s = viewState.value
+  const at = new Set(itemsAtFinding(board.value, f))
+  const off = allItems.value.filter(i => at.has(i.key) && !isShown(i, s, hiddenSet.value)).map(i => i.key)
+  if (off.length) setView(setShown(off, true, items.value, s))
+})
+watch(pickedItem, (k) => {
+  if (k) picked.value = null
+})
 
 function onAddJoint(f: Finding) {
   if (lockedTitle.value) return
@@ -192,10 +272,19 @@ function onHover(side: Side, hole: Hole | null) {
  * Per-side handlers, made once: the canvas re-renders its frames on every pan, and a new
  * handler each time would re-render both sides with it.
  */
+const warn = useWarning()
+/** True (and a warning) when the tool would change a hidden trail: what isn't drawn isn't edited. */
+function editsHidden(side: Side, a: Hole, b?: Hole): boolean {
+  const lb = live.board.value
+  if (!lb || !hiddenSet.value.size) return false
+  const t = editTarget(lb, hiddenSet.value, side, a, b)
+  if (t) warn(`Trail ${t} is hidden: show it in Layers to edit it.`)
+  return t !== null
+}
 const sideEvents = Object.fromEntries((['top', 'bottom'] as const).map(s => [s, {
   hover: (h: Hole | null) => onHover(s, h),
-  hole: (h: Hole) => onHoleClick(s, h),
-  segment: (a: Hole, b: Hole) => onSegmentClick(s, a, b)
+  hole: (h: Hole) => (tool.value === 'joint' && editsHidden(s, h)) || onHoleClick(s, h),
+  segment: (a: Hole, b: Hole) => (tool.value === 'erase' && editsHidden(s, a, b)) || onSegmentClick(s, a, b)
 }])) as Record<Side, { hover(h: Hole | null): void, hole(h: Hole): void, segment(a: Hole, b: Hole): void }>
 
 /** The two sides as frames on the canvas, in mm: top on the left, bottom on the right. */
@@ -328,6 +417,16 @@ const sideTitle = (s: Side) => (s === 'top'
         :color="STATUS[status].color"
         variant="subtle"
         :label="STATUS[status].label"
+      />
+      <UButton
+        v-if="hiddenN"
+        size="xs"
+        color="warning"
+        variant="soft"
+        icon="i-lucide-eye-off"
+        :label="`${hiddenN} hidden`"
+        title="Some items are hidden from view (in this browser only): open Layers"
+        @click="openLayers"
       />
       <PresenceBar :peers="peers" />
       <Toolbar
@@ -548,7 +647,7 @@ const sideTitle = (s: Side) => (s === 'top'
           <NuxtErrorBoundary>
             <LazyBoard3D
               class="min-h-0 flex-1"
-              :board="board"
+              :board="drawn ?? board"
               :highlight-nets="highlightNets"
               :mark-holes="markHoles"
               :layers="layers"
@@ -616,6 +715,8 @@ const sideTitle = (s: Side) => (s === 'top'
                 :draw-from="drawFrom?.side === f.id ? drawFrom.hole : null"
                 :mark-holes="markHoles"
                 :layers="layers"
+                :hidden="hiddenSet"
+                :highlight-lit="litItem"
                 @hover="sideEvents[f.id].hover"
                 @hole-click="sideEvents[f.id].hole"
                 @segment-click="sideEvents[f.id].segment"
@@ -660,7 +761,7 @@ const sideTitle = (s: Side) => (s === 'top'
         <template #edit>
           <EditPanel
             v-model:tool="tool"
-            v-model:layers="panel.layers"
+            :layers="layers"
             :can-undo="canUndo"
             :can-redo="canRedo"
             :locked="lockedTitle !== null"
@@ -668,6 +769,16 @@ const sideTitle = (s: Side) => (s === 'top'
             :view-only="viewOnly"
             @undo="undo"
             @redo="redo"
+          />
+        </template>
+        <template #layers>
+          <LayersPanel
+            :items="items"
+            :state="viewState"
+            :picked="pickedItem"
+            @change="setView"
+            @hover="(k: string | null) => hoverItem = k"
+            @pick="(k: string | null) => pickedItem = k"
           />
         </template>
         <template #history>

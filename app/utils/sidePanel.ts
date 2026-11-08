@@ -1,4 +1,5 @@
-// The side panel's state: open or collapsed, the active tab, and the view layers. Kept in
+// The side panel's state: open or collapsed, the active tab, and the view layers (the
+// Layers tab's group switches). Kept in
 // localStorage; every access is guarded, since storage can be blocked, full or tampered with.
 import { ALL_LAYERS, type Layers } from './layers'
 
@@ -8,6 +9,7 @@ export const PANEL_KEY = 'wirebender:sidepanel'
 export const PANEL_TABS = [
   { id: 'findings', label: 'Findings', icon: 'i-lucide-list-checks' },
   { id: 'edit', label: 'Edit', icon: 'i-lucide-pencil-ruler' },
+  { id: 'layers', label: 'Layers', icon: 'i-lucide-layers' },
   { id: 'history', label: 'History', icon: 'i-lucide-history' }
 ] as const
 

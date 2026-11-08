@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// The side panel's Edit tab: the tools, undo/redo, and the view layers. The editing tools
-// are off in 3D (look only) and while the board is not live, Navigate (pan, no edits) stays on; the layers work in both
-// views and never touch the file.
+// The side panel's Edit tab: the tools and undo/redo. The editing tools are off in 3D
+// (look only) and while the board is not live, Navigate (pan, no edits) stays on. The view
+// layers are in the Layers tab; this one only reads them, to warn while drawing blind.
 import { LOCKED_TITLE, type Tool } from '~/utils/boardView'
 import { blindHint, type Layers } from '~/utils/layers'
 
@@ -14,11 +14,12 @@ const props = defineProps<{
   lockedTitle?: string
   /** The link gives view only: no undo or redo to offer. */
   viewOnly?: boolean
+  /** The view layers (set in the Layers tab). */
+  layers: Layers
 }>()
 const emit = defineEmits<{ undo: [], redo: [] }>()
 
 const tool = defineModel<Tool>('tool', { required: true })
-const layers = defineModel<Layers>('layers', { required: true })
 
 const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
   { id: 'navigate', label: 'Navigate', icon: 'i-lucide-hand', key: 'H' },
@@ -28,18 +29,8 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
   { id: 'joint', label: 'Joint', icon: 'i-lucide-circle-dot', key: 'J' }
 ]
 
-const LAYERS: { id: keyof Layers, label: string, description: string }[] = [
-  { id: 'components', label: 'Components', description: 'Part bodies, labels and legs' },
-  { id: 'wires', label: 'Wires', description: 'Insulated wires, laid and flying' },
-  { id: 'trails', label: 'Trails', description: 'Bare trails, their joints, leg-folds, bridges' }
-]
-
-function setLayer(id: keyof Layers, on: boolean) {
-  layers.value = { ...layers.value, [id]: on }
-}
-
 const lockTitle = computed(() => props.lockedTitle ?? LOCKED_TITLE)
-const blind = computed(() => (props.locked ? null : blindHint(tool.value, layers.value)))
+const blind = computed(() => (props.locked ? null : blindHint(tool.value, props.layers)))
 </script>
 
 <template>
@@ -97,26 +88,6 @@ const blind = computed(() => (props.locked ? null : blindHint(tool.value, layers
       >
         {{ blind }}
       </p>
-    </section>
-
-    <section>
-      <h2 class="mb-1 text-lg font-medium">
-        Layers
-      </h2>
-      <p class="mb-2 text-xs text-muted">
-        View only: the board file and the check are unchanged. Holes and pads always show.
-      </p>
-      <div class="space-y-2">
-        <USwitch
-          v-for="l in LAYERS"
-          :key="l.id"
-          :model-value="layers[l.id]"
-          :label="l.label"
-          :description="l.description"
-          size="sm"
-          @update:model-value="(on: boolean) => setLayer(l.id, on)"
-        />
-      </div>
     </section>
   </div>
 </template>
