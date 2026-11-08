@@ -11,6 +11,18 @@ const fresh = ref<{ name: string, token: string } | null>(null)
 const confirming = ref<string | null>(null)
 const toast = useToast()
 
+// R8: in local mode a paired device cannot make tokens; only this computer can.
+const { me, load } = useMe()
+const onDevice = ref(false)
+onMounted(async () => {
+  if ((await load())?.mode !== 'local') return
+  try {
+    onDevice.value = (await $fetch<{ paired: boolean }>('/api/devices/me')).paired
+  } catch {
+    // The server's own refusal is shown if Create is tried.
+  }
+})
+
 function message(e: unknown): string {
   const data = (e as { data?: { errors?: unknown, error?: unknown } }).data
   return Array.isArray(data?.errors) ? data.errors.map(String).join(' ') : typeof data?.error === 'string' ? data.error : (e as Error).message
@@ -70,7 +82,14 @@ const when = (t: number) => new Date(t).toLocaleString(undefined, { dateStyle: '
       </NuxtLink>
     </p>
 
+    <p
+      v-if="onDevice && me?.mode === 'local'"
+      class="text-sm"
+    >
+      Create tokens on this computer.
+    </p>
     <form
+      v-else
       class="flex items-start gap-2"
       @submit.prevent="create"
     >

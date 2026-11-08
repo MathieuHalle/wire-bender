@@ -52,3 +52,6 @@ export function errorLines(status: number, json: unknown): string[] {
   for (const v of [j.error, j.message, j.statusMessage]) if (typeof v === 'string' && v !== '') return [v]
   return [`HTTP ${status}`]
 }
+
+/** A board id or share link id: nothing that could leave `/api/boards/`. */
+export const BOARD_KEY = /^[A-Za-z0-9_-]+$/

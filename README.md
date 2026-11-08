@@ -181,6 +181,7 @@ The app's `/api` page lists these routes and the errors.
 
 A token lets a script or an AI client use the API as you. Make one on `/account` (**Tokens**): give it a name, copy it at once, it is shown only that one time. A token starts with `wb_`; keep it private and never commit it. You can have 20. **Revoke** stops it at once, and closes its open live connections.
 
+- In local mode a token can be made only on this computer, not from a paired device (`403`, `Create tokens on this computer.`): a token made on a tablet would outlive unpairing it. A paired device can still list and revoke tokens.
 - Send it as `Authorization: Bearer <token>`. It acts as its owner, with that owner's access to boards and share links.
 - In public mode a script needs a token. In local mode this computer is trusted, so a token is optional; with one, the change has a named author, `<token name> · Local`.
 - While a token works on a board, open copies show it in the presence bar with a robot icon.

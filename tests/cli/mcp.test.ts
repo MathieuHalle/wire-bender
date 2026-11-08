@@ -46,6 +46,19 @@ describe('mcp server', () => {
     expect(replace.description).toMatch(/409/)
   })
 
+  it.each(['.', '..', 'a b', 'a/b'])('a bad board key %j fails locally and never calls the server', async (key) => {
+    const { client, call } = await connect(() => ({ status: 200, json: {} }))
+    const r = await client.callTool({ name: 'get_board', arguments: { board: key } })
+    expect(isError(r)).toBe(true)
+    expect(call).not.toHaveBeenCalled()
+  })
+
+  it('list_revisions says newest first', async () => {
+    const { client } = await connect(() => ({ status: 200, json: {} }))
+    const t = (await client.listTools()).tools.find(x => x.name === 'list_revisions')!
+    expect(t.description).toMatch(/newest first/)
+  })
+
   it('replace_board requires baseRevision', async () => {
     const { client, call } = await connect(() => ({ status: 200, json: { revision: 2 } }))
     const r = await client.callTool({ name: 'replace_board', arguments: { board: 'b1', data: { name: 'x' } } })
@@ -56,10 +69,10 @@ describe('mcp server', () => {
 
   it('replace_board sends baseRevision with the board', async () => {
     const { client, call } = await connect(() => ({ status: 200, json: { revision: 6 } }))
-    const r = await client.callTool({ name: 'replace_board', arguments: { board: 'b 1', baseRevision: 5, data: { name: 'x' } } })
+    const r = await client.callTool({ name: 'replace_board', arguments: { board: 'b-1', baseRevision: 5, data: { name: 'x' } } })
     expect(isError(r)).toBe(false)
     expect(JSON.parse(textOf(r))).toEqual({ revision: 6 })
-    expect(call).toHaveBeenCalledWith('PUT', '/api/boards/b%201', { baseRevision: 5, board: { name: 'x' } })
+    expect(call).toHaveBeenCalledWith('PUT', '/api/boards/b-1', { baseRevision: 5, board: { name: 'x' } })
   })
 
   it('a 409 gives the "read it again" message and changes nothing', async () => {

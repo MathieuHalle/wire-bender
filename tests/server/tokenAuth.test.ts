@@ -575,6 +575,30 @@ describe('local mode', () => {
     expect(await call(route.tokensGet!, 'GET', '/api/tokens', { headers: { ...host, ...bearer(token) }, address: '127.0.0.1' })).toMatchObject({ status: 403 })
   })
 
+  it('R8: this computer makes tokens; a paired device gets 403 but can still list and revoke', async () => {
+    const { resetPairing, startPairing, completePairing } = await import('../../server/utils/access')
+    resetPairing()
+    const paired = completePairing(startPairing().code, 'Tablet', '192.168.1.30')
+    if (!paired.ok) throw new Error('pairing failed')
+    const device = { host: 'localhost:3002', cookie: /^(wb_device=[^;]+)/.exec(paired.cookie)![1]! }
+    const computer = { host: 'localhost:3002' }
+
+    const refused = await call(route.tokensPost!, 'POST', '/api/tokens', { headers: device, address: '192.168.1.30', body: { name: 'Rogue' } })
+    expect(refused).toMatchObject({ status: 403, body: { error: 'Create tokens on this computer.' } })
+    expect(useDb().select().from(tokens).all()).toHaveLength(0)
+
+    const made = await call(route.tokensPost!, 'POST', '/api/tokens', { headers: computer, address: '127.0.0.1', body: { name: 'Laptop' } })
+    expect(made.status).toBe(201)
+    const id = (made.body as { id: string }).id
+
+    const listed = await call(route.tokensGet!, 'GET', '/api/tokens', { headers: device, address: '192.168.1.30' })
+    expect(listed.status).toBe(200)
+    expect(listed.body).toHaveLength(1)
+    const gone = await call(route.tokensDelete!, 'DELETE', `/api/tokens/${id}`, { headers: device, address: '192.168.1.30', params: { id } })
+    expect(gone.status).toBe(204)
+    expect(useDb().select().from(tokens).all()).toHaveLength(0)
+  })
+
   it('a public account\'s token is not valid in local mode', async () => {
     const ann = newUser('Ann')
     const { token } = mint(ann)

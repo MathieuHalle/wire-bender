@@ -5,7 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { ADVISORY } from '~core/advisory'
-import { apiCall, configFrom } from './client'
+import { apiCall, BOARD_KEY, configFrom } from './client'
 
 /** One API call: what `apiCall` does, with the server and token already bound. */
 export type Call = (method: string, path: string, body?: unknown) => Promise<{ status: number, json: unknown }>
@@ -16,7 +16,7 @@ const RULES = 'Edit a board by reading it with get_board first, then calling rep
   + 'A 409 means someone else changed the board in between: read it again with get_board, redo your change on the new board, and send it with the new head; never resend the old data. '
   + 'Check results are advisory: never claim a board is safe to power.'
 
-const boardArg = z.string().min(1).describe('A board id (owner only) or a share link id')
+const boardArg = z.string().regex(BOARD_KEY, 'A board key is letters, digits, - and _ only').describe('A board id (owner only) or a share link id')
 const revisionArg = z.number().int().positive().describe('A revision number')
 const dataArg = z.record(z.string(), z.unknown()).describe('A whole board file (JSON), as get_board returns it in `board`')
 
@@ -76,7 +76,7 @@ export function createMcpServer(call: Call): McpServer {
   }, ({ board: key }) => api('GET', `${board(key)}/check`, undefined, j => text(`${JSON.stringify(j, null, 2)}\n${ADVISORY}`)))
 
   server.registerTool('list_revisions', {
-    description: `List a board's revisions, newest last. ${RULES}`,
+    description: `List a board's revisions, newest first. ${RULES}`,
     inputSchema: { board: boardArg }
   }, ({ board: key }) => api('GET', `${board(key)}/revisions`))
 

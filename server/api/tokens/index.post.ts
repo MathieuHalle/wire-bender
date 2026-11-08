@@ -1,7 +1,7 @@
 import { useDb } from '../../db'
 import { readCapped } from '../../utils/readCapped'
 import { mintToken } from '../../utils/tokens'
-import { tokenManager } from '../../utils/sendResult'
+import { tokenManager, whoOf } from '../../utils/sendResult'
 
 const MAX_BODY = 4096
 
@@ -13,6 +13,12 @@ export default defineEventHandler(async (event) => {
   setResponseHeader(event, 'cache-control', 'no-store')
   const who = tokenManager(event)
   if (!who.ok) return who.body
+  // R8: in local mode a paired device cannot make a token: it would outlive unpairing the device.
+  const caller = whoOf(event)
+  if (caller.kind === 'local' && caller.device) {
+    setResponseStatus(event, 403)
+    return { error: 'Create tokens on this computer.' }
+  }
   const text = Number(getRequestHeader(event, 'content-length') ?? 0) > MAX_BODY ? null : await readCapped(event.node.req, MAX_BODY)
   if (text === null) {
     setResponseStatus(event, 413)

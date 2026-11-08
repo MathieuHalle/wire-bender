@@ -62,6 +62,16 @@ describe('import', () => {
   })
 })
 
+describe('pull key check', () => {
+  it.each(['.', '..', 'a b', 'a/b'])('rejects %j without calling the server', async (key) => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    expect(await pullCmd([key, '-o', path.join(dir, 'never.json')])).toBe(2)
+    expect(err.join('\n')).toMatch(/board key/)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
 describe('pull', () => {
   const board = () => JSON.parse(readFileSync(fixturePath, 'utf8'))
 

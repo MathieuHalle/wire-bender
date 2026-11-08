@@ -1,7 +1,7 @@
 // The CLI commands that talk to a server: import and pull. Never prints the token.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { parseBoard } from '~core/schema'
-import { apiCall, configFrom, errorLines } from './client'
+import { apiCall, BOARD_KEY, configFrom, errorLines } from './client'
 import { ADVISORY } from './format'
 
 export const REMOTE_LINES = '       wirebender import <file> [--url <server>] [--token <token>]\n       wirebender pull <board> -o <file> [--force] [--url <server>] [--token <token>]\n       (--url defaults to $WIREBENDER_SERVER or http://localhost:3000; --token to $WIREBENDER_TOKEN)'
@@ -67,6 +67,10 @@ export async function pullCmd(args: string[], env: Record<string, string | undef
     return 2
   }
   const out = p.out
+  if (!BOARD_KEY.test(p.positional[0]!)) {
+    console.error('A board key is letters, digits, - and _ only.')
+    return 2
+  }
   if (existsSync(out) && !p.force) {
     console.error(`${out} exists; add --force to overwrite`)
     return 2

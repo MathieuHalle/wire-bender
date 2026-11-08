@@ -16,7 +16,8 @@ const ROUTES: [string, string][] = [
   ['GET /api/boards/:id/revisions', 'history'],
   ['GET /api/boards/:id/revisions/:n', 'the board as it was at revision `n`'],
   ['POST /api/boards/:id/revisions/:n/restore', 'makes revision `n` the board again, as a new revision'],
-  ['POST /api/boards/:id/undo`, `/redo', 'undo or redo the last change'],
+  ['POST /api/boards/:id/undo', 'undo the last change (`409` with `{ reason }` if there is nothing to undo)'],
+  ['POST /api/boards/:id/redo', 'redo the last undone change (`409` with `{ reason }` if there is nothing to redo)'],
   ['POST /api/boards/:id/fork', 'a copy in your account, `{ id }` (signed in; on your own board it is a duplicate named `<name> (copy)`)'],
   ['POST /api/boards/:id/trash', 'moves the board to the trash, `{ trashedAt }` (owner)'],
   ['POST /api/boards/:id/untrash', 'brings it back, `{ trashedAt: null }` (owner)'],
@@ -123,6 +124,7 @@ const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localh
         <li><code>{ "error": "…" }</code> with the status: one message (<code>401</code>, <code>403</code>, <code>404</code>, <code>413</code>…).</li>
         <li><code>{ "errors": ["…"] }</code> with <code>422</code>: what is wrong with the data you sent, one line each.</li>
         <li><code>409</code> on a <code>PUT</code>: the board moved on. The body is <code>{ "current": n }</code>, the board's current <code>head</code>; GET the board again.</li>
+        <li><code>409</code> on undo, redo or restore: <code>{ "reason": "…" }</code>, why it cannot be done.</li>
       </ul>
     </section>
 
