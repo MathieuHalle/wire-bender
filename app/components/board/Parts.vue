@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Part bodies at real size (solid on top, dashed ghost on the bottom), leads on both
-// sides, and orientation marks (pin 1, TO-220 tab, diode stripe).
+// sides, and orientation marks (pin 1, TO-220 tab, diode stripe). A part lit as a whole
+// (`part:<ref>`, hovered in the Layers tab) is ringed.
 import { holeMm } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
 import type { PlacedPart } from '~core/footprints'
@@ -78,6 +79,8 @@ const parts = computed(() => props.placed.map((p) => {
   const two = p.fp.twoLead && pinPts.length === 2
   return {
     ref: p.part.ref,
+    /** Lit as a whole: the part hovered in the Layers tab. */
+    lit: props.lit?.ids.has(`part:${p.part.ref}`) ?? false,
     body,
     round,
     c: v(centre),
@@ -100,6 +103,33 @@ const dim = (id: string) => (props.lit && !props.lit.ids.has(id) ? 0.45 : 1)
 
 <template>
   <g pointer-events="none">
+    <!-- glow round a part lit as a whole -->
+    <g
+      fill="none"
+      stroke="#f5b400"
+      stroke-opacity="0.7"
+      stroke-width="0.9"
+    >
+      <template
+        v-for="p in parts.filter(x => x.lit)"
+        :key="`g${p.ref}`"
+      >
+        <circle
+          v-if="p.round"
+          :cx="p.c.x"
+          :cy="p.c.y"
+          :r="p.body.w / 2 + 0.3"
+        />
+        <rect
+          v-else
+          :x="p.body.x - 0.3"
+          :y="p.body.y - 0.3"
+          :width="p.body.w + 0.6"
+          :height="p.body.h + 0.6"
+          rx="0.6"
+        />
+      </template>
+    </g>
     <template v-if="top">
       <g
         v-for="p in parts"

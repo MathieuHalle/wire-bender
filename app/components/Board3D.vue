@@ -25,7 +25,7 @@ const props = withDefaults(defineProps<{
   highlightNets?: string[]
   /** Holes of the finding picked in the panel, ringed on both surfaces. */
   markHoles?: Hole[]
-  /** The Edit tab's view layers: hidden prims are not drawn and not hovered. */
+  /** The view layers (the Layers tab's groups): hidden prims are not drawn and not hovered. */
   layers?: Layers
 }>(), { highlightNets: () => [], markHoles: () => [], layers: () => ({ ...ALL_LAYERS }) })
 const emit = defineEmits<{ 'back': [], 'hover-tag': [tag: Tag | null] }>()

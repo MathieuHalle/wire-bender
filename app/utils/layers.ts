@@ -1,4 +1,4 @@
-// The view layers of the Edit tab. View only: they never change the board file or the
+// The view layers: the group switches of the Layers tab. View only: they never change the board file or the
 // check. Holes and pads are not a layer; they always show.
 import type { JointOwner, Tag } from '~core/scene3d'
 import type { Tool } from './boardView'

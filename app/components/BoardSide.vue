@@ -8,7 +8,8 @@ import type { BoardFile, Side } from '~core/schema'
 import { placePart, type PlacedPart } from '~core/footprints'
 import { buildConnectivity, type Connectivity } from '~core/connectivity'
 import type { Mirror } from '~core/sideView'
-import { litOf, makeGeo, SIDE_MARGIN, sideBox, sideExtent, type Group, type Tool } from '~/utils/boardView'
+import { litOf, makeGeo, SIDE_MARGIN, sideBox, sideExtent, type Group, type Lit, type Tool } from '~/utils/boardView'
+import { drawnBoard, drawnPlaced } from '~/utils/hiddenItems'
 import { ALL_LAYERS, type Layers } from '~/utils/layers'
 import { CANVAS_CONTEXT } from '~/utils/canvasContext'
 
@@ -30,11 +31,18 @@ const props = withDefaults(defineProps<{
   /** Holes of the finding picked in the findings panel (a second highlight, separate from the net). */
   markHoles?: Hole[]
   /**
-   * The Edit tab's view layers. A hidden layer is not drawn; hover, tooltips and clicks
+   * The view layers (the Layers tab's groups). A hidden layer is not drawn; hover, tooltips and clicks
    * still work on the board data (connectivity is unchanged).
    */
   layers?: Layers
-}>(), { layers: () => ({ ...ALL_LAYERS }), mirror: 'none', highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
+  /**
+   * Keys of single items hidden from view (`part:U1`, `wire:W3`, `trail:T7`): not drawn,
+   * labels and ghosts included, and not named in the tooltip.
+   */
+  hidden?: ReadonlySet<string>
+  /** What to light instead of `highlightNet`: one item, hovered in the Layers tab. */
+  highlightLit?: Lit | null
+}>(), { layers: () => ({ ...ALL_LAYERS }), hidden: () => new Set<string>(), highlightLit: null, mirror: 'none', highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
 
 const emit = defineEmits<{
   'hole-click': [hole: Hole]
@@ -54,7 +62,10 @@ const MIRROR_LABEL: Record<Mirror, string> = {
 const geo = computed(() => makeGeo(props.board, props.mirror))
 const placedParts = computed(() => props.placed ?? props.board.parts.map(placePart))
 const connectivity = computed(() => props.conn ?? buildConnectivity(props.board))
-const lit = computed(() => litOf(props.highlightNet))
+const lit = computed(() => props.highlightLit ?? litOf(props.highlightNet))
+/** What is drawn: the board without its hidden items (connectivity stays the whole board's). */
+const drawn = computed(() => drawnBoard(props.board, props.hidden))
+const drawnParts = computed(() => drawnPlaced(placedParts.value, props.hidden))
 
 /** Board outline (half a pitch past the outer holes) and everything that overhangs it. */
 const extent = computed(() => sideExtent(geo.value, placedParts.value))
@@ -174,7 +185,7 @@ function onClick(ev: MouseEvent) {
 // ---- Tooltip ------------------------------------------------------------------------
 const pinAt = computed(() => {
   const m = new Map<string, string[]>()
-  for (const p of placedParts.value)
+  for (const p of drawnParts.value)
     for (const pin of p.pins) {
       const k = holeKey(pin.hole)
       m.set(k, [...(m.get(k) ?? []), `${p.part.ref} pin ${pin.name}`])
@@ -266,30 +277,30 @@ const ringed = computed(() => {
         <!-- the other side's wires, dashed, under everything of this side -->
         <BoardGhostWires
           v-if="layers.wires"
-          :board="board"
+          :board="drawn"
           :side="side"
           :geo="geo"
         />
         <BoardCopper
           v-if="layers.trails"
-          :board="board"
+          :board="drawn"
           :side="side"
           :geo="geo"
           :lit="lit"
           :conn="connectivity"
-          :placed="placedParts"
+          :placed="drawnParts"
         />
         <BoardParts
           v-if="layers.components"
-          :board="board"
+          :board="drawn"
           :side="side"
           :geo="geo"
           :lit="lit"
-          :placed="placedParts"
+          :placed="drawnParts"
         />
         <BoardWires
           v-if="layers.wires"
-          :board="board"
+          :board="drawn"
           :side="side"
           :geo="geo"
           :lit="lit"
