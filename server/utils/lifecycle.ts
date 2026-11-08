@@ -13,6 +13,8 @@ import { boards, identities, linkVisits, revisions, tokens, users } from '../db/
 import { invalid, notFound, parseBody, withAccess, withOwner, type ApiResult, type BoardRequest } from './api'
 import { createBoard, getBoard, getBoardRow } from './boards'
 import { closeRoom, kickAccount, kickNonOwnerPeers } from './rooms'
+import { tokensRevoked } from './tokenEvents'
+import { userTokenIds } from './accounts'
 import type { SessionState, Who } from './who'
 
 export const TRASH_DAYS = 30
@@ -182,6 +184,8 @@ export function deleteAccount(db: Db, userId: string, now = Date.now()): boolean
   if (userId === 'local') return false
   const changed = db.update(users).set({ deletedAt: now }).where(and(eq(users.id, userId), isNull(users.deletedAt))).run().changes === 1
   if (changed) {
+    // R7 first: the account's token sockets close as a dead token's (4401), not 4403.
+    tokensRevoked(userTokenIds(db, userId))
     const owned = db.select({ id: boards.id }).from(boards).where(eq(boards.ownerId, userId)).all()
     kickAccount(userId, new Set(owned.map(b => b.id)))
   }
@@ -227,6 +231,7 @@ export function purge(db: Db, now = Date.now()): { boards: number, users: number
   for (const userId of dueUsers) {
     const owned = db.select({ id: boards.id }).from(boards).where(eq(boards.ownerId, userId)).all().map(b => b.id)
     for (const id of owned) closeRoom(id)
+    tokensRevoked(userTokenIds(db, userId))
     db.transaction((tx) => {
       deleteBoardRows(tx, owned)
       tx.delete(identities).where(eq(identities.userId, userId)).run()

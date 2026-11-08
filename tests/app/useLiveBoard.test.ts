@@ -298,7 +298,7 @@ describe('useLiveBoard', () => {
     const token = new Awareness(new Y.Doc())
     token.setLocalStateField('user', { name: 'Claude', kind: 'token', avatar: 'https://avatars.githubusercontent.com/u/1' })
     applyAwarenessUpdate(last().awareness, encodeAwarenessUpdate(token, [token.clientID]), 'remote')
-    expect(live.peers.value).toEqual([{ name: 'Claude', color: '', kind: 'token' }])
+    expect(live.peers.value).toEqual([{ name: 'Claude', color: '#64748b', kind: 'token' }])
     token.destroy()
   })
 

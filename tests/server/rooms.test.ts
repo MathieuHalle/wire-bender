@@ -9,10 +9,11 @@ import { openDb, type Db } from '../../server/db'
 import * as decoding from 'lib0/decoding'
 import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
+import { WebsocketProvider } from 'y-websocket'
 import { eq } from 'drizzle-orm'
 import { revisions } from '../../server/db/schema'
 import { MAX_BOARD_BYTES, createBoard, getBoard, getRevision, listRevisions } from '../../server/utils/boards'
-import { GROUP_IDLE_MS, MAX_AWARENESS_BYTES, MAX_PEER_CLIENTS, TOKEN_PRESENCE_MS, closeRoom, openRoom, type Room } from '../../server/utils/rooms'
+import { GROUP_IDLE_MS, MAX_AWARENESS_BYTES, MAX_PEER_CLIENTS, TOKEN_PRESENCE_MS, closeRoom, openRoom, type Presence, type Room } from '../../server/utils/rooms'
 import { putBoard, redoBoard, renameBoard, restoreRevision, undoBoard } from '../../server/utils/api'
 import type { Who } from '../../server/utils/who'
 import { MAX_MESSAGE_BYTES, capSocketPayload, handleMessage } from '../../server/utils/liveMessage'
@@ -30,18 +31,27 @@ function fixture(): BoardFile {
   return r.board
 }
 
-/** An in-memory Yjs doc wired to a room, as a browser tab would be. */
-interface Client { peerId: string, author: string, doc: Y.Doc, awareness: Awareness, room: Room, last: { ok: boolean, reason?: string } | null, left: boolean }
+/**
+ * An in-memory Yjs doc wired to a room, as a browser tab would be. Like y-websocket, it
+ * sends the room every presence change it sees, its own or received (R6); `refused` holds
+ * any of those the room refused (the socket would have closed).
+ */
+interface Client { peerId: string, author: string, doc: Y.Doc, awareness: Awareness, room: Room, last: { ok: boolean, reason?: string } | null, left: boolean, refused: { ok: boolean, reason?: string }[] }
 
-function connect(peerId: string, author = 'Local', authorId: string | null = null, presence?: { name: string, avatar?: string }): Client {
+function connect(peerId: string, author = 'Local', authorId: string | null = null, presence?: Presence, tokenId: string | null = null): Client {
   const room = openRoom(db, id)!
   const doc = new Y.Doc()
   const awareness = new Awareness(doc)
-  const client: Client = { peerId, author, doc, awareness, room, last: null, left: false }
+  const client: Client = { peerId, author, doc, awareness, room, last: null, left: false, refused: [] }
+  awareness.on('update', ({ added, updated, removed }: Record<'added' | 'updated' | 'removed', number[]>) => {
+    if (client.left) return
+    const r = room.receiveAwareness(peerId, encodeAwarenessUpdate(awareness, [...added, ...updated, ...removed]))
+    if (!r.ok) client.refused.push(r)
+  })
   room.join(peerId, author, {
     update: u => Y.applyUpdate(doc, u, 'remote'),
     awareness: u => applyAwarenessUpdate(awareness, u, 'remote')
-  }, { role: 'owner', viaLink: false, authorId, presence })
+  }, { role: 'owner', viaLink: false, authorId, presence, tokenId })
   Y.applyUpdate(doc, Y.encodeStateAsUpdate(room.doc), 'remote')
   doc.on('update', (u: Uint8Array, origin: unknown) => {
     if (origin !== 'remote') client.last = room.receive(peerId, author, u)
@@ -84,10 +94,13 @@ beforeEach(() => {
   id = createBoard(db, fixture(), 'create', 'Local', 'local').id
 })
 afterEach(() => {
+  // No test's browser echo may close its socket.
+  const refused = clients.flatMap(c => c.refused.map(r => ({ peer: c.peerId, ...r })))
   for (const c of clients.splice(0)) leave(c)
   vi.useRealTimers()
   db.$client.close()
   rmSync(dir, { recursive: true, force: true })
+  expect(refused).toEqual([])
 })
 
 describe('rooms', () => {
@@ -342,7 +355,7 @@ describe('rooms', () => {
     expect(connect('c').awareness.getStates().get(guest.doc.clientID)).toEqual({ user: { name: 'Guest', color: '#123456' } })
   })
 
-  it('a peer can\'t claim another peer\'s presence id: the update is refused and reaches no one', () => {
+  it('a peer can\'t claim another peer\'s presence id: the entry is dropped and reaches no one', () => {
     const a = connect('a')
     const g = connect('g', 'Visitor', null, { name: 'Guest' })
     const c = connect('c')
@@ -354,7 +367,8 @@ describe('rooms', () => {
     // A higher clock than a's own state, so the room would take it.
     for (let i = 0; i < 5; i++) forged.setLocalState({ user: { name: 'Ada' } })
     const r = g.room.receiveAwareness('g', encodeAwarenessUpdate(forged, [a.doc.clientID]))
-    expect(r).toEqual({ ok: false, reason: 'the presence update names another peer\'s client' })
+    // R6: dropped, not refused (a browser sends back what it receives).
+    expect(r).toEqual({ ok: true })
     expect(c.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Local · Tablet' } })
     // a keeps its own presence when g leaves.
     leave(g)
@@ -777,15 +791,181 @@ describe('rooms', () => {
       const forged = new Awareness(new Y.Doc())
       forged.clientID = reserved
       for (let i = 0; i < 5; i++) forged.setLocalState({ user: { name: 'Not Claude' } })
-      expect(g.room.receiveAwareness('g', encodeAwarenessUpdate(forged, [reserved]))).toEqual({ ok: false, reason: 'the presence update names another peer\'s client' })
+      expect(g.room.receiveAwareness('g', encodeAwarenessUpdate(forged, [reserved]))).toEqual({ ok: true })
       expect(tokens(a).map(([, s]) => s)).toEqual([{ user: { name: 'Claude', kind: 'token' } }])
       // Nor any id in the reserved range, before a token takes it.
       const ahead = new Awareness(new Y.Doc())
       ahead.clientID = reserved + 1
       ahead.setLocalState({ user: { name: 'Ada' } })
-      expect(g.room.receiveAwareness('g', encodeAwarenessUpdate(ahead, [reserved + 1])).ok).toBe(false)
+      expect(g.room.receiveAwareness('g', encodeAwarenessUpdate(ahead, [reserved + 1]))).toEqual({ ok: true })
+      expect(a.awareness.getStates().has(reserved + 1)).toBe(false)
+      expect(a.room.awareness.getStates().has(reserved + 1)).toBe(false)
       forged.destroy()
       ahead.destroy()
+    })
+
+    it('a browser that echoes a token entry stays connected', () => {
+      vi.useFakeTimers()
+      const a = connect('a')
+      put()
+      expect(names(a)).toEqual(['Claude'])
+      vi.advanceTimersByTime(TOKEN_PRESENCE_MS)
+      expect(tokens(a)).toEqual([])
+      // Again after the removal: a renewed entry under the same id is accepted and echoed.
+      put()
+      expect(names(a)).toEqual(['Claude'])
+      expect(a.refused).toEqual([])
+    })
+
+    it('two echoing tabs on one board both stay connected and see each other', () => {
+      const a = connect('a')
+      const b = connect('b')
+      a.awareness.setLocalState({ user: { name: 'Local · Tablet' } })
+      b.awareness.setLocalState({ user: { name: 'Local · This computer' } })
+      put()
+      expect(a.awareness.getStates().get(b.doc.clientID)).toEqual({ user: { name: 'Local · This computer' } })
+      expect(b.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Local · Tablet' } })
+      expect(names(a)).toEqual(['Claude'])
+      expect(names(b)).toEqual(['Claude'])
+      a.awareness.setLocalStateField('user', { name: 'Local · Tablet 2' })
+      expect(b.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Local · Tablet 2' } })
+      expect([a.refused, b.refused]).toEqual([[], []])
+    })
+
+    it('a forged entry naming a reserved or foreign id is dropped; the sender\'s own entry still applies', () => {
+      const a = connect('a')
+      const b = connect('b')
+      a.awareness.setLocalState({ user: { name: 'Local · Tablet' } })
+      put()
+      const [reserved] = tokens(b)[0]!
+      const relayed: Uint8Array[] = []
+      a.room.join('watch', 'Local', { update: () => {}, awareness: u => relayed.push(u) })
+      relayed.length = 0 // the join snapshot
+      const e = encoding.createEncoder()
+      const entries: [number, number, unknown][] = [
+        [reserved, 99, { user: { name: 'Not Claude' } }],
+        [a.doc.clientID, 99, { user: { name: 'Ada' } }],
+        [reserved + 7, 1, { user: { name: 'Ghost' } }],
+        [b.doc.clientID, 1, { user: { name: 'b itself' } }]
+      ]
+      encoding.writeVarUint(e, entries.length)
+      for (const [c, clock, state] of entries) {
+        encoding.writeVarUint(e, c)
+        encoding.writeVarUint(e, clock)
+        encoding.writeVarString(e, JSON.stringify(state))
+      }
+      expect(b.room.receiveAwareness('b', encoding.toUint8Array(e))).toEqual({ ok: true })
+      // Only b's own entry got through, to the room and the others.
+      expect(relayed).toHaveLength(1)
+      const seen = new Awareness(new Y.Doc())
+      applyAwarenessUpdate(seen, relayed[0]!, 'remote')
+      expect([...seen.getStates()].filter(([c]) => c !== seen.clientID)).toEqual([[b.doc.clientID, { user: { name: 'b itself' } }]])
+      seen.destroy()
+      expect(a.room.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Local · Tablet' } })
+      expect(names(a)).toEqual(['Claude'])
+      expect(a.room.awareness.getStates().has(reserved + 7)).toBe(false)
+      // Nothing but forgeries: nothing stored or relayed, and the socket stays.
+      relayed.length = 0
+      const forged = new Awareness(new Y.Doc())
+      forged.clientID = a.doc.clientID
+      for (let i = 0; i < 200; i++) forged.setLocalState({ user: { name: 'Mallory' } })
+      expect(b.room.receiveAwareness('b', encodeAwarenessUpdate(forged, [a.doc.clientID]))).toEqual({ ok: true })
+      expect(relayed).toEqual([])
+      forged.destroy()
+      a.room.leave('watch')
+    })
+
+    it('real y-websocket tabs stay connected through a token write and see each other', async () => {
+      const closes: { code?: number, reason?: string }[] = []
+      const room = openRoom(db, id)!
+      let n = 0
+      /** A WebSocket that reaches the room the way the socket route does (handleMessage, link). */
+      class RoomSocket {
+        static readonly OPEN = 1
+        readonly OPEN = 1
+        readyState = 0
+        binaryType = 'arraybuffer'
+        onopen: (() => void) | null = null
+        onmessage: ((e: { data: ArrayBuffer }) => void) | null = null
+        onclose: ((e: { code: number, reason: string }) => void) | null = null
+        onerror: (() => void) | null = null
+        private readonly peerId = `tab${++n}`
+        constructor() {
+          const deliver = (type: number, write: (e: encoding.Encoder) => void) => {
+            const e = encoding.createEncoder()
+            encoding.writeVarUint(e, type)
+            write(e)
+            const data = encoding.toUint8Array(e)
+            // Async, like a socket: never inside the sender's call.
+            setTimeout(() => this.readyState === 1 && this.onmessage?.({ data: data.buffer as ArrayBuffer }), 0)
+          }
+          setTimeout(() => {
+            room.join(this.peerId, 'Local', {
+              update: u => deliver(0, e => syncProtocol.writeUpdate(e, u)),
+              awareness: u => deliver(1, e => encoding.writeVarUint8Array(e, u))
+            })
+            deliver(0, e => syncProtocol.writeSyncStep1(e, room.doc))
+            this.readyState = 1
+            this.onopen?.()
+          }, 0)
+        }
+
+        send(data: Uint8Array) {
+          const peer = { id: this.peerId, send: (d: Uint8Array) => setTimeout(() => this.readyState === 1 && this.onmessage?.({ data: d.slice().buffer as ArrayBuffer }), 0) }
+          const r = handleMessage(peer, room, 'Local', new Uint8Array(data))
+          if (!r.ok) this.close(r.code ?? 4400, r.reason ?? '')
+        }
+
+        close(code = 1000, reason = '') {
+          if (this.readyState === 3) return
+          if (code !== 1000) closes.push({ code, reason })
+          this.readyState = 3
+          room.leave(this.peerId)
+          this.onclose?.({ code, reason })
+        }
+      }
+      const settle = async () => {
+        for (let i = 0; i < 20; i++) await new Promise(r => setTimeout(r, 0))
+      }
+      // A peer that stays, so the room does while the tabs come and go.
+      room.join('keep', 'Local', { update: () => {}, awareness: () => {} })
+      const tab = (name: string) => {
+        const p = new WebsocketProvider('ws://test', id, new Y.Doc(), { WebSocketPolyfill: RoomSocket as unknown as typeof WebSocket, disableBc: true })
+        p.awareness.setLocalStateField('user', { name, color: '#123456' })
+        return p
+      }
+      const one = tab('Local · Tablet')
+      const two = tab('Local · This computer')
+      try {
+        await settle()
+        put()
+        await settle()
+        const tokenIn = (p: WebsocketProvider) => [...p.awareness.getStates().values()].filter(isToken)
+        expect(closes).toEqual([])
+        expect(tokenIn(one)).toEqual([{ user: { name: 'Claude', kind: 'token' } }])
+        expect(tokenIn(two)).toEqual([{ user: { name: 'Claude', kind: 'token' } }])
+        expect(one.awareness.getStates().get(two.doc.clientID)).toMatchObject({ user: { name: 'Local · This computer' } })
+        expect(two.awareness.getStates().get(one.doc.clientID)).toMatchObject({ user: { name: 'Local · Tablet' } })
+        expect([one.wsconnected, two.wsconnected]).toEqual([true, true])
+      } finally {
+        one.destroy()
+        two.destroy()
+        await settle()
+        room.leave('keep')
+      }
+    })
+
+    it('a token whose socket shows it is not shown again for its HTTP writes', () => {
+      const b = connect('b')
+      const sock = connect('sock', 'Claude · Local', 'local', { name: 'Claude', kind: 'token' }, 'tok-1')
+      sock.awareness.setLocalState({ user: { name: 'whatever' } })
+      put()
+      expect(names(b)).toEqual(['Claude'])
+      expect(b.awareness.getStates().get(sock.doc.clientID)).toEqual({ user: { name: 'Claude', kind: 'token' } })
+      // A token socket with no presence of its own: the HTTP write shows it.
+      connect('quiet', 'Bot · Local', 'local', { name: 'Bot', kind: 'token' }, 'tok-2')
+      put({ ...claude, author: 'Bot · Local', token: { id: 'tok-2', name: 'Bot' } })
+      expect(names(b)).toEqual(['Bot', 'Claude'])
     })
 
     it('a signed-in peer cannot pass itself off as a token', () => {

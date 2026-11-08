@@ -6,6 +6,7 @@ import { parseBoard, type BoardFile } from '~core/schema'
 import { undoState } from '#shared/undoState'
 import { RECORDS, SECTION_NAMES, boardToDoc, docToBoard, itemKey, sameItems, unknownSingles, withItems, writeBoard } from '#shared/yboard'
 import type { Db } from '../db'
+import { onTokensRevoked } from './tokenEvents'
 import type { Role } from './boardAccess'
 import { MAX_BOARD_BYTES, boardBefore, commitRevision, getBoard, getRevision, listRevisions, recover, saveCurrent } from './boards'
 
@@ -33,17 +34,30 @@ const TOKEN_ORIGIN = Symbol('token presence')
 /** A personal API token at work on the board (never the token string). */
 export interface ActiveToken { id: string, name: string }
 
-/** The client ids an awareness update names (y-protocols: count, then id, clock, state each). */
-function awarenessClients(update: Uint8Array): number[] {
+/** One entry of an awareness update: a client id, its clock and its state as sent (JSON). */
+interface AwarenessEntry { client: number, clock: number, state: string }
+
+/** An awareness update's entries (y-protocols: count, then id, clock, state each). */
+function awarenessEntries(update: Uint8Array): AwarenessEntry[] {
   const d = decoding.createDecoder(update)
   const n = decoding.readVarUint(d)
-  const ids: number[] = []
+  const entries: AwarenessEntry[] = []
   for (let i = 0; i < n; i++) {
-    ids.push(decoding.readVarUint(d))
-    decoding.readVarUint(d)
-    decoding.readVarString(d)
+    entries.push({ client: decoding.readVarUint(d), clock: decoding.readVarUint(d), state: decoding.readVarString(d) })
   }
-  return ids
+  return entries
+}
+
+/** An awareness update of `entries`, in the y-protocols format. */
+function encodeEntries(entries: readonly AwarenessEntry[]): Uint8Array {
+  const e = encoding.createEncoder()
+  encoding.writeVarUint(e, entries.length)
+  for (const { client, clock, state } of entries) {
+    encoding.writeVarUint(e, client)
+    encoding.writeVarUint(e, clock)
+    encoding.writeVarString(e, state)
+  }
+  return encoding.toUint8Array(e)
 }
 
 /** How a room reaches one connected peer. */
@@ -160,6 +174,11 @@ interface Group { author: string, authorId: string | null, tokenId: string | nul
 const groupKey = (author: string, authorId: string | null, tokenId: string | null): string => JSON.stringify([authorId, tokenId, author])
 const rooms = new Map<string, Room>()
 
+// R7: a revoked token (or one whose user is suspended or deleted) leaves every board's presence at once.
+onTokensRevoked((ids) => {
+  for (const room of rooms.values()) for (const id of ids) room.tokenGone(id)
+})
+
 /** The live room for a board, opened (after `recover`) if none is open. `null` when there is no such board. */
 export function openRoom(db: Db, id: string): Room | null {
   const open = rooms.get(id)
@@ -232,7 +251,7 @@ export class Room {
     this.awareness.on('update', ({ added, updated, removed }: Record<'added' | 'updated' | 'removed', number[]>, origin: unknown) => {
       const from = typeof origin === 'string' ? this.peers.get(origin) : undefined
       if (from) {
-        // Updated too: a state no peer owned yet (receiveAwareness refuses another peer's)
+        // Updated too: a state no peer owned yet (receiveAwareness drops another peer's)
         // belongs to the sender from then on, so it goes when that peer leaves.
         for (const c of [...added, ...updated]) from.clients.add(c)
         for (const c of removed) from.clients.delete(c)
@@ -276,6 +295,8 @@ export class Room {
    */
   tokenActive(token: ActiveToken): void {
     if (this.closed) return
+    // A socket the token has open already shows it (stamped as a token): not twice.
+    if ([...this.peers.values()].some(p => p.tokenId === token.id && p.clients.size > 0)) return
     const known = this.tokens.get(token.id)
     clearTimeout(known?.timer)
     const client = known?.client ?? this.nextTokenClient++
@@ -291,8 +312,8 @@ export class Room {
     applyAwarenessUpdate(this.awareness, encoding.toUint8Array(e), TOKEN_ORIGIN)
   }
 
-  /** Remove a token's presence entry (it went quiet, or the room is closing). */
-  private tokenGone(tokenId: string): void {
+  /** Remove a token's presence entry (it went quiet, was revoked, or the room is closing). */
+  tokenGone(tokenId: string): void {
     const entry = this.tokens.get(tokenId)
     if (!entry) return
     clearTimeout(entry.timer)
@@ -360,23 +381,24 @@ export class Room {
   }
 
   /**
-   * Apply a peer's presence and relay it to the others. Refused whole (nothing stored or
-   * relayed, and the socket closes with 4400) when it is over MAX_AWARENESS_BYTES, names a
-   * client id another peer has or one reserved for tokens, or would give this peer more
-   * than MAX_PEER_CLIENTS ids.
+   * Apply a peer's presence and relay it to the others (R6). Entries naming a client id
+   * another peer has, or one reserved for tokens, are dropped and the rest applied: a
+   * y-websocket client sends back every presence change it receives, so those are mostly
+   * echoes, and a forgery is never stored or relayed either way. Refused whole (nothing
+   * stored or relayed, and the socket closes with 4400) when it is over MAX_AWARENESS_BYTES,
+   * malformed, or the entries kept would give this peer more than MAX_PEER_CLIENTS ids.
    */
   receiveAwareness(peerId: string, update: Uint8Array): Received {
     const peer = this.peers.get(peerId)
     if (!peer) return NOT_JOINED
     if (update.byteLength > MAX_AWARENESS_BYTES) return { ok: false, reason: `the presence update is larger than ${MAX_AWARENESS_BYTES} bytes` }
     try {
-      const ids = awarenessClients(update)
-      if (ids.some(c => c >= TOKEN_CLIENT_BASE)) return { ok: false, reason: 'the presence update names another peer\'s client' }
-      for (const [otherId, other] of this.peers) {
-        if (otherId !== peerId && ids.some(c => other.clients.has(c))) return { ok: false, reason: 'the presence update names another peer\'s client' }
-      }
-      if (new Set([...peer.clients, ...ids]).size > MAX_PEER_CLIENTS) return { ok: false, reason: `a peer may have at most ${MAX_PEER_CLIENTS} presence clients` }
-      applyAwarenessUpdate(this.awareness, update, peerId)
+      const entries = awarenessEntries(update)
+      const others = [...this.peers].filter(([otherId]) => otherId !== peerId).map(([, other]) => other.clients)
+      const kept = entries.filter(({ client }) => client < TOKEN_CLIENT_BASE && !others.some(clients => clients.has(client)))
+      if (new Set([...peer.clients, ...kept.map(e => e.client)]).size > MAX_PEER_CLIENTS) return { ok: false, reason: `a peer may have at most ${MAX_PEER_CLIENTS} presence clients` }
+      if (kept.length === 0) return { ok: true }
+      applyAwarenessUpdate(this.awareness, kept.length === entries.length ? update : encodeEntries(kept), peerId)
       return { ok: true }
     } catch (e) {
       return { ok: false, reason: `malformed awareness update: ${(e as Error).message}` }

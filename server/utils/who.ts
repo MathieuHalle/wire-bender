@@ -98,6 +98,15 @@ function tokenState(db: Db, mode: Mode, bearer: string): SessionState {
   return { who, account: row, pendingDeletion: false }
 }
 
+/**
+ * Who a source's bearer token is, synchronously (a socket's open checks its token again);
+ * null when it sends no bearer header.
+ */
+export function bearerSession(source: TrustSource, deps: Pick<WhoDeps, 'mode' | 'db'> = {}): SessionState | null {
+  const bearer = bearerOf(source)
+  return bearer === undefined ? null : tokenState(deps.db ?? useDb(), deps.mode ?? checkMode(), bearer)
+}
+
 /** Who a request or socket is, with the account behind the session. */
 export async function resolveSession(source: TrustSource, deps: WhoDeps = {}): Promise<SessionState> {
   const mode = deps.mode ?? checkMode()

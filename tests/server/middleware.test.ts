@@ -13,12 +13,13 @@ import * as Y from 'yjs'
 import type { BoardFile } from '../../core/schema'
 import { closeDb, useDb } from '../../server/db'
 import { boards, linkVisits, revisions, users } from '../../server/db/schema'
-import { signIn } from '../../server/utils/accounts'
+import { patchAccount, signIn } from '../../server/utils/accounts'
 import { unlockEntry } from '../../server/utils/boardAccess'
 import { createBoard, getBoardRow } from '../../server/utils/boards'
+import { deleteAccount } from '../../server/utils/lifecycle'
 import { openRoom } from '../../server/utils/rooms'
 import { MESSAGE_COMMAND } from '../../shared/liveCommand'
-import { mintToken } from '../../server/utils/tokens'
+import { mintToken, revokeToken } from '../../server/utils/tokens'
 import { docToBoard, writeBoard } from '../../shared/yboard'
 import type { NodeReqLike } from '../../server/utils/peerAddress'
 import type { SessionData } from '../../server/utils/who'
@@ -529,6 +530,64 @@ describe('board socket', () => {
       ws.close(p.peer)
       room.leave('watcher')
       expect(JSON.stringify(authored(b.id))).not.toContain(minted.token)
+    })
+
+    /** Ada's board, with a token socket open on it (and a cookie peer that stays). */
+    async function tokenSocket(name = 'Ada'): Promise<{ ada: string, b: { id: string }, tokenId: string, closed: { code?: number, reason?: string }[], room: ReturnType<typeof openRoom> & object }> {
+      publicMode()
+      const ada = newUser(name)
+      const b = board(ada)
+      const minted = mintToken(useDb(), ada, 'Claude')
+      if (!minted.ok) throw new Error('mint failed')
+      const up = upgradeRequest(`/_ws/board/${b.id}`, '203.0.113.9', { host: 'wire.example.org', authorization: `Bearer ${minted.token}` })
+      expect(await ws.upgrade(up)).toBeUndefined()
+      const p = peer(up, `tok-${minted.row.id}`)
+      ws.open(p.peer)
+      expect(p.closed).toEqual([])
+      const room = openRoom(useDb(), b.id)!
+      room.join('watcher', 'Bob', { update: () => {}, awareness: () => {} }, { role: 'owner', viaLink: false, authorId: 'someone' })
+      // Its HTTP presence too.
+      room.tokenActive({ id: minted.row.id, name: 'Claude' })
+      expect(room.peerTokenId(p.peer.id)).toBe(minted.row.id)
+      return { ada, b, tokenId: minted.row.id, closed: p.closed, room }
+    }
+    const tokenEntries = (room: { awareness: { getStates: () => Map<number, unknown> } }) =>
+      [...room.awareness.getStates().values()].filter(s => (s as { user?: { kind?: string } }).user?.kind === 'token')
+
+    it('revoking the token closes its socket with 4401 at once, and its presence goes', async () => {
+      const t = await tokenSocket()
+      expect(revokeToken(useDb(), t.ada, t.tokenId)).toBe(true)
+      expect(t.closed).toEqual([{ code: 4401, reason: 'token revoked' }])
+      expect(t.room.peerAccess(`tok-${t.tokenId}`)).toBeNull()
+      expect(tokenEntries(t.room)).toEqual([])
+      t.room.leave('watcher')
+    })
+
+    it('suspending or deleting the token\'s user closes its socket with 4401', async () => {
+      const t = await tokenSocket()
+      const admin = newUser('Root')
+      useDb().update(users).set({ isAdmin: 1 }).where(eq(users.id, admin)).run()
+      expect(patchAccount(useDb(), admin, t.ada, { suspended: true }).status).toBe(200)
+      expect(t.closed).toEqual([{ code: 4401, reason: 'token revoked' }])
+      expect(tokenEntries(t.room)).toEqual([])
+
+      const d = await tokenSocket('Dee')
+      expect(deleteAccount(useDb(), d.ada)).toBe(true)
+      expect(d.closed).toEqual([{ code: 4401, reason: 'token revoked' }])
+    })
+
+    it('a token revoked between the upgrade and the open is refused on open', async () => {
+      publicMode()
+      const ada = newUser('Ada')
+      const b = board(ada)
+      const minted = mintToken(useDb(), ada, 'Claude')
+      if (!minted.ok) throw new Error('mint failed')
+      const up = upgradeRequest(`/_ws/board/${b.id}`, '203.0.113.9', { host: 'wire.example.org', authorization: `Bearer ${minted.token}` })
+      expect(await ws.upgrade(up)).toBeUndefined()
+      revokeToken(useDb(), ada, minted.row.id)
+      const p = peer(up)
+      ws.open(p.peer)
+      expect(p.closed).toEqual([{ code: 4401, reason: 'invalid token' }])
     })
 
     it('local mode: a token from another address joins, and its edits are the token\'s', async () => {

@@ -6,6 +6,7 @@ import { and, count, desc, eq } from 'drizzle-orm'
 import type { Db } from '../db'
 import { tokens } from '../db/schema'
 import { MAX_NAME, cleanName } from './accounts'
+import { tokensRevoked } from './tokenEvents'
 
 export type TokenRow = typeof tokens.$inferSelect
 
@@ -54,9 +55,11 @@ export function listTokens(db: Db, userId: string): TokenListing[] {
     .from(tokens).where(eq(tokens.userId, userId)).orderBy(desc(tokens.createdAt), desc(tokens.id)).all()
 }
 
-/** Delete one of the user's own tokens; false if it is not theirs or is gone. */
+/** Delete one of the user's own tokens; false if it is not theirs or is gone. Its live sockets close at once (R7). */
 export function revokeToken(db: Db, userId: string, id: string): boolean {
-  return db.delete(tokens).where(and(eq(tokens.id, id), eq(tokens.userId, userId))).run().changes === 1
+  const gone = db.delete(tokens).where(and(eq(tokens.id, id), eq(tokens.userId, userId))).run().changes === 1
+  if (gone) tokensRevoked([id])
+  return gone
 }
 
 /** Record a use, at most once per TOKEN_TOUCH_MS per token. */

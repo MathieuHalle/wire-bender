@@ -34,7 +34,7 @@ import { docToBoard, writeBoard } from '#shared/yboard'
 export type LiveStatus = 'connecting' | 'live' | 'offline'
 /**
  * Someone in the presence list; `avatar` is what their copy says (shown only from known
- * hosts). `kind: 'token'` is an API token at work (the server says so): no avatar or colour.
+ * hosts). `kind: 'token'` is an API token at work (the server says so): no avatar, TOKEN_COLOR.
  */
 export interface Peer { name: string, color: string, avatar?: string, kind?: 'token' }
 
@@ -87,6 +87,9 @@ const CLOSE_UNTRUSTED = 4401
 const CLOSE_ACCESS = 4403
 const CLOSE_NO_BOARD = 4404
 const MAX_BACKOFF_MS = 2500
+
+/** The colour of an API token in presence (it sends none): a neutral slate. */
+export const TOKEN_COLOR = '#64748b'
 
 /** Presence colours; one is picked per tab. */
 const COLORS = ['#e11d48', '#d97706', '#16a34a', '#0891b2', '#2563eb', '#7c3aed', '#c026d3', '#475569']
@@ -145,7 +148,7 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
     for (const [client, state] of p.awareness.getStates()) {
       const u = (state as { user?: Peer }).user
       if (client !== p.doc.clientID && u && typeof u.name === 'string') {
-        if (u.kind === 'token') list.push({ name: u.name, color: '', kind: 'token' })
+        if (u.kind === 'token') list.push({ name: u.name, color: TOKEN_COLOR, kind: 'token' })
         else list.push({ name: u.name, color: String(u.color), ...(typeof u.avatar === 'string' ? { avatar: u.avatar } : {}) })
       }
     }
