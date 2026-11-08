@@ -125,7 +125,7 @@ Requests from this computer (`localhost`) are trusted. Any other device must pai
 
 ## API
 
-JSON over HTTP, for the app and for scripts (Claude reads and writes boards this way). In local mode callers must be trusted or paired; in public mode they must be signed in (a script cannot sign in yet; tokens come in step 3). A foreign `Origin` or `Host` is refused.
+JSON over HTTP, for the app and for scripts (Claude reads and writes boards this way). In local mode callers must be trusted or paired; in public mode they must be signed in (a script signs in with a token, see Tokens). A foreign `Origin` or `Host` is refused.
 
 | Route | Does |
 | --- | --- |
@@ -142,7 +142,8 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `GET /api/boards/:id/revisions` | history |
 | `GET /api/boards/:id/revisions/:n` | the board as it was at revision `n` |
 | `POST /api/boards/:id/revisions/:n/restore` | makes revision `n` the board again, as a new revision |
-| `POST /api/boards/:id/undo`, `/redo` | undo or redo the last change |
+| `POST /api/boards/:id/undo` | undo the last change (`409` with `{ reason }` if there is nothing to undo) |
+| `POST /api/boards/:id/redo` | redo the last undone change (`409` with `{ reason }` if there is nothing to redo) |
 | `POST /api/boards/:id/fork` | a copy in your account, `{ id }` (signed in; on your own board it is a duplicate named `<name> (copy)`) |
 | `POST /api/boards/:id/trash` | moves the board to the trash, `{ trashedAt }` (owner) |
 | `POST /api/boards/:id/untrash` | brings it back, `{ trashedAt: null }` (owner) |
@@ -162,11 +163,58 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `GET /api/devices` | the paired devices (`id`, `name`, `createdAt`, `lastSeen`) (local mode) |
 | `DELETE /api/devices/:id` | unpairs a device (local mode) |
 | `GET /api/devices/me` | the calling device: `{ name, paired }` (local mode) |
+| `GET /api/tokens` | your tokens (`id`, `name`, `prefix`, `createdAt`, `lastUsedAt`), never the token itself |
+| `POST /api/tokens` | `{ "name" }` makes a token; answers `201 { id, name, prefix, token }`, the only time `token` is shown (up to 20 tokens) |
+| `DELETE /api/tokens/:id` | revokes one of your tokens, `204` |
 
 Sign-in starts at `/auth/github` or `/auth/google`, and `/_ws/board/:id` is the live board's WebSocket (y-websocket protocol; a message over 4,000,000 bytes, a presence update over 8 KB, or a change that makes the board larger than 2,000,000 bytes is refused; only the owner's changes may rename the board). In public mode nuxt-auth-utils also answers `GET` and `DELETE /api/_auth/session` (sign out); any other `/api` path is `404`.
 
 `:id` is a key: a board id (owner only) or a share link id. A role limits what a key can do: `PUT`, undo, redo and restore need edit; rename, trash, sharing and the link need the owner.
 
-Every API write is its own revision (`how: api`) and shows live in open tabs. Writes from this computer (loopback, e.g. `curl` or Claude) are recorded as `Local · This computer`; a paired device's as `Local · <device name>`.
+Send a token as `Authorization: Bearer <token>`. Every API write is its own revision (`how: api`) and shows live in open tabs. Writes from this computer (loopback, e.g. `curl` or Claude) are recorded as `Local · This computer`; a paired device's as `Local · <device name>`; a token's as `<token name> · <user name>` (`<token name> · Local` in local mode).
 
-To change a board safely while others may be editing it, `GET` it first and `PUT` with `"baseRevision"` set to the `head` from that `GET`. A `409` means someone changed it in between (live edits still being grouped count): read it again and redo the change.
+To change a board safely while others may be editing it, `GET` it first and `PUT` with `"baseRevision"` set to the `head` from that `GET`. A `409` means someone changed it in between (live edits still being grouped count). `PUT` answers `{ current }`, the head now; undo, redo and restore answer `{ reason }`. Read the board again, redo the change on it, and send that with the new head; never retry the old body.
+
+The app's `/api` page lists these routes and the errors.
+
+## Tokens
+
+A token lets a script or an AI client use the API as you. Make one on `/account` (**Tokens**): give it a name, copy it at once, it is shown only that one time. A token starts with `wb_`; keep it private and never commit it. You can have 20. **Revoke** stops it at once, and closes its open live connections.
+
+- Send it as `Authorization: Bearer <token>`. It acts as its owner, with that owner's access to boards and share links.
+- In public mode a script needs a token. In local mode this computer is trusted, so a token is optional; with one, the change has a named author, `<token name> · Local`.
+- While a token works on a board, open copies show it in the presence bar with a robot icon.
+- History shows `<token name> · <user name>`. An undo or redo reads `undo of #N by <author>` (or `redo of ...`), naming the author of change `#N`.
+
+A token cannot (`403`, `Not allowed with a token.`):
+
+- manage tokens, or delete, restore or sign out of your account (`/api/me`);
+- delete a board for good, change its sharing, or make a new share link;
+- use `/api/admin`, `POST /api/setup`, `/auth/*` or `/api/_auth/*`;
+- pair or manage devices (`/api/pair`, `/api/devices`);
+- unlock a password link.
+
+Do those in the app.
+
+## CLI import and pull
+
+Besides `check` and `export`, the CLI can talk to a running server:
+
+```sh
+pnpm wirebender import board.wirebender.json [--url http://localhost:3000] [--token wb_...]
+pnpm wirebender pull <board> -o board.wirebender.json [--force] [--url ...] [--token ...]
+```
+
+`--url` defaults to `$WIREBENDER_SERVER`, then `http://localhost:3000`; `--token` to `$WIREBENDER_TOKEN`. `import` checks the file, creates a board and prints its address. `pull` saves a board (an id or share link id) to a file; it will not replace an existing file without `--force`. Exit codes: `0` done, `1` the server refused (its message is printed), `2` bad usage, a bad board file, or an existing output file.
+
+## MCP server for Claude Code
+
+`pnpm wirebender mcp` is an MCP server on stdio. Its tools are `list_boards`, `get_board`, `replace_board`, `check_board`, `list_revisions`, `get_revision`, `undo`, `redo`, `restore_revision` and `create_board`; they follow the editing rules under API (`get_board`, then `replace_board` with `baseRevision`).
+
+Register it with Claude Code. Replace `wb_...` with your token, and `/path/to/wire-bender` with this folder (`--silent` is required, or pnpm's own output breaks the protocol):
+
+```sh
+claude mcp add wirebender --env WIREBENDER_SERVER=http://localhost:3000 --env WIREBENDER_TOKEN=wb_... -- pnpm --silent --dir /path/to/wire-bender wirebender mcp
+```
+
+For a server on another port or address, change `WIREBENDER_SERVER` (or add `--url <server>` after `mcp`; `--token <token>` works too). In local mode you can leave out `WIREBENDER_TOKEN`; in public mode it is required.
