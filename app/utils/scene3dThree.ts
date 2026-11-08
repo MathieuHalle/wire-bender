@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import type { BoardFile } from '~core/schema'
 import {
-  COLORS, COPPER_THICKNESS_MM, HOLE_DIAMETER_MM, PAD_DIAMETER_MM, tagNets,
+  COLORS, COPPER_THICKNESS_MM, HOLE_DIAMETER_MM, LABEL_TEXT_MM, PAD_DIAMETER_MM, tagNets,
   type Prim, type Scene3D, type Tag, type V3, type XZ
 } from '~core/scene3d'
 
@@ -26,7 +26,7 @@ const dimOf = new WeakMap<THREE.Material, THREE.Material>()
 /** Opacity of the meshes outside the highlighted nets. */
 export const DIM_OPACITY = 0.25
 
-/** Disposes every geometry and material under `root` (dim variants included), then empties it. */
+/** Disposes every geometry, material and texture under `root` (dim variants included), then empties it. */
 export function dispose(root: THREE.Object3D): void {
   const geometries = new Set<THREE.BufferGeometry>()
   const materials = new Set<THREE.Material>()
@@ -44,8 +44,13 @@ export function dispose(root: THREE.Object3D): void {
     const dim = dimOf.get(mat)
     if (dim) materials.add(dim)
   }
+  // Textures (the label atlas) are not freed with their material.
+  const textures = new Set<THREE.Texture>()
+  for (const m of materials)
+    for (const v of Object.values(m)) if ((v as THREE.Texture | null)?.isTexture) textures.add(v as THREE.Texture)
   for (const g of geometries) g.dispose()
   for (const m of materials) m.dispose()
+  for (const t of textures) t.dispose()
   for (const i of instanced) i.dispose()
   root.clear()
 }
@@ -173,9 +178,118 @@ export function buildMeshes(scene: Scene3D): BuiltMeshes {
   group.add(instanced('pads', pad, new THREE.MeshStandardMaterial({ color: COLORS.pad, metalness: 0.45, roughness: 0.35 }),
     surfaceMatrices(scene.pads.top, scene.pads.bottom, topY, bottomY)))
 
+  const labels = labelMesh(scene, newCanvas())
+  if (labels) group.add(labels)
+
   for (const p of scene.prims) group.add(primMesh(p, material))
 
   return { group, dispose: () => dispose(group) }
+}
+
+/** A fresh canvas for the label atlas; null without a DOM (tests, server). */
+function newCanvas(): HTMLCanvasElement | null {
+  if (typeof document === 'undefined' || !document) return null
+  try {
+    return document.createElement('canvas')
+  } catch {
+    return null
+  }
+}
+
+/** Atlas font size, px; a cell is LABEL_CELL px tall. */
+const LABEL_PX = 48
+const LABEL_CELL = 64
+const LABEL_ATLAS_W = 1024
+/** Same family as the 2D view's numbers. */
+const LABEL_FONT = `600 ${LABEL_PX}px 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace`
+/** A column number is shrunk to fit this share of a pitch, so neighbours never touch. */
+const LABEL_FIT = 0.9
+
+/**
+ * The printed column numbers and row letters (`scene.labels`) as one mesh: a quad per label,
+ * flat on the top surface and a hair above it, all cut from one canvas atlas that holds each
+ * text once. The atlas is an alpha map tinted COLORS.print, so it shades like ink on the
+ * slab. Text reads along +x with its top toward -z (row A), upright in the top and iso views.
+ * Null when there is no canvas or no labels. Free it with `dispose`.
+ */
+export function labelMesh(scene: Scene3D, canvas: HTMLCanvasElement | null): THREE.Mesh | null {
+  if (!canvas || !scene.labels.length) return null
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return null
+
+  // Lay the distinct texts out in rows of cells.
+  ctx.font = LABEL_FONT
+  const texts = [...new Set(scene.labels.map(l => l.text))]
+  const cells = new Map<string, { x: number, y: number, w: number }>()
+  let x = 0
+  let y = 0
+  for (const t of texts) {
+    const w = Math.ceil(ctx.measureText(t).width) + 8
+    if (x + w > LABEL_ATLAS_W) {
+      x = 0
+      y += LABEL_CELL
+    }
+    cells.set(t, { x, y, w })
+    x += w
+  }
+  canvas.width = LABEL_ATLAS_W
+  canvas.height = y + LABEL_CELL
+  // Setting the size resets the context. White on black: the alpha map reads the green channel.
+  ctx.fillStyle = '#000000'
+  ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.font = LABEL_FONT
+  ctx.fillStyle = '#ffffff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (const [t, c] of cells) ctx.fillText(t, c.x + c.w / 2, c.y + LABEL_CELL / 2)
+
+  const texture = new THREE.CanvasTexture(canvas)
+  texture.anisotropy = 8 // the renderer clamps it; keeps the numbers sharp at a slant
+
+  const { center, thicknessMm } = scene.board
+  // The pitch, from the first two holes (neighbours in a row, or in a column on a one-column board).
+  const pitch = scene.holes.length > 1 ? Math.hypot(scene.holes[1]!.x - scene.holes[0]!.x, scene.holes[1]!.z - scene.holes[0]!.z) : Infinity
+  const mmPerPx = LABEL_TEXT_MM / LABEL_PX
+  const ly = center[1] + thicknessMm / 2 + LIFT
+  const W = canvas.width
+  const H = canvas.height
+  const positions: number[] = []
+  const normals: number[] = []
+  const uvs: number[] = []
+  const index: number[] = []
+  scene.labels.forEach((l, i) => {
+    const c = cells.get(l.text)!
+    let w = c.w * mmPerPx
+    let h = LABEL_CELL * mmPerPx
+    const along = l.edge === 'top' || l.edge === 'bottom'
+    if (along && w > pitch * LABEL_FIT) {
+      const k = (pitch * LABEL_FIT) / w
+      w *= k
+      h *= k
+    }
+    const [x0, x1, z0, z1] = [l.x - w / 2, l.x + w / 2, l.z - h / 2, l.z + h / 2]
+    const [u0, u1] = [c.x / W, (c.x + c.w) / W]
+    // Canvas row 0 is the top of the texture (v = 1, flipY).
+    const [v0, v1] = [1 - c.y / H, 1 - (c.y + LABEL_CELL) / H]
+    // Top-left, bottom-left, bottom-right, top-right; "top" is toward -z.
+    positions.push(x0, ly, z0, x0, ly, z1, x1, ly, z1, x1, ly, z0)
+    uvs.push(u0, v0, u0, v1, u1, v1, u1, v0)
+    normals.push(0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0)
+    const b = i * 4
+    index.push(b, b + 1, b + 2, b, b + 2, b + 3) // counter-clockwise seen from above
+  })
+  const geometry = new THREE.BufferGeometry()
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3))
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
+  geometry.setIndex(index)
+  const material = new THREE.MeshStandardMaterial({
+    color: COLORS.print, alphaMap: texture, transparent: true, depthWrite: false, roughness: 0.85,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
+  })
+  const mesh = new THREE.Mesh(geometry, material)
+  mesh.name = 'labels'
+  return mesh
 }
 
 /** The prim meshes of a build (every tagged mesh but the slab), in `scene.prims` order. */

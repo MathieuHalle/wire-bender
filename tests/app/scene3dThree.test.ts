@@ -4,7 +4,7 @@ import * as THREE from 'three'
 import { parseBoard, type BoardFile } from '~core/schema'
 import { axial, mk, trail } from '../core/helpers'
 import { BOARD_THICKNESS_MM, buildScene, COLORS, type Scene3D, type Tag } from '~core/scene3d'
-import { buildMeshes, dispose, markRings, markVisibility, MARK_COLOR, primMeshes, resetWebglProbe, setHighlight, tagTip, webglAvailable } from '../../app/utils/scene3dThree'
+import { buildMeshes, dispose, labelMesh, markRings, markVisibility, MARK_COLOR, primMeshes, resetWebglProbe, setHighlight, tagTip, webglAvailable } from '../../app/utils/scene3dThree'
 
 function board2(): BoardFile {
   const res = parseBoard(JSON.parse(readFileSync(new URL('../fixtures/channel-board-2.json', import.meta.url), 'utf8')))
@@ -273,7 +273,7 @@ describe('metal by material', () => {
   /** A one-prim scene per case, on a bare board. */
   const sceneOf = (prims: Scene3D['prims']): Scene3D => ({
     board: { widthMm: 10, depthMm: 10, thicknessMm: 1.6, center: [5, -0.8, 5] },
-    holes: [], pads: { top: [], bottom: [] }, prims, bounds: { min: [0, -2, 0], max: [10, 2, 10] }, skipped: []
+    holes: [], pads: { top: [], bottom: [] }, labels: [], prims, bounds: { min: [0, -2, 0], max: [10, 2, 10] }, skipped: []
   })
 
   it('metal prims get a metallic material, the rest a plain one, whatever the tag kind', () => {
@@ -306,6 +306,83 @@ describe('metal by material', () => {
     })
     expect(meshes.some((m, i) => scene.prims[i]!.color === COLORS.headerPin && metalness(m) > 0)).toBe(true)
     expect(meshes.some((m, i) => scene.prims[i]!.color === COLORS.tab && metalness(m) > 0)).toBe(true)
+    built.dispose()
+  })
+})
+
+describe('printed edge labels', () => {
+  /** A stand-in for a browser canvas: enough 2D context for the atlas. */
+  const fakeCanvas = () => {
+    const drawn: string[] = []
+    const ctx = {
+      font: '', fillStyle: '', textAlign: '', textBaseline: '',
+      measureText: (t: string) => ({ width: t.length * 30 }),
+      fillRect: vi.fn(),
+      fillText: (t: string) => drawn.push(t)
+    }
+    const canvas = { width: 0, height: 0, getContext: (k: string) => (k === '2d' ? ctx : null) }
+    return { canvas: canvas as unknown as HTMLCanvasElement, drawn }
+  }
+  const scene = buildScene(mk({ board: { cols: 4, rows: 3 } }))
+
+  it('one mesh and one texture for every label, each text drawn once in the atlas', () => {
+    const { canvas, drawn } = fakeCanvas()
+    const mesh = labelMesh(scene, canvas)!
+    expect(mesh.name).toBe('labels')
+    expect(mesh.userData.tag).toBeUndefined() // not hoverable, not dimmed
+    expect(mesh.geometry.getIndex()!.count).toBe(scene.labels.length * 6)
+    expect([...drawn].sort()).toEqual(['1', '2', '3', '4', 'A', 'B', 'C'])
+    const mat = mesh.material as THREE.MeshStandardMaterial
+    expect(mat.alphaMap).toBeInstanceOf(THREE.CanvasTexture)
+    expect(mat.color.getHexString()).toBe(new THREE.Color(COLORS.print).getHexString())
+    // Flat on the top surface, a hair above it, and facing up.
+    mesh.geometry.computeBoundingBox()
+    const box = mesh.geometry.boundingBox!
+    expect(box.min.y).toBeGreaterThan(0)
+    expect(box.max.y).toBeLessThan(0.01)
+    expect(box.max.y - box.min.y).toBeLessThan(1e-9)
+    const n = mesh.geometry.getAttribute('normal')
+    for (let i = 0; i < n.count; i++) expect(n.getY(i)).toBeCloseTo(1)
+    // Text up is -z (row A), so it reads upright in the top and iso views: v is larger at smaller z.
+    const pos = mesh.geometry.getAttribute('position')
+    const uv = mesh.geometry.getAttribute('uv')
+    expect(pos.getZ(0)).toBeLessThan(pos.getZ(1))
+    expect(uv.getY(0)).toBeGreaterThan(uv.getY(1))
+  })
+
+  it('quads are centred on the scene labels', () => {
+    const { canvas } = fakeCanvas()
+    const mesh = labelMesh(scene, canvas)!
+    const pos = mesh.geometry.getAttribute('position')
+    scene.labels.forEach((l, i) => {
+      let x = 0
+      let z = 0
+      for (let k = 0; k < 4; k++) {
+        x += pos.getX(i * 4 + k) / 4
+        z += pos.getZ(i * 4 + k) / 4
+      }
+      expect(x).toBeCloseTo(l.x, 5)
+      expect(z).toBeCloseTo(l.z, 5)
+    })
+  })
+
+  it('buildMeshes adds the labels when a canvas is there, and dispose frees the texture', () => {
+    const { canvas } = fakeCanvas()
+    vi.stubGlobal('document', { createElement: () => canvas })
+    const tex = vi.spyOn(THREE.Texture.prototype, 'dispose')
+    const built = buildMeshes(scene)
+    const labels = built.group.getObjectByName('labels') as THREE.Mesh
+    expect(labels).toBeTruthy()
+    expect(primMeshes(built.group)).not.toContain(labels)
+    const map = (labels.material as THREE.MeshStandardMaterial).alphaMap!
+    built.dispose()
+    expect(tex.mock.contexts).toContain(map)
+  })
+
+  it('no canvas (no DOM): no labels, no error', () => {
+    expect(labelMesh(scene, null)).toBeNull()
+    const built = buildMeshes(scene)
+    expect(built.group.getObjectByName('labels')).toBeUndefined()
     built.dispose()
   })
 })

@@ -1,4 +1,5 @@
 export * from './holes'
+export * from './edgeLabels'
 export * from './schema'
 export * from './footprints'
 export * from './connectivity'

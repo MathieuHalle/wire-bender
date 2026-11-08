@@ -9,7 +9,8 @@ function rowFromLetters(letters: string): number {
   return n
 }
 
-function rowToLetters(row: number): string {
+/** A row's letters: 1 -> A, 26 -> Z, 27 -> AA. */
+export function rowToLetters(row: number): string {
   let s = ''
   let n = row
   while (n > 0) {

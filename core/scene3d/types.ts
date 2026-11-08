@@ -43,10 +43,22 @@ export type Prim
 
 export interface XZ { x: number, z: number }
 
+/**
+ * An edge of the board as the top view draws it (row A at the top, column 1 on the left):
+ * `top` is past row A (z < 0), `bottom` past the last row, `left` past column 1 (x < 0),
+ * `right` past the last column.
+ */
+export type BoardEdge = 'top' | 'bottom' | 'left' | 'right'
+
+/** A number printed on the top surface (y = 0), centred at x/z, reading upright in the top view. */
+export interface EdgeLabel { text: string, edge: BoardEdge, x: number, z: number }
+
 export interface Scene3D {
   board: { widthMm: number, depthMm: number, thicknessMm: number, center: V3 }
   holes: XZ[]
   pads: { top: XZ[], bottom: XZ[] }
+  /** Column numbers and row letters printed on the top surface's margin (none on the bottom). */
+  labels: EdgeLabel[]
   prims: Prim[]
   bounds: { min: V3, max: V3 }
   /** Human-readable, e.g. "part X1: unknown footprint foo". */
