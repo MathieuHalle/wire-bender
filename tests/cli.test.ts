@@ -118,4 +118,32 @@ describe('wirebender export', () => {
     expect(existsSync(join(dir, 'bad.html'))).toBe(false)
     expect(cli('export', join(dir, 'missing.json')).code).toBe(2)
   })
+  it('export --flip tb gives the tb sheet, --flip lr and the default the lr sheet', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wb-export-'))
+    const run = (...flip: string[]) => {
+      const out = join(dir, `o${flip.join('')}.html`)
+      const r = cli('export', fixture, '-o', out, ...flip)
+      expect(r.code, r.out + r.err).toBe(0)
+      return readFileSync(out, 'utf8')
+    }
+    const lr = run()
+    const tb = run('--flip', 'tb')
+    expect(run('--flip', 'lr')).toBe(lr)
+    expect(tb).not.toBe(lr)
+    expect(tb).toContain('(mirrored top↔bottom)')
+    expect(tb).toContain('board turned over, mirrored top↔bottom')
+    expect(lr).not.toContain('top↔bottom')
+  })
+
+  it('export --flip with a bad or missing value exits 2 and writes nothing', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wb-export-'))
+    const out = join(dir, 'x.html')
+    const bad = cli('export', fixture, '-o', out, '--flip', 'xx')
+    expect(bad.code).toBe(2)
+    expect(bad.err).toContain('--flip must be lr or tb, not "xx"')
+    const none = cli('export', fixture, '-o', out, '--flip')
+    expect(none.code).toBe(2)
+    expect(none.err).toContain('--flip needs lr or tb')
+    expect(existsSync(out)).toBe(false)
+  })
 })
