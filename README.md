@@ -66,7 +66,9 @@ pnpm dev:public --dotenv ~/wirebender.env
 2. `NUXT_SESSION_PASSWORD`
 3. the file `<data>/session-secret`, which the server creates once (random, readable only by you)
 
-`pnpm dev` sets it for you. A production build in public mode must have `NUXT_APP_SECRET` set before it starts. If only the file exists, the server refuses to start and names the command, `NUXT_APP_SECRET=$(cat <data>/session-secret)`; start the server with that variable set.
+`pnpm dev:public` sets it for you: before the server starts, it copies the first of these into `NUXT_APP_SECRET`, which is what nuxt-auth-utils seals sessions with. (`pnpm dev` is local mode, which has no sessions and needs no secret.) A production build in public mode must have `NUXT_APP_SECRET` set before it starts; nothing copies it there. If only `NUXT_SESSION_PASSWORD` or the file is set, the server refuses to start and names the fix, `NUXT_APP_SECRET="$NUXT_SESSION_PASSWORD"` or `NUXT_APP_SECRET=$(cat <data>/session-secret)`; start the server with that variable set.
+
+Whenever `NUXT_SESSION_PASSWORD` is set, nuxt-auth-utils logs that it "is not used anymore" and to set `NUXT_APP_SECRET` instead. Under `pnpm dev:public` this is harmless, because WireBender has copied it into `NUXT_APP_SECRET`. In a production build, set `NUXT_APP_SECRET` as the start-up message says.
 
 ### First admin
 
@@ -74,7 +76,9 @@ A public server with no admin prints a setup code in its log, `[wirebender] setu
 
 ### Admin page
 
-`/admin` lists the accounts. Each has a premium switch and a suspend button. A suspended account cannot sign in, its share links stop working (`404`), and its open boards disconnect until it is unsuspended.
+`/admin` lists the accounts. Each has a premium switch, an admin switch and a suspend button. A suspended account cannot sign in, its share links stop working (`404`), and its open boards disconnect until it is unsuspended.
+
+The admin switch makes another account an admin, with the same powers as you. The server always keeps one active (not deleted, not suspended) admin: the only admin can neither turn off their own admin switch nor delete their account, and is told `You are the only admin. Make another account admin first.` Turn on someone else's admin switch first.
 
 ## Sharing
 
@@ -101,10 +105,11 @@ Boards opened by someone else's link are listed under **Shared with me**. A sign
 
 Everything is stored in `WIREBENDER_DATA` (default `./.data`, which git ignores):
 
-- `wirebender.sqlite`: all boards, their revision history and the paired devices.
+- `wirebender.sqlite`: all boards, their revision history, the accounts and the paired devices.
 - `backups/`: the server writes `pre-migration-<time>.sqlite` here before it changes the database layout.
+- `session-secret`: public mode only, made once when no `NUXT_APP_SECRET` or `NUXT_SESSION_PASSWORD` is set. Anyone who has it can forge a session as any account: keep it private, including in your backups.
 
-Revisions are only ever added, never edited or deleted. To back up, stop the server and copy the whole data folder. To restore, put the folder back. Use `WIREBENDER_DATA=/some/folder pnpm dev` to keep experiments apart from your real boards.
+Revisions are never edited. They are deleted only with their board: when the trash is purged (30 days after the board was trashed, or with a purged account), or by **Delete for good**. To back up, stop the server and copy the whole data folder. To restore, put the folder back. Use `WIREBENDER_DATA=/some/folder pnpm dev` to keep experiments apart from your real boards.
 
 One server per data folder: the server holds `<data>/wirebender.lock` while it runs, and a second server on the same folder refuses to start, naming the folder. So `PORT=3002 pnpm dev` without its own `WIREBENDER_DATA` will not start while another server uses `./.data`; give each server its own folder. A lock left by a server that crashed (its process is gone) is taken over.
 
@@ -124,23 +129,41 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 
 | Route | Does |
 | --- | --- |
-| `GET /api/boards?list=mine\|shared\|trash` | list your boards (`id`, `name`, `head`, `visibility`, ...; `mine` by default), those in the trash, or those shared with you (`key`, `name`, `owner`, `role`, `lastOpened`) |
-| `POST /api/boards` | `{ "board": <board json> }` imports; `{ "name", "cols", "rows", "type" }` creates an empty board |
-| `GET /api/boards/:id` | `{ id, name, head, board }`, plus `role` and `owner` for a share link |
-| `PUT /api/boards/:id` | `{ "board": <board json>, "baseRevision"?: n }`; `409` with `{ current }` if `baseRevision` is not the head |
-| `PATCH /api/boards/:id` | `{ "name" }` renames |
+| `GET /api/boards?list=mine\|shared\|trash` | list your boards (`id`, `name`, `head`, `visibility`, `hasPassword`, ...; `mine` by default), those in the trash, or those shared with you (`key`, `name`, `owner`, `role`, `lastOpened`) |
+| `POST /api/boards` | `{ "board": <board json> }` imports; `{ "name", "cols", "rows", "type" }` creates an empty board; answers `{ id }` |
+| `GET /api/boards/:id` | `{ id, name, head, board, role, signInToEdit, owner: { name }, forkedFrom }`. `id` is the key you asked with; `role` is `owner`, `edit` or `view`; `signInToEdit` is true for a signed-out visitor on an edit link; `forkedFrom` is `{ key, name }` of the board this one was forked from, for its owner while they can still open that board by the link they forked it through, else `null` |
+| `PUT /api/boards/:id` | `{ "board": <board json>, "baseRevision"?: n }`; `409` with `{ current }` if `baseRevision` is not the head. Only the owner's PUT can change the name; anyone else's keeps it |
+| `PATCH /api/boards/:id` | `{ "name" }` renames (owner) |
+| `DELETE /api/boards/:id` | `{ "confirm": <the board's exact name> }` deletes a board in the trash for good, with its history (owner) |
 | `GET /api/boards/:id/check` | findings and counts, as in the findings panel |
 | `GET /api/boards/:id/bench` | bench sheet (HTML) |
 | `GET /api/boards/:id/download` | the board as a `.wirebender.json` file |
 | `GET /api/boards/:id/thumbnail` | an SVG of the top side, for the board lists |
-| `GET /api/boards/:id/revisions` | history; `POST /api/boards/:id/revisions/:n/restore` restores one |
+| `GET /api/boards/:id/revisions` | history |
 | `GET /api/boards/:id/revisions/:n` | the board as it was at revision `n` |
+| `POST /api/boards/:id/revisions/:n/restore` | makes revision `n` the board again, as a new revision |
 | `POST /api/boards/:id/undo`, `/redo` | undo or redo the last change |
-| `POST /api/pair/start` | this computer only: a new pairing code, `{ code, expiresAt, url }` |
-| `POST /api/pair` | `{ "code", "name" }` pairs the calling device (the one call an unpaired device may make); sets its cookie |
-| `GET /api/devices` | the paired devices (`id`, `name`, `createdAt`, `lastSeen`) |
-| `DELETE /api/devices/:id` | unpairs a device |
-| `GET /api/devices/me` | the calling device: `{ name, paired }` |
+| `POST /api/boards/:id/fork` | a copy in your account, `{ id }` (signed in; on your own board it is a duplicate named `<name> (copy)`) |
+| `POST /api/boards/:id/trash` | moves the board to the trash, `{ trashedAt }` (owner) |
+| `POST /api/boards/:id/untrash` | brings it back, `{ trashedAt: null }` (owner) |
+| `GET /api/boards/:id/sharing` | `{ visibility, hasPassword, link, canUsePremium }` (owner, public mode) |
+| `PATCH /api/boards/:id/sharing` | `{ "visibility"?: "view"\|"edit"\|"private", "password"?: string\|null }`; answers like the GET (owner, public mode) |
+| `POST /api/boards/:id/sharing/regenerate` | a new share link, `{ link }`; the old one stops working (owner, public mode) |
+| `POST /api/links/:linkId/unlock` | `{ "password" }` opens a password link for this session (public mode; 5 wrong tries per address per 10 minutes, then `429`) |
+| `GET /api/me` | `{ mode, user, providers }`: who is signed in (`id`, `name`, `avatar`, `isAdmin`, `isPremium`, `providers`, `deletedAt`), or `user: null` |
+| `PATCH /api/me` | `{ "name" }` sets your display name (1 to 60 characters) |
+| `DELETE /api/me` | deletes your account, restorable for 30 days, and signs you out (public mode; `409` for the only admin) |
+| `POST /api/me/restore` | restores your deleted account after signing in again (public mode) |
+| `POST /api/setup` | `{ "code" }` the setup code from the log, `{ ok, admin }` (public mode, until an admin exists; see First admin) |
+| `GET /api/admin/users` | every account (`id`, `name`, `providers`, `boards`, `isPremium`, `isAdmin`, `suspendedAt`, `deletedAt`, ...) (admin) |
+| `PATCH /api/admin/users/:id` | `{ "premium"?, "suspended"?, "admin"? }`, each `true` or `false`; any other key is `422` (admin) |
+| `POST /api/pair/start` | this computer only: a new pairing code, `{ code, expiresAt, url }` (local mode) |
+| `POST /api/pair` | `{ "code", "name" }` pairs the calling device (the one call an unpaired device may make); sets its cookie (local mode) |
+| `GET /api/devices` | the paired devices (`id`, `name`, `createdAt`, `lastSeen`) (local mode) |
+| `DELETE /api/devices/:id` | unpairs a device (local mode) |
+| `GET /api/devices/me` | the calling device: `{ name, paired }` (local mode) |
+
+Sign-in starts at `/auth/github` or `/auth/google`, and `/_ws/board/:id` is the live board's WebSocket (y-websocket protocol; a message over 4,000,000 bytes, a presence update over 8 KB, or a change that makes the board larger than 2,000,000 bytes is refused; only the owner's changes may rename the board). In public mode nuxt-auth-utils also answers `GET` and `DELETE /api/_auth/session` (sign out); any other `/api` path is `404`.
 
 `:id` is a key: a board id (owner only) or a share link id. A role limits what a key can do: `PUT`, undo, redo and restore need edit; rename, trash, sharing and the link need the owner.
 
