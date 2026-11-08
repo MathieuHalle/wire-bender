@@ -6,15 +6,24 @@ import { runCheck, type Finding } from '~core/check'
 import { tagNets, type Tag } from '~core/scene3d'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
-import { jointSide, LOCKED_TITLE, makeGeo, PAUSED_TITLE, pageKey, sideBox, sideFrames, type View } from '~/utils/boardView'
+import { jointSide, LOCKED_TITLE, makeGeo, PAUSED_TITLE, pageKey, SIGN_IN_TITLE, sideBox, sideFrames, VIEW_TITLE, type View } from '~/utils/boardView'
+import { NO_ACCESS } from '~/composables/useLiveBoard'
 import { fallbackAlert } from '~/utils/board3dFallback'
 import { defaultPanel, loadPanel, savePanel, type PanelState } from '~/utils/sidePanel'
 import { ALL_LAYERS } from '~/utils/layers'
 
+// `id` is the key the board was opened by: its board id (the owner) or its share link id
+// (everyone else, who never sees the board id).
 const route = useRoute()
 const id = computed(() => String(route.params.id))
 const live = useLiveBoard(id)
-const { status, readOnly, missing, revision, canUndo, canRedo, peers, undo, redo } = live
+const { status, readOnly, missing, revision, canUndo, canRedo, peers, undo, redo, role, meta, canEdit, needsPassword, noAccess } = live
+const { me } = useMe()
+const isPublic = computed(() => me.value?.mode === 'public')
+const signedIn = computed(() => !!me.value?.user)
+/** Someone else's board, opened by its link. */
+const visiting = computed(() => meta.value !== null && role.value !== 'owner')
+const viewOnly = computed(() => role.value === 'view')
 
 /**
  * A past revision on show (History tab): its row, and its board once fetched. While it is
@@ -44,7 +53,7 @@ watch(id, () => (previewRow.value = null))
 const restoring = ref(false)
 async function restore() {
   const row = previewRow.value
-  if (!row || restoring.value || readOnly.value) return
+  if (!row || restoring.value || !canEdit.value) return
   restoring.value = true
   try {
     await $fetch(`/api/boards/${encodeURIComponent(id.value)}/revisions/${row.n}/restore`, { method: 'POST' })
@@ -64,7 +73,9 @@ const view = ref<View>('both')
 /** Why editing is off, if it is: a board that is not live, or the 3D view (look only). */
 const lockedTitle = computed(() => (previewing.value
   ? PREVIEW_TITLE
-  : readOnly.value ? PAUSED_TITLE : view.value === '3d' ? LOCKED_TITLE : null))
+  : viewOnly.value
+    ? (meta.value?.signInToEdit ? SIGN_IN_TITLE : VIEW_TITLE)
+    : readOnly.value ? PAUSED_TITLE : view.value === '3d' ? LOCKED_TITLE : null))
 const { tool, drawing, onHoleClick, onSegmentClick, addJoint, endDrawing } = useTools(live, { locked: () => lockedTitle.value !== null })
 /** The 2D view the 3D one was entered from; key 3 goes back to it. */
 const last2d = ref<Exclude<View, '3d'>>('both')
@@ -191,31 +202,59 @@ const frames = computed(() => {
   return (['top', 'bottom'] as const).map(s => ({ id: s, title: sideTitle(s), rect: at[s] }))
 })
 
-/** The "Pair a device" and "Paired devices" dialogs. */
+/** The "Pair a device" and "Paired devices" dialogs: local mode only (public mode has no pairing). */
 const pairing = ref(false)
 const devicesOpen = ref(false)
+const canPair = computed(() => me.value?.mode === 'local')
 
-/**
- * "Share": only the owner may change sharing, and only in public mode (local mode offers
- * none). The sharing route answers the owner only, so it decides whether the button shows.
- */
+/** "Share": the owner's, in public mode only (local mode offers none). */
 const shareOpen = ref(false)
-const canShare = ref(false)
-async function checkShare() {
-  canShare.value = false
-  shareOpen.value = false
-  const asked = id.value
+const canShare = computed(() => isPublic.value && role.value === 'owner')
+watch(id, () => (shareOpen.value = false))
+
+/** A link visitor's "Sign in to edit" (an edit link, signed out). */
+const signInOpen = ref(false)
+
+/** Fork: a copy of this board in my account (signed in, someone else's board). */
+const forking = ref(false)
+async function forkBoard() {
+  if (forking.value) return
+  forking.value = true
   try {
-    const me = await $fetch<{ mode: 'local' | 'public' }>('/api/me')
-    if (me.mode !== 'public') return
-    await $fetch(`/api/boards/${encodeURIComponent(asked)}/sharing`)
-    if (asked === id.value) canShare.value = true
-  } catch {
-    // Not the owner, or no such board: no Share button.
+    const { id: fresh } = await $fetch<{ id: string }>(`/api/boards/${encodeURIComponent(id.value)}/fork`, { method: 'POST' })
+    toast.add({ title: `Forked: ${meta.value?.name ?? 'the board'} is now in your boards`, color: 'success', icon: 'i-lucide-check' })
+    await navigateTo(`/b/${fresh}`)
+  } catch (e) {
+    const data = (e as { data?: { error?: unknown } }).data
+    toast.add({ title: typeof data?.error === 'string' ? data.error : `Fork failed: ${(e as Error).message}`, color: 'error', icon: 'i-lucide-ban' })
+  } finally {
+    forking.value = false
   }
 }
-onMounted(() => void checkShare())
-watch(id, () => void checkShare())
+
+/** The link password prompt (GET answered 401). */
+const password = ref('')
+const unlockError = ref<string | null>(null)
+const unlocking = ref(false)
+watch(id, () => {
+  password.value = ''
+  unlockError.value = null
+})
+async function unlock() {
+  if (unlocking.value || password.value === '') return
+  unlocking.value = true
+  unlockError.value = null
+  try {
+    await $fetch(`/api/links/${encodeURIComponent(id.value)}/unlock`, { method: 'POST', body: { password: password.value } })
+    password.value = ''
+    live.retry()
+  } catch (e) {
+    const data = (e as { data?: { error?: unknown } }).data
+    unlockError.value = typeof data?.error === 'string' ? data.error : 'Could not check the password. Try again.'
+  } finally {
+    unlocking.value = false
+  }
+}
 
 const STATUS = {
   live: { label: 'live', color: 'success' },
@@ -293,20 +332,22 @@ const sideTitle = (s: Side) => (s === 'top'
           label="Share"
           @click="shareOpen = true"
         />
-        <UButton
-          size="xs"
-          variant="ghost"
-          icon="i-lucide-tablet-smartphone"
-          label="Pair a device"
-          @click="pairing = true"
-        />
-        <UButton
-          size="xs"
-          variant="ghost"
-          icon="i-lucide-monitor-smartphone"
-          label="Paired devices"
-          @click="devicesOpen = true"
-        />
+        <template v-if="canPair">
+          <UButton
+            size="xs"
+            variant="ghost"
+            icon="i-lucide-tablet-smartphone"
+            label="Pair a device"
+            @click="pairing = true"
+          />
+          <UButton
+            size="xs"
+            variant="ghost"
+            icon="i-lucide-monitor-smartphone"
+            label="Paired devices"
+            @click="devicesOpen = true"
+          />
+        </template>
       </div>
       <UTooltip text="Open the printable bench sheet in a new tab">
         <span class="inline-flex">
@@ -315,13 +356,15 @@ const sideTitle = (s: Side) => (s === 'top'
             variant="outline"
             icon="i-lucide-printer"
             label="Bench sheet"
-            :disabled="missing"
+            :disabled="missing || noAccess || needsPassword"
             @click="openBench"
           />
         </span>
       </UTooltip>
-      <PairDialog v-model:open="pairing" />
-      <DevicesDialog v-model:open="devicesOpen" />
+      <template v-if="canPair">
+        <PairDialog v-model:open="pairing" />
+        <DevicesDialog v-model:open="devicesOpen" />
+      </template>
       <ShareDialog
         v-if="canShare"
         v-model:open="shareOpen"
@@ -330,7 +373,25 @@ const sideTitle = (s: Side) => (s === 'top'
     </header>
 
     <UAlert
-      v-if="missing"
+      v-if="noAccess"
+      class="mx-4 mt-3 shrink-0"
+      color="error"
+      variant="subtle"
+      icon="i-lucide-lock"
+      :title="NO_ACCESS"
+    >
+      <template #actions>
+        <UButton
+          size="xs"
+          color="error"
+          variant="outline"
+          to="/"
+          label="Back to the board list"
+        />
+      </template>
+    </UAlert>
+    <UAlert
+      v-else-if="missing"
       class="mx-4 mt-3 shrink-0"
       color="error"
       variant="subtle"
@@ -357,10 +418,11 @@ const sideTitle = (s: Side) => (s === 'top'
     >
       <template #actions>
         <UButton
+          v-if="!viewOnly"
           size="xs"
           label="Restore"
           :loading="restoring"
-          :disabled="readOnly || !previewBoard"
+          :disabled="!canEdit || !previewBoard"
           :title="readOnly ? PAUSED_TITLE : undefined"
           @click="restore"
         />
@@ -380,14 +442,95 @@ const sideTitle = (s: Side) => (s === 'top'
       icon="i-lucide-wifi-off"
       :title="PAUSED_TITLE"
     />
+    <UAlert
+      v-else-if="visiting && meta"
+      class="mx-4 mt-3 shrink-0"
+      color="neutral"
+      variant="subtle"
+      :icon="viewOnly ? 'i-lucide-eye' : 'i-lucide-pencil'"
+      :title="`Viewing ${board?.name ?? meta.name} by ${meta.owner.name}.`"
+    >
+      <template
+        v-if="signedIn || meta.signInToEdit"
+        #actions
+      >
+        <UButton
+          v-if="meta.signInToEdit && !signedIn"
+          size="xs"
+          icon="i-lucide-log-in"
+          label="Sign in to edit"
+          @click="signInOpen = true"
+        />
+        <UButton
+          v-else-if="signedIn"
+          size="xs"
+          variant="outline"
+          icon="i-lucide-git-fork"
+          label="Fork"
+          :loading="forking"
+          @click="forkBoard"
+        />
+      </template>
+    </UAlert>
 
-    <div class="flex min-h-0 flex-1 flex-col lg:flex-row">
+    <UModal
+      v-model:open="signInOpen"
+      title="Sign in to edit"
+      description="This link lets signed-in people edit. You come back to this board once signed in."
+    >
+      <template #body>
+        <SignInButtons
+          :providers="me?.providers ?? []"
+          :return-to="`/b/${id}`"
+        />
+      </template>
+    </UModal>
+
+    <div
+      v-if="needsPassword"
+      class="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center gap-4 p-6"
+    >
+      <h1 class="text-lg font-semibold">
+        This board's link needs a password
+      </h1>
+      <p class="text-sm text-muted">
+        Ask the person who sent you the link for it.
+      </p>
+      <form
+        class="space-y-3"
+        @submit.prevent="unlock"
+      >
+        <UFormField
+          label="Password"
+          :error="unlockError ?? undefined"
+        >
+          <UInput
+            v-model="password"
+            type="password"
+            class="w-full"
+            autocomplete="current-password"
+            autofocus
+          />
+        </UFormField>
+        <UButton
+          type="submit"
+          label="Open the board"
+          :loading="unlocking"
+          :disabled="password === ''"
+        />
+      </form>
+    </div>
+
+    <div
+      v-else
+      class="flex min-h-0 flex-1 flex-col lg:flex-row"
+    >
       <main class="flex min-h-0 min-w-0 flex-1 flex-col border-b border-default lg:border-r lg:border-b-0">
         <p
           v-if="!board || !loaded"
           class="p-4 text-muted"
         >
-          {{ missing ? 'Nothing to show.' : 'Loading board…' }}
+          {{ missing || noAccess ? 'Nothing to show.' : 'Loading board…' }}
         </p>
         <ClientOnly v-else-if="view === '3d'">
           <!-- A failed 3D load (or a throw while it starts) shows the fallback, not nothing. -->
@@ -510,6 +653,7 @@ const sideTitle = (s: Side) => (s === 'top'
             :can-redo="canRedo"
             :locked="lockedTitle !== null"
             :locked-title="lockedTitle ?? undefined"
+            :view-only="viewOnly"
             @undo="undo"
             @redo="redo"
           />

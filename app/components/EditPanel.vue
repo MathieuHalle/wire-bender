@@ -12,6 +12,8 @@ const props = defineProps<{
   locked?: boolean
   /** Why editing is off; the 3D view's reason by default. */
   lockedTitle?: string
+  /** The link gives view only: no undo or redo to offer. */
+  viewOnly?: boolean
 }>()
 const emit = defineEmits<{ undo: [], redo: [] }>()
 
@@ -65,7 +67,10 @@ const blind = computed(() => (props.locked ? null : blindHint(tool.value, layers
           @click="(locked && t.id !== 'navigate') || (tool = t.id)"
         />
       </div>
-      <div class="mt-2 flex gap-1">
+      <div
+        v-if="!viewOnly"
+        class="mt-2 flex gap-1"
+      >
         <UButton
           size="xs"
           variant="ghost"

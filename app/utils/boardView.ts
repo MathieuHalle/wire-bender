@@ -133,6 +133,18 @@ export function sideFrames(sizes: Record<Side, { w: number, h: number }>): Recor
 export const LOCKED_TITLE = 'The 3D view is for looking: switch back to edit'
 /** Why editing is off while the board is not live. */
 export const PAUSED_TITLE = 'Reconnecting… editing is paused'
+/** Why editing is off on a link that gives view only. */
+export const VIEW_TITLE = 'View only: this link lets you look, check and download'
+/** Why editing is off on an edit link opened signed out. */
+export const SIGN_IN_TITLE = 'Sign in to edit this board'
+
+/** Where to go back to after a sign-in started from a board (sessionStorage key). */
+export const RETURN_KEY = 'wirebender:return'
+
+/** `path` if it is a board page of this app (a share link or board id), else null: never another site. */
+export function returnPath(path: string | null): string | null {
+  return path !== null && /^\/b\/[\w-]{1,64}$/.test(path) ? path : null
+}
 
 /** A control that is off in 3D (or while not live): disabled there with the lock's title, else its own title. */
 export function lockedAttrs(locked: boolean, title?: string, lockedTitle = LOCKED_TITLE): { disabled: boolean, title: string | undefined } {

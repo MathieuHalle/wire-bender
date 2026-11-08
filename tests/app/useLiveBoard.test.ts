@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick, ref } from 'vue'
 import type { BoardFile } from '~core/schema'
 import { boardToDoc, writeBoard } from '#shared/yboard'
-import { createLiveBoard, type LiveProvider } from '../../app/composables/useLiveBoard'
+import { createLiveBoard, NO_ACCESS, type LiveProvider, type Peer, type RoleRead } from '../../app/composables/useLiveBoard'
 import { mk, trail } from '../core/helpers'
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- the fake's event map */
@@ -323,5 +323,150 @@ describe('useLiveBoard', () => {
     expect(unpaired).toBe(1)
     expect(providers).toHaveLength(1)
     expect(live.status.value).toBe('offline')
+  })
+})
+
+describe('useLiveBoard roles', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const meta = (role: 'owner' | 'edit' | 'view') => ({ role, name: 'B', owner: { name: 'Ada' }, signInToEdit: false, forkedFrom: null })
+
+  /** A store whose role reads come from `reads`, one per call (the last repeats). */
+  function withRoles(reads: RoleRead[]) {
+    const providers: FakeProvider[] = []
+    const notes: string[] = []
+    const asked: string[] = []
+    const live = createLiveBoard(ref('k1'), {
+      connect: (id) => {
+        const p = new FakeProvider(id)
+        providers.push(p)
+        return p
+      },
+      notify: m => notes.push(m),
+      readRole: async (id) => {
+        asked.push(id)
+        return reads[Math.min(asked.length - 1, reads.length - 1)]!
+      }
+    })
+    live.start()
+    return { live, providers, notes, asked, last: () => providers.at(-1)! }
+  }
+
+  it('reads the role before it connects', async () => {
+    const { live, providers, asked } = withRoles([{ ok: true, info: meta('edit') }])
+    expect(providers).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(asked).toEqual(['k1'])
+    expect(providers).toHaveLength(1)
+    expect(live.role.value).toBe('edit')
+    expect(live.meta.value).toMatchObject({ owner: { name: 'Ada' } })
+  })
+
+  it('a view client never writes: no edits, no undo or redo on the socket', async () => {
+    const { live, last } = withRoles([{ ok: true, info: meta('view') }])
+    await vi.advanceTimersByTimeAsync(0)
+    last().goLive(serverDoc(start))
+    expect(live.readOnly.value).toBe(false)
+    expect(live.canEdit.value).toBe(false)
+    let writes = 0
+    last().doc.on('update', () => writes++)
+    expect(live.apply(withT2(live.board.value!))).toBe(false)
+    await live.undo()
+    await live.redo()
+    expect(writes).toBe(0)
+    expect(last().sent).toEqual([])
+  })
+
+  it('4403 reconnects once, then stops on 4404', async () => {
+    const { live, providers, asked, last } = withRoles([{ ok: true, info: meta('edit') }, { ok: true, info: meta('view') }])
+    await vi.advanceTimersByTimeAsync(0)
+    last().goLive(serverDoc(start))
+    expect(live.canEdit.value).toBe(true)
+
+    // Access changed: a fresh connection, with the role read again.
+    const first = last()
+    first.close(4403, 'access changed')
+    expect(first.destroyed).toBe(true)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(asked).toEqual(['k1', 'k1'])
+    expect(providers).toHaveLength(2)
+    expect(last().doc).not.toBe(first.doc)
+    expect(live.role.value).toBe('view')
+
+    // Still denied: it says so and stops.
+    last().close(4404, 'no such board')
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(providers).toHaveLength(2)
+    expect(asked).toHaveLength(2)
+    expect(live.noAccess.value).toBe(true)
+    expect(live.missing.value).toBe(false)
+    expect(live.status.value).toBe('offline')
+    expect(NO_ACCESS).toBe('You no longer have access to this board.')
+  })
+
+  it('a second 4403 in a row stops; one after a good sync reconnects again', async () => {
+    const { live, providers, last } = withRoles([{ ok: true, info: meta('view') }])
+    await vi.advanceTimersByTimeAsync(0)
+    last().goLive(serverDoc(start))
+    last().close(4403)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(providers).toHaveLength(2)
+    // Synced again: a later sharing change gets its own reconnect.
+    last().goLive(serverDoc(start))
+    last().close(4403)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(providers).toHaveLength(3)
+    // Denied before it ever syncs: stop.
+    last().close(4403)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(providers).toHaveLength(3)
+    expect(live.noAccess.value).toBe(true)
+  })
+
+  it('a role read that finds the board gone after 4403 stops with no access; a password asks for it', async () => {
+    const gone = withRoles([{ ok: true, info: meta('view') }, { ok: false, reason: 'missing' }])
+    await vi.advanceTimersByTimeAsync(0)
+    gone.last().goLive(serverDoc(start))
+    gone.last().close(4403)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(gone.providers).toHaveLength(1)
+    expect(gone.live.noAccess.value).toBe(true)
+    expect(gone.live.missing.value).toBe(false)
+
+    const locked = withRoles([{ ok: false, reason: 'password' }, { ok: true, info: meta('view') }])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(locked.providers).toHaveLength(0)
+    expect(locked.live.needsPassword.value).toBe(true)
+    // Unlocked: read again and connect.
+    locked.live.retry()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(locked.live.needsPassword.value).toBe(false)
+    expect(locked.providers).toHaveLength(1)
+  })
+
+  it('an unknown key is missing; a failed role read tries again', async () => {
+    const unknown = withRoles([{ ok: false, reason: 'missing' }])
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(unknown.live.missing.value).toBe(true)
+    expect(unknown.asked).toHaveLength(1)
+
+    const flaky = withRoles([{ ok: false, reason: 'error' }, { ok: true, info: meta('owner') }])
+    await vi.advanceTimersByTimeAsync(0)
+    expect(flaky.providers).toHaveLength(0)
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(flaky.providers).toHaveLength(1)
+  })
+
+  it('presence carries the name and avatar it is given', () => {
+    const { live, last } = setup()
+    live.setPresence('Guest')
+    expect((last().awareness.getLocalState() as { user: Peer }).user).toMatchObject({ name: 'Guest' })
+    live.setPresence('Ada', 'https://avatars.githubusercontent.com/u/1')
+    expect((last().awareness.getLocalState() as { user: Peer }).user).toMatchObject({ name: 'Ada', avatar: 'https://avatars.githubusercontent.com/u/1' })
   })
 })

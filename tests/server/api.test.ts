@@ -9,6 +9,8 @@ import { openDb, type Db } from '../../server/db'
 import { boards, linkVisits, revisions } from '../../server/db/schema'
 import { unlockEntry } from '../../server/utils/boardAccess'
 import { signIn } from '../../server/utils/accounts'
+import { deleteAccount, trashBoard } from '../../server/utils/lifecycle'
+import { regenerateLink } from '../../server/utils/sharing'
 import * as api from '../../server/utils/api'
 import { MAX_BOARD_BYTES } from '../../server/utils/api'
 import { getBoard, getBoardRow, listBoards, listRevisions } from '../../server/utils/boards'
@@ -256,7 +258,8 @@ describe('access by key and role', () => {
     revision: () => api.getRevisionResponse(db, req, '1'),
     restore: () => api.restoreRevision(db, req, '1'),
     undo: () => api.undoBoard(db, req),
-    redo: () => api.redoBoard(db, req)
+    redo: () => api.redoBoard(db, req),
+    thumbnail: () => api.thumbnailBoard(db, req)
   })
 
   it('board id is 404 for non-owners', () => {
@@ -392,5 +395,84 @@ describe('access by key and role', () => {
     expect(getBoardRow(db, id)!.ownerId).toBe(owner.userId)
     expect((api.listBoardsResponse(db, owner.userId).body as { id: string }[]).map(x => x.id)).toEqual([id])
     expect(api.listBoardsResponse(db, 'local').body).toEqual([])
+  })
+  /** Bob's "Shared with me" list. */
+  const shared = (who: Who & { kind: 'user' }) => {
+    const r = api.listBoardsResponse(db, who.userId, 'shared')
+    expect(r.status).toBe(200)
+    return r.body as { key: string, name: string, owner: string, role: string, lastOpened: number }[]
+  }
+
+  it('shared list drops a board whose link was regenerated', () => {
+    const b = adaBoard({ visibility: 'edit' })
+    const bob = user('Bob')
+    api.getBoardResponse(db, { key: b.linkId, who: bob })
+    const [row] = shared(bob)
+    expect(row).toMatchObject({ key: b.linkId, name: 'B', owner: 'Ada', role: 'edit' })
+    expect(Object.keys(row!).sort()).toEqual(['key', 'lastOpened', 'name', 'owner', 'role'])
+    expect(JSON.stringify(shared(bob))).not.toContain(b.id)
+
+    expect(regenerateLink(db, { key: b.id, who: b.owner }, 'https://wire.example.org').status).toBe(200)
+    // The visit still holds the old link id: it no longer opens, so it is not listed.
+    expect(db.select().from(linkVisits).all()).toHaveLength(1)
+    expect(shared(bob)).toEqual([])
+    // Opening the new link lists it again, under the new key.
+    const fresh = getBoardRow(db, b.id)!.linkId
+    api.getBoardResponse(db, { key: fresh, who: bob })
+    expect(shared(bob).map(x => x.key)).toEqual([fresh])
+  })
+
+  it('shared list never shows private boards', () => {
+    const b = adaBoard()
+    const bob = user('Bob')
+    api.getBoardResponse(db, { key: b.linkId, who: bob })
+    expect(shared(bob).map(x => [x.key, x.role])).toEqual([[b.linkId, 'view']])
+    db.update(boards).set({ visibility: 'private' }).where(eq(boards.id, b.id)).run()
+    expect(shared(bob)).toEqual([])
+    // Nor trashed boards, nor boards of a deleted account.
+    db.update(boards).set({ visibility: 'view' }).where(eq(boards.id, b.id)).run()
+    expect(shared(bob)).toHaveLength(1)
+    expect(trashBoard(db, { key: b.id, who: b.owner }).status).toBe(200)
+    expect(shared(bob)).toEqual([])
+    db.update(boards).set({ trashedAt: null }).where(eq(boards.id, b.id)).run()
+    expect(shared(bob)).toHaveLength(1)
+    expect(deleteAccount(db, b.owner.userId)).toBe(true)
+    expect(shared(bob)).toEqual([])
+    // The owner's own list is not affected by anyone's visits.
+    expect(api.listBoardsResponse(db, b.owner.userId, 'shared').body).toEqual([])
+  })
+
+  it('lists are mine, shared or trash; anything else is 422', () => {
+    const b = adaBoard({ visibility: 'edit' })
+    const mine = api.listBoardsResponse(db, b.owner.userId, 'mine').body as { id: string, visibility: string, hasPassword: boolean }[]
+    expect(mine).toMatchObject([{ id: b.id, name: 'B', visibility: 'edit', hasPassword: false }])
+    expect(api.listBoardsResponse(db, b.owner.userId, 'trash').body).toEqual([])
+    trashBoard(db, { key: b.id, who: b.owner }, 1234)
+    expect(api.listBoardsResponse(db, b.owner.userId, 'mine').body).toEqual([])
+    expect(api.listBoardsResponse(db, b.owner.userId, 'trash').body).toMatchObject([{ id: b.id, trashedAt: 1234 }])
+    expect(api.listBoardsResponse(db, b.owner.userId, 'nope')).toEqual({ status: 422, body: { errors: ['list: must be mine, shared or trash'] } })
+  })
+
+  it('thumbnail needs view', () => {
+    const b = adaBoard()
+    const bob = user('Bob')
+    const svg = (r: api.ApiResult) => {
+      expect(r.status).toBe(200)
+      expect(r.headers).toMatchObject({ 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'private, max-age=60' })
+      expect(r.body as string).toMatch(/^<svg[\s\S]*<\/svg>\s*$/)
+      return r.body as string
+    }
+    const byOwner = svg(api.thumbnailBoard(db, { key: b.id, who: b.owner }))
+    expect(svg(api.thumbnailBoard(db, { key: b.linkId, who: ANON }))).toBe(byOwner)
+    expect(svg(api.thumbnailBoard(db, { key: b.linkId, who: bob }))).not.toContain(b.id)
+    // No view: the same 404 as an unknown board, or 401 for a password not entered.
+    for (const req of [{ key: b.id, who: bob }, { key: b.id, who: ANON }, { key: 'no-such-board', who: bob }]) {
+      expect(api.thumbnailBoard(db, req)).toEqual({ status: 404, body: { error: 'not found' } })
+    }
+    db.update(boards).set({ passwordHash: 'h:x' }).where(eq(boards.id, b.id)).run()
+    expect(api.thumbnailBoard(db, { key: b.linkId, who: bob })).toEqual({ status: 401, body: { password: true } })
+    db.update(boards).set({ passwordHash: null, visibility: 'private' }).where(eq(boards.id, b.id)).run()
+    expect(api.thumbnailBoard(db, { key: b.linkId, who: bob })).toEqual({ status: 404, body: { error: 'not found' } })
+    svg(api.thumbnailBoard(db, { key: b.id, who: b.owner }))
   })
 })

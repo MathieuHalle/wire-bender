@@ -1,13 +1,26 @@
 import { randomUUID } from 'node:crypto'
-import { and, desc, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, desc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm'
 import type { BoardFile } from '~core/schema'
 import { summarize } from '#shared/summary'
 import { sameItems } from '#shared/yboard'
 import type { Db } from '../db'
-import { boards, revisions, type RevisionHow } from '../db/schema'
+import { boards, linkVisits, revisions, users, type BoardVisibility, type RevisionHow } from '../db/schema'
 
-/** A board in the list; `author` made its head revision. */
-export interface BoardInfo { id: string, name: string, head: number, createdAt: number, updatedAt: number, author: string }
+/** A board in the owner's list; `author` made its head revision. */
+export interface BoardInfo {
+  id: string
+  name: string
+  head: number
+  createdAt: number
+  updatedAt: number
+  author: string
+  visibility: BoardVisibility
+  hasPassword: boolean
+  trashedAt: number | null
+}
+
+/** A board in "Shared with me": reached by its link only, so it carries the link id, never the board id. */
+export interface SharedInfo { key: string, name: string, owner: string, role: 'view' | 'edit', lastOpened: number }
 export interface RevisionInfo { n: number, createdAt: number, author: string, how: RevisionHow, target: number | null, summary: string }
 
 function withRevision(board: BoardFile, revision: number): BoardFile {
@@ -80,11 +93,30 @@ export function getBoardByLink(db: Db, linkId: string) {
 
 /** `ownerId`'s boards, newest change first: `mine` leaves out the trashed ones, `trash` lists only those. */
 export function listBoards(db: Db, ownerId: string, which: 'mine' | 'trash'): BoardInfo[] {
-  return db.select({ id: boards.id, name: boards.name, head: boards.head, createdAt: boards.createdAt, updatedAt: boards.updatedAt, author: revisions.author })
+  return db.select({
+    id: boards.id, name: boards.name, head: boards.head, createdAt: boards.createdAt, updatedAt: boards.updatedAt, author: revisions.author,
+    visibility: boards.visibility, hasPassword: sql<number>`${boards.passwordHash} is not null`, trashedAt: boards.trashedAt
+  })
     .from(boards)
     .innerJoin(revisions, and(eq(revisions.boardId, boards.id), eq(revisions.n, boards.head)))
     .where(and(eq(boards.ownerId, ownerId), which === 'mine' ? isNull(boards.trashedAt) : isNotNull(boards.trashedAt)))
     .orderBy(desc(boards.updatedAt)).all()
+    .map(b => ({ ...b, hasPassword: b.hasPassword === 1 }))
+}
+
+/**
+ * `userId`'s "Shared with me": the boards they opened by link whose link still opens, most
+ * recently opened first. A visit keeps the link id it was made with, so a regenerated link
+ * drops out; so do private and trashed boards, and those of a deleted account. A link
+ * password does not: the board asks for it when opened.
+ */
+export function listShared(db: Db, userId: string): SharedInfo[] {
+  return db.select({ key: boards.linkId, name: boards.name, owner: users.name, role: boards.visibility, lastOpened: linkVisits.lastOpened })
+    .from(linkVisits)
+    .innerJoin(boards, and(eq(boards.id, linkVisits.boardId), eq(boards.linkId, linkVisits.linkId)))
+    .innerJoin(users, eq(users.id, boards.ownerId))
+    .where(and(eq(linkVisits.userId, userId), ne(boards.ownerId, userId), ne(boards.visibility, 'private'), isNull(boards.trashedAt), isNull(users.deletedAt)))
+    .orderBy(desc(linkVisits.lastOpened)).all() as SharedInfo[]
 }
 
 /** Newest first, without the board JSON. */

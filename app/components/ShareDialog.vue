@@ -64,11 +64,19 @@ const items = computed(() => [
   { value: 'edit', label: 'Edit', description: 'Anyone signed in with the link can edit. Signed-out visitors can look.' },
   { value: 'private', label: 'Private', description: 'Only you. The link does not open.', disabled: !privateAllowed.value }
 ])
-const visibility = computed({
-  get: () => sharing.value?.visibility,
-  set: (v) => {
-    if (v && sharing.value && v !== sharing.value.visibility) void change({ visibility: v }, `The link now gives: ${LABEL[v]}`)
-  }
+/**
+ * The radio group's own value: a pick is sent, and a refused one (403, a limit) snaps back
+ * to the saved value. A computed over the saved value would leave the radio on the refused
+ * pick, since the group keeps its own state when its model does not change.
+ */
+const visibility = ref<Visibility | undefined>()
+watch(() => sharing.value?.visibility, (v) => {
+  visibility.value = v
+}, { immediate: true })
+watch(visibility, async (v) => {
+  const saved = sharing.value?.visibility
+  if (!v || !saved || v === saved) return
+  if (!await change({ visibility: v }, `The link now gives: ${LABEL[v]}`)) visibility.value = sharing.value?.visibility
 })
 
 const passwordLength = computed(() => [...password.value].length)
@@ -191,22 +199,26 @@ async function newLink() {
               />
             </div>
           </UFormField>
-          <UButton
-            v-if="sharing.hasPassword"
-            size="sm"
-            variant="link"
-            color="error"
-            label="Remove password"
-            :disabled="busy"
-            @click="removePassword"
-          />
         </form>
+        <!-- Outside the password form: removing it never submits that form. -->
+        <UButton
+          v-if="sharing.canUsePremium && sharing.hasPassword"
+          type="button"
+          size="sm"
+          variant="link"
+          color="error"
+          label="Remove password"
+          class="-mt-3"
+          :disabled="busy"
+          @click="removePassword"
+        />
         <div
           v-else-if="sharing.hasPassword"
           class="flex items-center gap-2 text-sm"
         >
           <span class="text-muted">The link asks for a password.</span>
           <UButton
+            type="button"
             size="sm"
             variant="link"
             color="error"

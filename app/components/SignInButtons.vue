@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { RETURN_KEY } from '~/utils/boardView'
+
 // One button per sign-in provider the server has configured (GET /api/me `providers`).
 // Each is a full page load: the provider's page, then back to /auth/<provider>.
 type Provider = 'github' | 'google'
@@ -7,7 +9,19 @@ const props = withDefaults(defineProps<{
   providers: Provider[]
   /** "Sign in with" or, from the account page, "Link". */
   verb?: string
-}>(), { verb: 'Sign in with' })
+  /** A board page to come back to once signed in (the sign-in itself ends on /). */
+  returnTo?: string
+}>(), { verb: 'Sign in with', returnTo: undefined })
+
+/** Remembered for this tab only; the board list sends the user on (index.vue). */
+function remember() {
+  if (!props.returnTo) return
+  try {
+    sessionStorage.setItem(RETURN_KEY, props.returnTo)
+  } catch {
+    // No storage (a private window): the user lands on the board list.
+  }
+}
 
 const LOOK: Record<Provider, { label: string, icon: string }> = {
   github: { label: 'GitHub', icon: 'i-simple-icons-github' },
@@ -28,6 +42,7 @@ const LOOK: Record<Provider, { label: string, icon: string }> = {
       variant="outline"
       :icon="LOOK[p].icon"
       :label="`${props.verb} ${LOOK[p].label}`"
+      @click="remember"
     />
   </div>
 </template>

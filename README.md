@@ -45,7 +45,7 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 
 | Route | Does |
 | --- | --- |
-| `GET /api/boards` | list boards (`id`, `name`, `head`, ...) |
+| `GET /api/boards?list=mine\|shared\|trash` | list your boards (`id`, `name`, `head`, `visibility`, ...; `mine` by default), those in the trash, or those shared with you (`key`, `name`, `owner`, `role`, `lastOpened`) |
 | `POST /api/boards` | `{ "board": <board json> }` imports; `{ "name", "cols", "rows", "type" }` creates an empty board |
 | `GET /api/boards/:id` | `{ id, name, head, board }` |
 | `PUT /api/boards/:id` | `{ "board": <board json>, "baseRevision"?: n }`; `409` with `{ current }` if `baseRevision` is not the head |
@@ -53,6 +53,7 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `GET /api/boards/:id/check` | findings and counts, as in the findings panel |
 | `GET /api/boards/:id/bench` | bench sheet (HTML) |
 | `GET /api/boards/:id/download` | the board as a `.wirebender.json` file |
+| `GET /api/boards/:id/thumbnail` | an SVG of the top side, for the board lists |
 | `GET /api/boards/:id/revisions` | history; `POST /api/boards/:id/revisions/:n/restore` restores one |
 | `GET /api/boards/:id/revisions/:n` | the board as it was at revision `n` |
 | `POST /api/boards/:id/undo`, `/redo` | undo or redo the last change |

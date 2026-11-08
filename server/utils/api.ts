@@ -6,7 +6,8 @@ import { tickKey } from '../../export/benchHtml'
 import type { Db } from '../db'
 import { benchResponse, fileStem } from './bench'
 import { access, allows, ownerName, recordVisit, type Access, type Role } from './boardAccess'
-import { createBoard, getBoard, getBoardRow, getRevision, listBoards, listRevisions } from './boards'
+import { boardOverviewSvg } from '../../export/svg'
+import { createBoard, getBoard, getBoardRow, getRevision, listBoards, listRevisions, listShared } from './boards'
 import { openRoom, type Room } from './rooms'
 import { authorIdOf, type Who } from './who'
 
@@ -76,9 +77,11 @@ export function createOrImport(db: Db, text: string, author = AUTHOR, ownerId = 
   return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', author, ownerId, ownerId).id })
 }
 
-/** `ownerId`'s boards (Task 7 adds the shared and trash lists). */
-export function listBoardsResponse(db: Db, ownerId = 'local'): ApiResult {
-  return ok(listBoards(db, ownerId, 'mine'))
+/** `GET /api/boards?list=`: `userId`'s own boards (`mine`, the default), those in their `trash`, or the boards `shared` with them. */
+export function listBoardsResponse(db: Db, userId = 'local', list: unknown = 'mine'): ApiResult {
+  if (list === 'mine' || list === 'trash') return ok(listBoards(db, userId, list))
+  if (list === 'shared') return ok(listShared(db, userId))
+  return invalid('list: must be mine, shared or trash')
 }
 
 /**
@@ -237,6 +240,23 @@ export function downloadBoard(db: Db, req: BoardRequest): ApiResult {
       'cache-control': 'no-store',
       'x-content-type-options': 'nosniff',
       'content-disposition': `attachment; filename="${filename}"`
+    })
+  })
+}
+
+/**
+ * `GET /api/boards/:key/thumbnail`: the top side, without labels, for the board lists. Kept
+ * a minute by the browser only. The SVG may not run or load anything if opened on its own.
+ */
+export function thumbnailBoard(db: Db, req: BoardRequest): ApiResult {
+  return withAccess(db, req, 'view', (a) => {
+    const stored = getBoard(db, a.boardId)
+    if (!stored) return notFound()
+    return ok(boardOverviewSvg(stored.board, 'top', { labelSize: 0 }), {
+      'content-type': 'image/svg+xml; charset=utf-8',
+      'cache-control': 'private, max-age=60',
+      'x-content-type-options': 'nosniff',
+      'content-security-policy': 'default-src \'none\'; style-src \'unsafe-inline\'; sandbox'
     })
   })
 }
