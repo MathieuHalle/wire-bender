@@ -48,6 +48,9 @@ function awarenessEntries(update: Uint8Array): AwarenessEntry[] {
   return entries
 }
 
+/** An entry that removes its client's presence (y-protocols sends the state `null`). */
+const isRemoval = (state: string): boolean => state.trim() === 'null'
+
 /** An awareness update of `entries`, in the y-protocols format. */
 function encodeEntries(entries: readonly AwarenessEntry[]): Uint8Array {
   const e = encoding.createEncoder()
@@ -384,7 +387,8 @@ export class Room {
    * Apply a peer's presence and relay it to the others (R6). Entries naming a client id
    * another peer has, or one reserved for tokens, are dropped and the rest applied: a
    * y-websocket client sends back every presence change it receives, so those are mostly
-   * echoes, and a forgery is never stored or relayed either way. Refused whole (nothing
+   * echoes, and a forgery is never stored or relayed either way. A removal applies only to
+   * the sender's own ids, and never counts toward the cap. Refused whole (nothing
    * stored or relayed, and the socket closes with 4400) when it is over MAX_AWARENESS_BYTES,
    * malformed, or the entries kept would give this peer more than MAX_PEER_CLIENTS ids.
    */
@@ -395,8 +399,13 @@ export class Room {
     try {
       const entries = awarenessEntries(update)
       const others = [...this.peers].filter(([otherId]) => otherId !== peerId).map(([, other]) => other.clients)
-      const kept = entries.filter(({ client }) => client < TOKEN_CLIENT_BASE && !others.some(clients => clients.has(client)))
-      if (new Set([...peer.clients, ...kept.map(e => e.client)]).size > MAX_PEER_CLIENTS) return { ok: false, reason: `a peer may have at most ${MAX_PEER_CLIENTS} presence clients` }
+      // A removal (null state) applies only to the sender's own ids: anything else is an echo
+      // of someone leaving (or a forgery), never counted toward the cap nor claiming an id.
+      const kept = entries.filter(({ client, state }) => isRemoval(state)
+        ? peer.clients.has(client)
+        : client < TOKEN_CLIENT_BASE && !others.some(clients => clients.has(client)))
+      const claimed = kept.filter(e => !isRemoval(e.state)).map(e => e.client)
+      if (new Set([...peer.clients, ...claimed]).size > MAX_PEER_CLIENTS) return { ok: false, reason: `a peer may have at most ${MAX_PEER_CLIENTS} presence clients` }
       if (kept.length === 0) return { ok: true }
       applyAwarenessUpdate(this.awareness, kept.length === entries.length ? update : encodeEntries(kept), peerId)
       return { ok: true }

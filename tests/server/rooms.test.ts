@@ -719,6 +719,70 @@ describe('rooms', () => {
     expect(kept.options.websocket).toEqual({ hooks: 1, serverOptions: { perMessageDeflate: false, maxPayload: MAX_MESSAGE_BYTES } })
   })
 
+  describe('echoed removals (N1)', () => {
+    /** A presence update of raw entries: [client id, clock, state]. */
+    const entries = (list: [number, number, unknown][]) => {
+      const e = encoding.createEncoder()
+      encoding.writeVarUint(e, list.length)
+      for (const [c, clock, state] of list) {
+        encoding.writeVarUint(e, c)
+        encoding.writeVarUint(e, clock)
+        encoding.writeVarString(e, JSON.stringify(state))
+      }
+      return encoding.toUint8Array(e)
+    }
+    /** A view-link guest joined straight to the room, holding `ids` (the most a peer may). */
+    const guest = (room: Room, peerId: string, ids: number[]) => {
+      room.join(peerId, 'Visitor', { update: () => {}, awareness: () => {} }, { role: 'view', viaLink: true, presence: { name: 'Guest' } })
+      expect(room.receiveAwareness(peerId, entries(ids.map(c => [c, 1, { user: { name: 'x' } }])))).toEqual({ ok: true })
+    }
+    const fourIds = (base: number) => Array.from({ length: MAX_PEER_CLIENTS }, (_, i) => base + i)
+
+    it('a 4-id peer leaves, and the echoing bystanders stay connected', () => {
+      const a = connect('a')
+      const b = connect('b')
+      a.awareness.setLocalState({ user: { name: 'Local · Tablet' } })
+      b.awareness.setLocalState({ user: { name: 'Local · This computer' } })
+      guest(a.room, 'g', fourIds(5000))
+      expect(a.awareness.getStates().has(5000)).toBe(true)
+      a.room.leave('g')
+      expect(fourIds(5000).some(c => a.awareness.getStates().has(c) || b.awareness.getStates().has(c))).toBe(false)
+      expect([a.refused, b.refused]).toEqual([[], []])
+      // Both still see each other.
+      expect(b.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Local · Tablet' } })
+    })
+
+    it('a view-link guest that keeps rejoining gets no one closed', () => {
+      const a = connect('a')
+      const b = connect('b')
+      a.awareness.setLocalState({ user: { name: 'Local · Tablet' } })
+      b.awareness.setLocalState({ user: { name: 'Local · This computer' } })
+      for (let round = 0; round < 5; round++) {
+        guest(a.room, `g${round}`, fourIds(6000 + round * 10))
+        a.room.leave(`g${round}`)
+      }
+      expect([a.refused, b.refused]).toEqual([[], []])
+    })
+
+    it('an echoed removal for an id nobody owns changes nothing and closes nobody', () => {
+      const a = connect('a')
+      const relayed: Uint8Array[] = []
+      a.room.join('watch', 'Local', { update: () => {}, awareness: u => relayed.push(u) })
+      relayed.length = 0
+      const before = [...a.room.awareness.getStates().keys()]
+      // Many removals at once: none counts toward the cap, and none claims an id.
+      expect(a.room.receiveAwareness('a', entries(fourIds(7000).concat(fourIds(8000)).map(c => [c, 3, null])))).toEqual({ ok: true })
+      expect(relayed).toEqual([])
+      expect([...a.room.awareness.getStates().keys()]).toEqual(before)
+      // a may still take its own ids up to the cap.
+      expect(a.room.receiveAwareness('a', entries(fourIds(9000).slice(0, MAX_PEER_CLIENTS - 1).map(c => [c, 1, { user: { name: 'tab' } }])))).toEqual({ ok: true })
+      // A peer's removal of its own id applies.
+      expect(a.room.receiveAwareness('a', entries([[9000, 2, null]]))).toEqual({ ok: true })
+      expect(a.room.awareness.getStates().has(9000)).toBe(false)
+      a.room.leave('watch')
+    })
+  })
+
   describe('a token at work', () => {
     const claude: Who = { kind: 'local', userId: 'local', author: 'Claude · Local', token: { id: 'tok-1', name: 'Claude' } }
     const put = (who: Who = claude) => {
