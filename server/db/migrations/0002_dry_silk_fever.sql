@@ -1,0 +1,1 @@
+ALTER TABLE `boards` ADD `forked_from_link` text;

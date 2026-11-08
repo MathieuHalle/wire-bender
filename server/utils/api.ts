@@ -153,16 +153,20 @@ export function getBoardResponse(db: Db, req: BoardRequest): ApiResult {
 
 /**
  * Where the owner's board was forked from, as they may reach it now: their own board by its
- * id, someone else's by its current share link; null if it is gone, trashed, or no longer
- * viewable by them (private, its owner deleted, a password they haven't entered).
+ * id, someone else's by the link the fork was made through, and only while that is still
+ * the source's link (R12: a regenerate kills the old link for forkers too, and the new one
+ * is never handed out); null if it is gone, trashed, or no longer viewable by them
+ * (private, its owner deleted, a password they haven't entered).
  */
 function forkedFrom(db: Db, req: BoardRequest, boardId: string): { key: string, name: string } | null {
-  const sourceId = getBoardRow(db, boardId)?.forkedFrom
-  const source = sourceId ? getBoardRow(db, sourceId) : undefined
-  if (!source || source.trashedAt !== null) return null
+  const fork = getBoardRow(db, boardId)
+  const source = fork?.forkedFrom ? getBoardRow(db, fork.forkedFrom) : undefined
+  if (!fork || !source || source.trashedAt !== null) return null
   const own = access(db, req.who, source.id, [])
   if (own.ok) return { key: source.id, name: source.name }
-  return access(db, req.who, source.linkId, req.unlocked ?? []).ok ? { key: source.linkId, name: source.name } : null
+  const link = fork.forkedFromLink
+  if (link === null || link !== source.linkId) return null
+  return access(db, req.who, link, req.unlocked ?? []).ok ? { key: link, name: source.name } : null
 }
 
 function foundOr404(body: unknown): ApiResult {

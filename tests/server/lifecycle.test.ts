@@ -15,7 +15,7 @@ import {
   PURGE_EVERY_MS, deleteAccount, deleteBoardForGood, fork, purge, resetCreateRate, restoreAccount, restoreSession, schedulePurge, trashBoard, untrashBoard, withCreateLimit
 } from '../../server/utils/lifecycle'
 import { openRoom, type PeerLink } from '../../server/utils/rooms'
-import { getSharing, patchSharing } from '../../server/utils/sharing'
+import { getSharing, patchSharing, regenerateLink } from '../../server/utils/sharing'
 import type { Who } from '../../server/utils/who'
 
 let dir: string
@@ -360,15 +360,13 @@ describe('fork', () => {
     expect(forkedFrom()).toBeNull()
     db.update(boards).set({ visibility: 'edit' }).where(eq(boards.id, b.id)).run()
     expect(forkedFrom()).toEqual({ key: b.linkId, name: 'Second' })
-    // A regenerated link: the new link id, never the board id.
-    db.update(boards).set({ linkId: 'new-link' }).where(eq(boards.id, b.id)).run()
-    expect(forkedFrom()).toEqual({ key: 'new-link', name: 'Second' })
     db.update(boards).set({ trashedAt: Date.now() }).where(eq(boards.id, b.id)).run()
     expect(forkedFrom()).toBeNull()
     db.update(boards).set({ trashedAt: null }).where(eq(boards.id, b.id)).run()
     db.update(users).set({ deletedAt: Date.now() }).where(eq(users.id, ada.userId)).run()
     expect(forkedFrom()).toBeNull()
     db.update(users).set({ deletedAt: null }).where(eq(users.id, ada.userId)).run()
+    expect(forkedFrom()).toEqual({ key: b.linkId, name: 'Second' })
     // Never shown to anyone but the fork's owner.
     db.update(boards).set({ visibility: 'view' }).where(eq(boards.id, id)).run()
     const viaLink = api.getBoardResponse(db, { key: getBoardRow(db, id)!.linkId, who: user('Cy') }).body as { forkedFrom: unknown }
@@ -378,6 +376,33 @@ describe('fork', () => {
     trashBoard(db, { key: b.id, who: ada })
     deleteBoardForGood(db, { key: b.id, who: ada }, deleteBody('Second'))
     expect(forkedFrom()).toBeNull()
+  })
+
+  it('forkedFrom is null for good once the owner regenerates the link, and the new link shows nowhere (R12)', () => {
+    const ada = user('Ada')
+    const bob = user('Bob')
+    const b = board(ada)
+    db.update(boards).set({ visibility: 'edit' }).where(eq(boards.id, b.id)).run()
+    const id = (fork(db, { key: b.linkId, who: bob }).body as { id: string }).id
+    expect(getBoardRow(db, id)!.forkedFromLink).toBe(b.linkId)
+    const got = () => api.getBoardResponse(db, { key: id, who: bob }).body as { forkedFrom: unknown }
+    expect(got().forkedFrom).toEqual({ key: b.linkId, name: 'Second' })
+    expect(regenerateLink(db, { key: b.id, who: ada }, 'https://wire.example.org').status).toBe(200)
+    const fresh = getBoardRow(db, b.id)!.linkId
+    expect(fresh).not.toBe(b.linkId)
+    expect(got().forkedFrom).toBeNull()
+    for (const r of [api.getBoardResponse(db, { key: id, who: bob }), api.listBoardsResponse(db, bob.userId, 'mine'), api.listBoardsResponse(db, bob.userId, 'shared'), api.listRevisionsResponse(db, { key: id, who: bob })]) {
+      expect(JSON.stringify(r.body)).not.toContain(fresh)
+    }
+  })
+
+  it('a fork of the forker\'s own board points back by board id, whatever its link (R12)', () => {
+    const ada = user('Ada')
+    const b = board(ada)
+    const id = (fork(db, { key: b.id, who: ada }).body as { id: string }).id
+    expect(getBoardRow(db, id)!.forkedFromLink).toBeNull()
+    regenerateLink(db, { key: b.id, who: ada }, 'https://wire.example.org')
+    expect((api.getBoardResponse(db, { key: id, who: ada }).body as { forkedFrom: unknown }).forkedFrom).toEqual({ key: b.id, name: 'Second' })
   })
 })
 

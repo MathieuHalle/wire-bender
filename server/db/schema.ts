@@ -20,7 +20,12 @@ export const boards = sqliteTable('boards', {
   passwordHash: text('password_hash'),
   trashedAt: integer('trashed_at'),
   /** The board this one was forked from. */
-  forkedFrom: text('forked_from')
+  forkedFrom: text('forked_from'),
+  /**
+   * The source's link id the fork was made through (null for a duplicate of one's own
+   * board). `forkedFrom` shows it only while the source's link is still this one (R12).
+   */
+  forkedFromLink: text('forked_from_link')
 }, t => [
   uniqueIndex('boards_link_id_unique').on(t.linkId)
 ])
