@@ -5,7 +5,7 @@ import { ADVISORY } from '../core/advisory'
 import { benchModel, type BenchModel, type MeterRow } from '../core/bench/sheet'
 import { netLabel, type WireCard } from '../core/bench/cards'
 import type { BoardFile, Side } from '../core/schema'
-import type { Flip } from '../core/sideView'
+import { sideMap, type Flip, type SideMap } from '../core/sideView'
 import {
   bendSvgs, boardOverviewSvg, COPPER, esc, INSULATED_FALLBACK, legFoldSvg, mmExact, mmText, safeColor, scaleBarSvg,
   SPARE_TAIL_LABEL, stripBarSvg
@@ -181,7 +181,7 @@ function material(c: WireCard): string {
   return c.kind === 'trail' ? 'bare tinned copper' : `insulated wire, ${c.color ?? 'any colour'}`
 }
 
-function card(c: WireCard, board: BoardFile, printable: number, id: (k: string) => string): string {
+function card(c: WireCard, board: BoardFile, printable: number, id: (k: string) => string, map: SideMap): string {
   const color = c.kind === 'trail' ? COPPER : safeColor(c.color, INSULATED_FALLBACK)
   const net = c.net === null
     ? 'no net'
@@ -189,7 +189,7 @@ function card(c: WireCard, board: BoardFile, printable: number, id: (k: string) 
   const showStrip = c.strip.length > 0 || c.kind !== 'trail'
   // In print, cards sit in two columns; a card whose 1:1 drawing is wider than a column spans both.
   const column = (printable - COLUMN_GAP_MM) / 2 - CARD_INSET_MM
-  const svgs = c.kind === 'flying' ? [] : bendSvgs(c, printable - CARD_INSET_MM)
+  const svgs = c.kind === 'flying' ? [] : bendSvgs(c, printable - CARD_INSET_MM, map)
   const narrow = svgs.every(s => svgWidthMm(s) <= column)
   const stripW = narrow ? column : Math.min(170, printable - CARD_INSET_MM)
   let drawing: string
@@ -218,19 +218,19 @@ ${drawing}
 </section>`
 }
 
-function cards(m: BenchModel, board: BoardFile, printable: number, id: (k: string) => string): string {
+function cards(m: BenchModel, board: BoardFile, printable: number, id: (k: string) => string, map: SideMap): string {
   return `<section id="cards" class="page">
 <h2>Wire cards</h2>
 <p class="hint">Lay the cut wire on the drawing from the dashed start; bend at each marked corner. Bend drawings are 1:1. Strip bars are not to scale; their marks are measured from the start end.</p>
-${m.cards.length ? `<div class="columns">\n${m.cards.map(c => card(c, board, printable, id)).join('\n')}\n</div>` : '<p>No trails or wires.</p>'}
+${m.cards.length ? `<div class="columns">\n${m.cards.map(c => card(c, board, printable, id, map)).join('\n')}\n</div>` : '<p>No trails or wires.</p>'}
 </section>`
 }
 
-function legFolds(m: BenchModel, pitchMm: number, id: (k: string) => string): string {
+function legFolds(m: BenchModel, pitchMm: number, id: (k: string) => string, map: SideMap): string {
   const rows = m.legFolds.map(f => `<div class="fold">
 ${tick(id(`fold:${f.lead}`))}
 <div><p><strong>${esc(f.lead)}</strong> <span class="mono">${esc(f.from)} → ${esc(f.to)}</span></p><p>${esc(f.note)}</p></div>
-<div class="sketch">${legFoldSvg(f, pitchMm)}</div>
+<div class="sketch">${legFoldSvg(f, pitchMm, map)}</div>
 </div>`)
   return `<section id="legfolds" class="page">
 <h2>Leg-fold bridges</h2>
@@ -511,14 +511,15 @@ export function tickKey(sha256Hex: string): string {
  */
 export function benchHtml(board: BoardFile, opts: { hash?: string, date?: string, flip?: Flip } = {}): string {
   const flip = opts.flip ?? 'lr'
+  const map = sideMap(board, flip)
   const m = benchModel(board)
   const printable = PRINTABLE_MM[m.paper]
   const id = tickIds()
   const date = opts.date ?? today()
   const key = `wirebender:${m.name}:${opts.hash ?? m.revision}`
   const parts = [
-    overview(board, printable, flip), enlarged(board, m.paper, flip), placement(m, id), cards(m, board, printable, id),
-    legFolds(m, board.board.pitchMm, id), meter(m, id)
+    overview(board, printable, flip), enlarged(board, m.paper, flip), placement(m, id), cards(m, board, printable, id, map),
+    legFolds(m, board.board.pitchMm, id, map), meter(m, id)
   ].map(html => ({ html, ...sectionHead(html) }))
   return `<!doctype html>
 <html lang="en">
