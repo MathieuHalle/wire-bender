@@ -42,7 +42,9 @@ export const revisions = sqliteTable('revisions', {
   summary: text('summary').notNull(),
   /** JSON BoardFile */
   board: text('board').notNull(),
-  authorId: text('author_id')
+  authorId: text('author_id'),
+  /** The API token a revision was made with, if any. */
+  tokenId: text('token_id')
 }, t => [
   primaryKey({ columns: [t.boardId, t.n] }),
   index('revisions_board_idx').on(t.boardId)
@@ -91,4 +93,19 @@ export const linkVisits = sqliteTable('link_visits', {
   lastOpened: integer('last_opened').notNull()
 }, t => [
   primaryKey({ columns: [t.userId, t.boardId] })
+])
+
+/** Personal API tokens. Only the sha256 of a token is stored. */
+export const tokens = sqliteTable('tokens', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  name: text('name').notNull(),
+  /** Hex sha256 of the whole token string. */
+  hash: text('hash').notNull().unique(),
+  /** The first 8 characters after `wb_`, for display. */
+  prefix: text('prefix').notNull(),
+  createdAt: integer('created_at').notNull(),
+  lastUsedAt: integer('last_used_at')
+}, t => [
+  index('tokens_user_idx').on(t.userId)
 ])

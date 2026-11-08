@@ -9,7 +9,7 @@
 // memory; a restart drops them.
 import { and, count, eq, inArray, isNotNull, isNull, lt, ne } from 'drizzle-orm'
 import type { Db } from '../db'
-import { boards, identities, linkVisits, revisions, users } from '../db/schema'
+import { boards, identities, linkVisits, revisions, tokens, users } from '../db/schema'
 import { invalid, notFound, parseBody, withAccess, withOwner, type ApiResult, type BoardRequest } from './api'
 import { createBoard, getBoard, getBoardRow } from './boards'
 import { closeRoom, kickAccount, kickNonOwnerPeers } from './rooms'
@@ -231,6 +231,7 @@ export function purge(db: Db, now = Date.now()): { boards: number, users: number
       deleteBoardRows(tx, owned)
       tx.delete(identities).where(eq(identities.userId, userId)).run()
       tx.delete(linkVisits).where(eq(linkVisits.userId, userId)).run()
+      tx.delete(tokens).where(eq(tokens.userId, userId)).run()
       tx.delete(users).where(eq(users.id, userId)).run()
     })
     boardCount += owned.length
