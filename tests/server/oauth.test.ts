@@ -82,6 +82,15 @@ describe('finishSignIn', () => {
     expect(replaced).toHaveBeenCalledWith({ user: { id: a }, pendingDeletion: true, unlocked: ['link-1'] })
   })
 
+  it('a pendingDeletion session\'s unlocked links stay with that account, not the next one (R14)', async () => {
+    const a = existing('42')
+    useDb().update(users).set({ deletedAt: Date.now() }).where(eq(users.id, a)).run()
+    session = { user: { id: a }, pendingDeletion: true, unlocked: ['link-of-a'] }
+    expect(await finishSignIn(callback(), 'github', { id: '7', name: 'Bob' })).toEqual({ redirect: '/', status: 302 })
+    const bob = useDb().select().from(users).all().find(u => u.name === 'Bob')!
+    expect(replaced).toHaveBeenCalledWith({ user: { id: bob.id } })
+  })
+
   it('linking from a signed-in session goes to / and keeps the session', async () => {
     const a = existing('42')
     session = { user: { id: a } }
