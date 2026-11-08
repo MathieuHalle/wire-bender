@@ -1,3 +1,4 @@
+import * as decoding from 'lib0/decoding'
 import * as Y from 'yjs'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
 import { parseBoard, type BoardFile } from '~core/schema'
@@ -12,6 +13,22 @@ export const GROUP_IDLE_MS = 2000
 
 /** The largest presence update a peer may send: a name, an avatar URL and a colour fit many times. */
 export const MAX_AWARENESS_BYTES = 8192
+
+/** The most presence client ids one peer may have (y-websocket uses one per doc). */
+export const MAX_PEER_CLIENTS = 4
+
+/** The client ids an awareness update names (y-protocols: count, then id, clock, state each). */
+function awarenessClients(update: Uint8Array): number[] {
+  const d = decoding.createDecoder(update)
+  const n = decoding.readVarUint(d)
+  const ids: number[] = []
+  for (let i = 0; i < n; i++) {
+    ids.push(decoding.readVarUint(d))
+    decoding.readVarUint(d)
+    decoding.readVarString(d)
+  }
+  return ids
+}
 
 /** How a room reaches one connected peer. */
 export interface PeerLink {
@@ -190,8 +207,8 @@ export class Room {
     this.awareness.on('update', ({ added, updated, removed }: Record<'added' | 'updated' | 'removed', number[]>, origin: unknown) => {
       const from = typeof origin === 'string' ? this.peers.get(origin) : undefined
       if (from) {
-        // Updated too: a peer that writes another client's state owns it from then on, so it
-        // goes when that peer leaves.
+        // Updated too: a state no peer owned yet (receiveAwareness refuses another peer's)
+        // belongs to the sender from then on, so it goes when that peer leaves.
         for (const c of [...added, ...updated]) from.clients.add(c)
         for (const c of removed) from.clients.delete(c)
         // A stamped peer's name and avatar are the server's, whatever it sent and under
@@ -264,11 +281,21 @@ export class Room {
     return { ok: true }
   }
 
-  /** Apply a peer's presence and relay it to the others. */
+  /**
+   * Apply a peer's presence and relay it to the others. Refused whole (nothing stored or
+   * relayed, and the socket closes with 4400) when it is over MAX_AWARENESS_BYTES, names a
+   * client id another peer has, or would give this peer more than MAX_PEER_CLIENTS ids.
+   */
   receiveAwareness(peerId: string, update: Uint8Array): Received {
-    if (!this.peers.has(peerId)) return NOT_JOINED
+    const peer = this.peers.get(peerId)
+    if (!peer) return NOT_JOINED
     if (update.byteLength > MAX_AWARENESS_BYTES) return { ok: false, reason: `the presence update is larger than ${MAX_AWARENESS_BYTES} bytes` }
     try {
+      const ids = awarenessClients(update)
+      for (const [otherId, other] of this.peers) {
+        if (otherId !== peerId && ids.some(c => other.clients.has(c))) return { ok: false, reason: 'the presence update names another peer\'s client' }
+      }
+      if (new Set([...peer.clients, ...ids]).size > MAX_PEER_CLIENTS) return { ok: false, reason: `a peer may have at most ${MAX_PEER_CLIENTS} presence clients` }
       applyAwarenessUpdate(this.awareness, update, peerId)
       return { ok: true }
     } catch (e) {

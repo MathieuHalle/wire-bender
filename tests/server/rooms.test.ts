@@ -12,7 +12,7 @@ import * as syncProtocol from 'y-protocols/sync'
 import { eq } from 'drizzle-orm'
 import { revisions } from '../../server/db/schema'
 import { MAX_BOARD_BYTES, createBoard, getBoard, getRevision, listRevisions } from '../../server/utils/boards'
-import { GROUP_IDLE_MS, MAX_AWARENESS_BYTES, openRoom, type Room } from '../../server/utils/rooms'
+import { GROUP_IDLE_MS, MAX_AWARENESS_BYTES, MAX_PEER_CLIENTS, openRoom, type Room } from '../../server/utils/rooms'
 import { MAX_MESSAGE_BYTES, capSocketPayload, handleMessage } from '../../server/utils/liveMessage'
 import { MESSAGE_COMMAND } from '../../shared/liveCommand'
 import { docToBoard, stable, writeBoard } from '../../shared/yboard'
@@ -340,21 +340,51 @@ describe('rooms', () => {
     expect(connect('c').awareness.getStates().get(guest.doc.clientID)).toEqual({ user: { name: 'Guest', color: '#123456' } })
   })
 
-  it('a client another peer updates goes with that peer when it leaves', () => {
+  it('a peer can\'t claim another peer\'s presence id: the update is refused and reaches no one', () => {
     const a = connect('a')
     const g = connect('g', 'Visitor', null, { name: 'Guest' })
     const c = connect('c')
     a.awareness.setLocalState({ user: { name: 'Local · Tablet' } })
     a.room.receiveAwareness('a', encodeAwarenessUpdate(a.awareness, [a.doc.clientID]))
-    // g sends a newer state under a's client id: an update, not an add.
+    // g sends a newer state under a's client id.
     const forged = new Awareness(new Y.Doc())
     forged.clientID = a.doc.clientID
-    // A higher clock than a's own state, so the room takes it.
+    // A higher clock than a's own state, so the room would take it.
     for (let i = 0; i < 5; i++) forged.setLocalState({ user: { name: 'Ada' } })
-    g.room.receiveAwareness('g', encodeAwarenessUpdate(forged, [a.doc.clientID]))
-    expect(c.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Guest' } })
+    const r = g.room.receiveAwareness('g', encodeAwarenessUpdate(forged, [a.doc.clientID]))
+    expect(r).toEqual({ ok: false, reason: 'the presence update names another peer\'s client' })
+    expect(c.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Local · Tablet' } })
+    // a keeps its own presence when g leaves.
     leave(g)
-    expect(c.awareness.getStates().has(a.doc.clientID)).toBe(false)
+    expect(c.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Local · Tablet' } })
+  })
+
+  it('a view peer sending 50 presence ids in one update is refused, and none is stored or relayed', () => {
+    const room = openRoom(db, id)!
+    const relayed: Uint8Array[] = []
+    room.join('v', 'Visitor', { update: () => {}, awareness: () => {} }, { role: 'view', viaLink: true, presence: { name: 'Guest' } })
+    room.join('o', 'Ada', { update: () => {}, awareness: u => relayed.push(u) }, { role: 'owner', viaLink: false })
+    const many = (ids: number[]) => {
+      const e = encoding.createEncoder()
+      encoding.writeVarUint(e, ids.length)
+      for (const c of ids) {
+        encoding.writeVarUint(e, c)
+        encoding.writeVarUint(e, 1)
+        encoding.writeVarString(e, '{}')
+      }
+      return encoding.toUint8Array(e)
+    }
+    const ids = Array.from({ length: 50 }, (_, i) => 1000 + i)
+    expect(room.receiveAwareness('v', many(ids))).toEqual({ ok: false, reason: `a peer may have at most ${MAX_PEER_CLIENTS} presence clients` })
+    expect([...room.awareness.getStates().keys()].filter(c => ids.includes(c))).toEqual([])
+    expect(relayed).toEqual([])
+    // Up to the limit is fine, spread over several updates; one more is not.
+    expect(room.receiveAwareness('v', many(ids.slice(0, 2)))).toEqual({ ok: true })
+    expect(room.receiveAwareness('v', many(ids.slice(2, MAX_PEER_CLIENTS)))).toEqual({ ok: true })
+    expect(room.receiveAwareness('v', many([ids[MAX_PEER_CLIENTS]!])).ok).toBe(false)
+    expect([...room.awareness.getStates().keys()].filter(c => ids.includes(c))).toHaveLength(MAX_PEER_CLIENTS)
+    room.leave('v')
+    room.leave('o')
   })
 
   it('a signed-in peer that claims another name arrives under its account name and avatar', () => {
