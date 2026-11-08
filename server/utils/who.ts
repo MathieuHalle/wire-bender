@@ -135,9 +135,11 @@ export const authorIdOf = (who: Who): string | null => who.kind === 'anonymous' 
 /**
  * Who `who` is in a board's presence, stamped by the server over whatever the client says:
  * a signed-in account's name and avatar (read fresh), `Guest` for anonymous. The local user
- * gets none: each device names itself (`Local · <device>`).
+ * gets none: each device names itself (`Local · <device>`). A request made with a token is
+ * the token, by its name, in either mode.
  */
-export function presenceOf(db: Db, who: Who): { name: string, avatar?: string } | undefined {
+export function presenceOf(db: Db, who: Who): { name: string, avatar?: string, kind?: 'token' } | undefined {
+  if (who.kind !== 'anonymous' && who.token) return { name: who.token.name, kind: 'token' }
   if (who.kind === 'local') return undefined
   if (who.kind === 'anonymous') return { name: 'Guest' }
   const row = db.select({ name: users.name, avatar: users.avatar }).from(users).where(eq(users.id, who.userId)).get()

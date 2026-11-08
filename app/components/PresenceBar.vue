@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // Who else is on the board: one avatar (a signed-in person's, from their sign-in provider)
 // or coloured initial per connected copy, its name in the tooltip. Signed-out visitors are
-// `Guest`.
+// `Guest`. An API token at work is a robot icon, never an avatar.
 import type { Peer } from '~/composables/useLiveBoard'
 
 const props = defineProps<{ peers: Peer[] }>()
@@ -25,8 +25,18 @@ const title = computed(() => (props.peers.length
       v-for="(p, i) in shown"
       :key="i"
     >
+      <span
+        v-if="p.kind === 'token'"
+        role="listitem"
+        class="inline-flex size-6 items-center justify-center rounded-full bg-elevated text-default ring-2 ring-default"
+        :aria-label="p.name"
+        data-kind="token"
+      ><UIcon
+        name="i-lucide-bot"
+        class="size-4"
+      /></span>
       <img
-        v-if="p.avatar"
+        v-else-if="p.avatar"
         role="listitem"
         class="size-6 rounded-full ring-2 ring-default"
         :src="p.avatar"

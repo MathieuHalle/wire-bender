@@ -137,6 +137,15 @@ const authorOf = (who: Who): string => who.kind === 'anonymous' ? AUTHOR : who.a
 /** The token a board change by `who` was made with, if any. */
 const tokenIdOf = (who: Who): string | null => who.kind === 'anonymous' ? null : who.token?.id ?? null
 
+/**
+ * A board change by `who` went through: if it was made with a token, the token shows in the
+ * board's presence for a while (spec §6). Nothing when the write closed the room (no peers).
+ */
+function written(room: Room, who: Who, revision: number): number {
+  if (who.kind !== 'anonymous' && who.token) room.tokenActive(who.token)
+  return revision
+}
+
 /** `GET /api/boards/:key`: to anyone but the owner by board id, `id` is the key they used. */
 export function getBoardResponse(db: Db, req: BoardRequest): ApiResult {
   return withAccess(db, req, 'view', (a) => {
@@ -200,7 +209,7 @@ export function putBoard(db: Db, req: BoardRequest, text: string): ApiResult {
       }
       // Only the owner renames (spec §5): anyone else's board keeps the name it has now.
       const next = a.role === 'owner' ? parsed.board : { ...parsed.board, name: getBoard(db, a.boardId)!.board.name }
-      return ok({ revision: room.serverWrite(next, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who), tokenId: tokenIdOf(req.who) }) })
+      return ok({ revision: written(room, req.who, room.serverWrite(next, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who), tokenId: tokenIdOf(req.who) })) })
     })
   })
 }
@@ -214,7 +223,7 @@ export function renameBoard(db: Db, req: BoardRequest, text: string): ApiResult 
     if (name === '') return invalid('name: must be a non-empty string')
     return withRoom(db, a.boardId, (room) => {
       const current = getBoard(db, a.boardId)!.board
-      return ok({ revision: room.serverWrite({ ...current, name }, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who), tokenId: tokenIdOf(req.who) }) })
+      return ok({ revision: written(room, req.who, room.serverWrite({ ...current, name }, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who), tokenId: tokenIdOf(req.who) })) })
     })
   })
 }
@@ -282,7 +291,7 @@ export function thumbnailBoard(db: Db, req: BoardRequest): ApiResult {
 function change(db: Db, req: BoardRequest, step: (room: Room, author: string, authorId: string | null, tokenId: string | null) => number | null, reason: string): ApiResult {
   return withAccess(db, req, 'edit', a => withRoom(db, a.boardId, (room) => {
     const revision = step(room, authorOf(req.who), authorIdOf(req.who), tokenIdOf(req.who))
-    return revision === null ? { status: 409, body: { reason } } : ok({ revision })
+    return revision === null ? { status: 409, body: { reason } } : ok({ revision: written(room, req.who, revision) })
   }))
 }
 
@@ -310,6 +319,6 @@ export function restoreRevision(db: Db, req: BoardRequest, segment: string): Api
     const n = revisionNumber(segment)
     const rev = n === null ? null : getRevision(db, a.boardId, n)
     if (n === null || !rev) return notFound()
-    return withRoom(db, a.boardId, room => ok({ revision: room.serverWrite(rev.board as BoardFile, { author: authorOf(req.who), how: 'restore', target: n, authorId: authorIdOf(req.who), tokenId: tokenIdOf(req.who) }) }))
+    return withRoom(db, a.boardId, room => ok({ revision: written(room, req.who, room.serverWrite(rev.board as BoardFile, { author: authorOf(req.who), how: 'restore', target: n, authorId: authorIdOf(req.who), tokenId: tokenIdOf(req.who) })) }))
   })
 }

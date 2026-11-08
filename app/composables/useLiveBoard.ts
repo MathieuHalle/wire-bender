@@ -32,8 +32,11 @@ import { MESSAGE_COMMAND, type LiveAnswer, type LiveCommand, type LiveOp } from 
 import { docToBoard, writeBoard } from '#shared/yboard'
 
 export type LiveStatus = 'connecting' | 'live' | 'offline'
-/** Someone in the presence list; `avatar` is what their copy says (shown only from known hosts). */
-export interface Peer { name: string, color: string, avatar?: string }
+/**
+ * Someone in the presence list; `avatar` is what their copy says (shown only from known
+ * hosts). `kind: 'token'` is an API token at work (the server says so): no avatar or colour.
+ */
+export interface Peer { name: string, color: string, avatar?: string, kind?: 'token' }
 
 export type Role = 'owner' | 'edit' | 'view'
 
@@ -142,7 +145,8 @@ export function createLiveBoard(id: Ref<string>, deps: LiveDeps) {
     for (const [client, state] of p.awareness.getStates()) {
       const u = (state as { user?: Peer }).user
       if (client !== p.doc.clientID && u && typeof u.name === 'string') {
-        list.push({ name: u.name, color: String(u.color), ...(typeof u.avatar === 'string' ? { avatar: u.avatar } : {}) })
+        if (u.kind === 'token') list.push({ name: u.name, color: '', kind: 'token' })
+        else list.push({ name: u.name, color: String(u.color), ...(typeof u.avatar === 'string' ? { avatar: u.avatar } : {}) })
       }
     }
     peers.value = list

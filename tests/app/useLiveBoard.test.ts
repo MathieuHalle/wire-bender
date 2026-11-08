@@ -292,6 +292,16 @@ describe('useLiveBoard', () => {
     expect(live.peers.value).toEqual([{ name: 'Local · Tablet', color: '#123456' }])
   })
 
+  it('a token in presence is a token, with no avatar', () => {
+    const { live, last } = setup()
+    last().goLive(serverDoc(start))
+    const token = new Awareness(new Y.Doc())
+    token.setLocalStateField('user', { name: 'Claude', kind: 'token', avatar: 'https://avatars.githubusercontent.com/u/1' })
+    applyAwarenessUpdate(last().awareness, encodeAwarenessUpdate(token, [token.clientID]), 'remote')
+    expect(live.peers.value).toEqual([{ name: 'Claude', color: '', kind: 'token' }])
+    token.destroy()
+  })
+
   it('setDevice names this device in presence, now and after a reconnect', () => {
     const { live, last, providers } = setup()
     last().goLive(serverDoc(start))

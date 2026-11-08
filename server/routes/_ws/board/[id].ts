@@ -34,18 +34,20 @@ type PeerWho = { ok: true, who: Who, deviceId?: string } | { ok: false }
 
 /**
  * Who the peer is, on open. Local mode checks again: the upgrade was checked, but the
- * device may have been unpaired since. Public mode takes who the upgrade found (a session
- * can only be read there, asynchronously).
+ * device may have been unpaired since. Public mode, and a socket opened with a token in
+ * either mode, take who the upgrade found (a session or token can only be read there,
+ * asynchronously; a token is not a device).
  */
 function whoOf(peer: WsPeer): PeerWho {
+  const upgraded = peer.context?.who as Who | undefined
+  if (upgraded && upgraded.kind !== 'anonymous' && upgraded.token) return { ok: true, who: upgraded }
   if (checkMode() === 'local') {
     const t = trust(peer.request)
     if (!t.ok) return { ok: false }
     const who: Who = t.device ? { kind: 'local', userId: 'local', author: t.author, device: t.device } : { kind: 'local', userId: 'local', author: t.author }
     return { ok: true, who, deviceId: t.device?.id }
   }
-  const who = peer.context?.who as Who | undefined
-  return who ? { ok: true, who } : { ok: false }
+  return upgraded ? { ok: true, who: upgraded } : { ok: false }
 }
 
 /** WebSocket close reasons are at most 123 bytes. */
@@ -123,7 +125,7 @@ function join(peer: WsPeer): void {
       joined.delete(peer.id)
       peer.close(code, reason)
     }
-  }, { role: a.role, viaLink: a.viaLink, authorId: authorIdOf(w.who), presence: presenceOf(useDb(), w.who) })
+  }, { role: a.role, viaLink: a.viaLink, authorId: authorIdOf(w.who), tokenId: w.who.kind === 'anonymous' ? null : w.who.token?.id ?? null, presence: presenceOf(useDb(), w.who) })
   recordVisit(useDb(), w.who, a, a.key!)
   peer.send(message((e) => {
     encoding.writeVarUint(e, MESSAGE_SYNC)

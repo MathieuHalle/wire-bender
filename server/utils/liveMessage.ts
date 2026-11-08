@@ -84,7 +84,8 @@ function command(peer: MessagePeer, room: Room, author: string, d: decoding.Deco
   let reply: LiveAnswer
   try {
     const authorId = room.peerAuthorId(peer.id)
-    const revision = op === 'undo' ? room.undo(author, authorId) : room.redo(author, authorId)
+    const tokenId = room.peerTokenId(peer.id)
+    const revision = op === 'undo' ? room.undo(author, authorId, tokenId) : room.redo(author, authorId, tokenId)
     reply = revision === null ? { id, ok: false, reason: NOTHING[op] } : { id, ok: true }
   } catch (e) {
     // A server fault, not the client's: answer it and keep the socket open.

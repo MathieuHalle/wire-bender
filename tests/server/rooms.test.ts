@@ -12,7 +12,9 @@ import * as syncProtocol from 'y-protocols/sync'
 import { eq } from 'drizzle-orm'
 import { revisions } from '../../server/db/schema'
 import { MAX_BOARD_BYTES, createBoard, getBoard, getRevision, listRevisions } from '../../server/utils/boards'
-import { GROUP_IDLE_MS, MAX_AWARENESS_BYTES, MAX_PEER_CLIENTS, openRoom, type Room } from '../../server/utils/rooms'
+import { GROUP_IDLE_MS, MAX_AWARENESS_BYTES, MAX_PEER_CLIENTS, TOKEN_PRESENCE_MS, closeRoom, openRoom, type Room } from '../../server/utils/rooms'
+import { putBoard, redoBoard, renameBoard, restoreRevision, undoBoard } from '../../server/utils/api'
+import type { Who } from '../../server/utils/who'
 import { MAX_MESSAGE_BYTES, capSocketPayload, handleMessage } from '../../server/utils/liveMessage'
 import { MESSAGE_COMMAND } from '../../shared/liveCommand'
 import { docToBoard, stable, writeBoard } from '../../shared/yboard'
@@ -701,6 +703,117 @@ describe('rooms', () => {
     const kept: { options: { websocket?: object } } = { options: { websocket: { hooks: 1, serverOptions: { perMessageDeflate: false } } } }
     capSocketPayload(kept)
     expect(kept.options.websocket).toEqual({ hooks: 1, serverOptions: { perMessageDeflate: false, maxPayload: MAX_MESSAGE_BYTES } })
+  })
+
+  describe('a token at work', () => {
+    const claude: Who = { kind: 'local', userId: 'local', author: 'Claude · Local', token: { id: 'tok-1', name: 'Claude' } }
+    const put = (who: Who = claude) => {
+      const head = getBoard(db, id)!.head
+      const r = putBoard(db, { key: id, who }, JSON.stringify({ board: { ...getBoard(db, id)!.board, name: `rev ${head}` }, baseRevision: head }))
+      expect(r.status).toBe(200)
+    }
+    const isToken = (s: unknown) => (s as { user?: { kind?: string } }).user?.kind === 'token'
+    /** The token entries in a client's presence: [client id, state]. */
+    const tokens = (c: Client) => [...c.awareness.getStates()].filter(([, s]) => isToken(s))
+    const names = (c: Client) => tokens(c).map(([, s]) => (s as { user: { name: string } }).user.name).sort()
+
+    it('an API write with a token shows the token\'s name to peers', () => {
+      const a = connect('a')
+      const b = connect('b')
+      put()
+      for (const c of [a, b]) {
+        expect(tokens(c).map(([, s]) => s)).toEqual([{ user: { name: 'Claude', kind: 'token' } }])
+        // Never a Yjs client id (those are 32-bit): no real peer can have it.
+        expect(tokens(c)[0]![0]).toBeGreaterThan(0xFFFFFFFF)
+      }
+      // A second write renews the same entry; a write without a token adds none.
+      put()
+      put({ kind: 'local', userId: 'local', author: 'Local · This computer' })
+      expect(tokens(b)).toHaveLength(1)
+      // A second token has its own entry.
+      put({ ...claude, author: 'Bot · Local', token: { id: 'tok-2', name: 'Bot' } })
+      expect(names(b)).toEqual(['Bot', 'Claude'])
+    })
+
+    it('every write path a token takes shows it: rename, undo, redo, restore', () => {
+      const b = connect('b')
+      put({ kind: 'local', userId: 'local', author: 'Local · This computer' })
+      const as = (name: string): Who => ({ ...claude, author: `${name} · Local`, token: { id: `t-${name}`, name } })
+      const steps: [string, () => { status: number }][] = [
+        ['rename', () => renameBoard(db, { key: id, who: as('Rename') }, JSON.stringify({ name: 'Renamed' }))],
+        ['undo', () => undoBoard(db, { key: id, who: as('Undo') })],
+        ['redo', () => redoBoard(db, { key: id, who: as('Redo') })],
+        ['restore', () => restoreRevision(db, { key: id, who: as('Restore') }, '1')]
+      ]
+      for (const [name, step] of steps) expect(step().status, name).toBe(200)
+      expect(names(b)).toEqual(['Redo', 'Rename', 'Restore', 'Undo'])
+    })
+
+    it('the entry goes 30 s after the last write', () => {
+      vi.useFakeTimers()
+      const a = connect('a')
+      put()
+      vi.advanceTimersByTime(TOKEN_PRESENCE_MS - 1000)
+      expect(tokens(a)).toHaveLength(1)
+      put()
+      vi.advanceTimersByTime(TOKEN_PRESENCE_MS - 1000)
+      expect(tokens(a)).toHaveLength(1)
+      vi.advanceTimersByTime(1000)
+      expect(tokens(a)).toEqual([])
+      expect([...a.room.awareness.getStates().values()].filter(isToken)).toEqual([])
+    })
+
+    it('a new joiner sees an active token entry', () => {
+      connect('a')
+      put()
+      expect(tokens(connect('c')).map(([, s]) => s)).toEqual([{ user: { name: 'Claude', kind: 'token' } }])
+    })
+
+    it('a peer cannot claim a token\'s presence id', () => {
+      const a = connect('a')
+      const g = connect('g', 'Visitor', null, { name: 'Guest' })
+      put()
+      const [reserved] = tokens(a)[0]!
+      const forged = new Awareness(new Y.Doc())
+      forged.clientID = reserved
+      for (let i = 0; i < 5; i++) forged.setLocalState({ user: { name: 'Not Claude' } })
+      expect(g.room.receiveAwareness('g', encodeAwarenessUpdate(forged, [reserved]))).toEqual({ ok: false, reason: 'the presence update names another peer\'s client' })
+      expect(tokens(a).map(([, s]) => s)).toEqual([{ user: { name: 'Claude', kind: 'token' } }])
+      // Nor any id in the reserved range, before a token takes it.
+      const ahead = new Awareness(new Y.Doc())
+      ahead.clientID = reserved + 1
+      ahead.setLocalState({ user: { name: 'Ada' } })
+      expect(g.room.receiveAwareness('g', encodeAwarenessUpdate(ahead, [reserved + 1])).ok).toBe(false)
+      forged.destroy()
+      ahead.destroy()
+    })
+
+    it('a signed-in peer cannot pass itself off as a token', () => {
+      const bob = connect('bob', 'Bob', 'u-bob', { name: 'Bob' })
+      const b = connect('b')
+      bob.awareness.setLocalState({ user: { name: 'Claude', kind: 'token' } })
+      bob.room.receiveAwareness('bob', encodeAwarenessUpdate(bob.awareness, [bob.doc.clientID]))
+      expect(b.awareness.getStates().get(bob.doc.clientID)).toEqual({ user: { name: 'Bob' } })
+    })
+
+    it('the entry goes at once when the room closes', () => {
+      vi.useFakeTimers()
+      const a = connect('a')
+      put()
+      const room = a.room
+      leave(a)
+      expect([...room.awareness.getStates().values()].filter(isToken)).toEqual([])
+      // A deleted board's room too.
+      const b = connect('b')
+      put()
+      const second = b.room
+      expect(second).not.toBe(room)
+      closeRoom(id)
+      b.left = true
+      b.awareness.destroy()
+      expect([...second.awareness.getStates().values()].filter(isToken)).toEqual([])
+      expect(vi.getTimerCount()).toBe(0)
+    })
   })
 
   it('a peer joined without access is the owner (step 1 callers)', () => {

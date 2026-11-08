@@ -7,15 +7,17 @@ import path from 'node:path'
 import { eq } from 'drizzle-orm'
 import * as encoding from 'lib0/encoding'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Awareness, encodeAwarenessUpdate } from 'y-protocols/awareness'
 import * as syncProtocol from 'y-protocols/sync'
 import * as Y from 'yjs'
 import type { BoardFile } from '../../core/schema'
 import { closeDb, useDb } from '../../server/db'
-import { boards, linkVisits, users } from '../../server/db/schema'
+import { boards, linkVisits, revisions, users } from '../../server/db/schema'
 import { signIn } from '../../server/utils/accounts'
 import { unlockEntry } from '../../server/utils/boardAccess'
 import { createBoard, getBoardRow } from '../../server/utils/boards'
 import { openRoom } from '../../server/utils/rooms'
+import { MESSAGE_COMMAND } from '../../shared/liveCommand'
 import { mintToken } from '../../server/utils/tokens'
 import { docToBoard, writeBoard } from '../../shared/yboard'
 import type { NodeReqLike } from '../../server/utils/peerAddress'
@@ -476,6 +478,77 @@ describe('board socket', () => {
     expect(up.context.who).toMatchObject({ kind: 'local', author: 'Claude · Local' })
     const bad = await ws.upgrade(upgradeRequest(`/_ws/board/${b.id}`, '127.0.0.1', { host: 'localhost:3002', authorization: 'Bearer nope' }))
     expect(bad?.status).toBe(401)
+  })
+
+  describe('a socket opened with a token', () => {
+    /** Revisions of `boardId` after the first: author, author id and token id. */
+    const authored = (boardId: string) => useDb().select({ n: revisions.n, author: revisions.author, authorId: revisions.authorId, tokenId: revisions.tokenId, how: revisions.how })
+      .from(revisions).where(eq(revisions.boardId, boardId)).orderBy(revisions.n).all().slice(1)
+    /** A presence message from a client claiming to be `name`. */
+    function presenceMessage(name: string): { message: Uint8Array, client: number } {
+      const aw = new Awareness(new Y.Doc())
+      aw.setLocalState({ user: { name, color: '#123456', avatar: 'https://avatars.githubusercontent.com/u/1' } })
+      const e = encoding.createEncoder()
+      encoding.writeVarUint(e, 1)
+      encoding.writeVarUint8Array(e, encodeAwarenessUpdate(aw, [aw.clientID]))
+      aw.destroy()
+      return { message: encoding.toUint8Array(e), client: aw.clientID }
+    }
+    function undoMessage(): Uint8Array {
+      const e = encoding.createEncoder()
+      encoding.writeVarUint(e, MESSAGE_COMMAND)
+      encoding.writeVarString(e, JSON.stringify({ op: 'undo', id: 1 }))
+      return encoding.toUint8Array(e)
+    }
+
+    it('stores its edits under the token and shows the token in presence', async () => {
+      publicMode()
+      const ada = newUser('Ada')
+      const b = board(ada)
+      joinedId = b.id
+      const minted = mintToken(useDb(), ada, 'Claude')
+      if (!minted.ok) throw new Error('mint failed')
+      const up = upgradeRequest(`/_ws/board/${b.id}`, '203.0.113.9', { host: 'wire.example.org', authorization: `Bearer ${minted.token}` })
+      expect(await ws.upgrade(up)).toBeUndefined()
+      const p = peer(up)
+      ws.open(p.peer)
+      // Someone else on the board stays, so the room does.
+      const room = openRoom(useDb(), b.id)!
+      room.join('watcher', 'Ada', { update: () => {}, awareness: () => {} }, { role: 'owner', viaLink: false, authorId: ada })
+      const { message, client } = presenceMessage('Ada')
+      ws.message(p.peer, { uint8Array: () => message })
+      expect(p.closed).toEqual([])
+      expect(room.awareness.getStates().get(client)).toEqual({ user: { name: 'Claude', color: '#123456', kind: 'token' } })
+      ws.message(p.peer, { uint8Array: () => editMessage(x => ({ ...x, trails: x.trails.slice(1) })) })
+      expect(p.closed).toEqual([])
+      ws.message(p.peer, { uint8Array: undoMessage })
+      expect(authored(b.id)).toEqual([
+        { n: 2, author: 'Claude · Ada', authorId: ada, tokenId: minted.row.id, how: 'edit' },
+        { n: 3, author: 'Claude · Ada', authorId: ada, tokenId: minted.row.id, how: 'undo' }
+      ])
+      ws.close(p.peer)
+      room.leave('watcher')
+      expect(JSON.stringify(authored(b.id))).not.toContain(minted.token)
+    })
+
+    it('local mode: a token from another address joins, and its edits are the token\'s', async () => {
+      const b = board('local')
+      joinedId = b.id
+      const minted = mintToken(useDb(), 'local', 'Claude')
+      if (!minted.ok) throw new Error('mint failed')
+      const up = upgradeRequest(`/_ws/board/${b.id}`, '192.168.1.20', { host: 'localhost:3002', authorization: `Bearer ${minted.token}` })
+      expect(await ws.upgrade(up)).toBeUndefined()
+      const p = peer(up)
+      ws.open(p.peer)
+      expect(p.closed).toEqual([])
+      const { message, client } = presenceMessage('Local · Tablet')
+      ws.message(p.peer, { uint8Array: () => message })
+      expect(openRoom(useDb(), b.id)!.awareness.getStates().get(client)).toEqual({ user: { name: 'Claude', color: '#123456', kind: 'token' } })
+      ws.message(p.peer, { uint8Array: () => editMessage(x => ({ ...x, trails: x.trails.slice(1) })) })
+      expect(p.closed).toEqual([])
+      ws.close(p.peer)
+      expect(authored(b.id)).toEqual([{ n: 2, author: 'Claude · Local', authorId: 'local', tokenId: minted.row.id, how: 'edit' }])
+    })
   })
 
   it('access is checked again on open', async () => {
