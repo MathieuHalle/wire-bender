@@ -104,6 +104,7 @@ async function signOut() {
         This computer and the devices paired with it can open and edit every board. To let
         others in, run WireBender in public mode with GitHub or Google sign-in.
       </p>
+      <TokensPanel />
       <UButton
         to="/"
         label="Back to boards"
@@ -182,6 +183,8 @@ async function signOut() {
         />
       </section>
 
+      <TokensPanel />
+
       <UButton
         label="Sign out"
         color="neutral"
@@ -198,5 +201,12 @@ async function signOut() {
       </p>
       <SignInButtons :providers="me.providers" />
     </template>
+
+    <NuxtLink
+      to="/api"
+      class="text-sm text-muted underline"
+    >
+      API docs
+    </NuxtLink>
   </div>
 </template>
