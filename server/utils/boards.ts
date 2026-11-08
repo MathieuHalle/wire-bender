@@ -6,6 +6,9 @@ import { sameItems } from '#shared/yboard'
 import type { Db } from '../db'
 import { boards, linkVisits, revisions, users, type BoardVisibility, type RevisionHow } from '../db/schema'
 
+/** The largest board, and API request body, in bytes (spec §13); the live socket keeps to it too. */
+export const MAX_BOARD_BYTES = 2_000_000
+
 /** A board in the owner's list; `author` made its head revision. */
 export interface BoardInfo {
   id: string

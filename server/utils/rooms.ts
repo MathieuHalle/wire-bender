@@ -5,10 +5,13 @@ import { undoState } from '#shared/undoState'
 import { RECORDS, SECTION_NAMES, boardToDoc, docToBoard, itemKey, sameItems, unknownSingles, withItems, writeBoard } from '#shared/yboard'
 import type { Db } from '../db'
 import type { Role } from './boardAccess'
-import { boardBefore, commitRevision, getBoard, getRevision, listRevisions, recover, saveCurrent } from './boards'
+import { MAX_BOARD_BYTES, boardBefore, commitRevision, getBoard, getRevision, listRevisions, recover, saveCurrent } from './boards'
 
 /** Live updates from one author join one revision until that author has been idle this long. */
 export const GROUP_IDLE_MS = 2000
+
+/** The largest presence update a peer may send: a name, an avatar URL and a colour fit many times. */
+export const MAX_AWARENESS_BYTES = 8192
 
 /** How a room reaches one connected peer. */
 export interface PeerLink {
@@ -264,6 +267,7 @@ export class Room {
   /** Apply a peer's presence and relay it to the others. */
   receiveAwareness(peerId: string, update: Uint8Array): Received {
     if (!this.peers.has(peerId)) return NOT_JOINED
+    if (update.byteLength > MAX_AWARENESS_BYTES) return { ok: false, reason: `the presence update is larger than ${MAX_AWARENESS_BYTES} bytes` }
     try {
       applyAwarenessUpdate(this.awareness, update, peerId)
       return { ok: true }
@@ -391,6 +395,8 @@ export class Room {
       if (collision !== null) return { ok: false, reason: `${collision} was just created by someone else; draw it again` }
       const parsed = docToBoard(copy, this.head)
       if (!parsed.ok) return { ok: false, reason: parsed.errors.join('; ') }
+      // The API's cap: live edits may not grow a board past what a PUT may send.
+      if (Buffer.byteLength(JSON.stringify(parsed.board)) > MAX_BOARD_BYTES) return { ok: false, reason: `the board would be larger than ${MAX_BOARD_BYTES} bytes` }
       if (role !== 'owner' && parsed.board.name !== this.board.name) return { ok: false, reason: OWNER_RENAMES }
       return { ok: true, board: parsed.board, keys }
     } catch (e) {

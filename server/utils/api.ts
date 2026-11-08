@@ -7,12 +7,12 @@ import type { Db } from '../db'
 import { benchResponse, fileStem } from './bench'
 import { access, allows, ownerName, recordVisit, type Access, type Role } from './boardAccess'
 import { boardOverviewSvg } from '../../export/svg'
-import { createBoard, getBoard, getBoardRow, getRevision, listBoards, listRevisions, listShared } from './boards'
+import { MAX_BOARD_BYTES, createBoard, getBoard, getBoardRow, getRevision, listBoards, listRevisions, listShared } from './boards'
 import { openRoom, type Room } from './rooms'
 import { authorIdOf, type Who } from './who'
 
-/** The largest request body, in bytes, that the API accepts. */
-export const MAX_BOARD_BYTES = 2_000_000
+/** The largest request body, in bytes, that the API accepts (also the live board's cap). */
+export { MAX_BOARD_BYTES }
 
 /** The author of a create or import when a caller passes none (tests); routes pass the request's. */
 const AUTHOR = 'Local'

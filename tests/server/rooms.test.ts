@@ -11,9 +11,9 @@ import * as encoding from 'lib0/encoding'
 import * as syncProtocol from 'y-protocols/sync'
 import { eq } from 'drizzle-orm'
 import { revisions } from '../../server/db/schema'
-import { createBoard, getBoard, getRevision, listRevisions } from '../../server/utils/boards'
-import { GROUP_IDLE_MS, openRoom, type Room } from '../../server/utils/rooms'
-import { handleMessage } from '../../server/utils/liveMessage'
+import { MAX_BOARD_BYTES, createBoard, getBoard, getRevision, listRevisions } from '../../server/utils/boards'
+import { GROUP_IDLE_MS, MAX_AWARENESS_BYTES, openRoom, type Room } from '../../server/utils/rooms'
+import { MAX_MESSAGE_BYTES, capSocketPayload, handleMessage } from '../../server/utils/liveMessage'
 import { MESSAGE_COMMAND } from '../../shared/liveCommand'
 import { docToBoard, stable, writeBoard } from '../../shared/yboard'
 
@@ -630,6 +630,47 @@ describe('rooms', () => {
     expect(getBoard(db, id)!.board.name).toBe('By Ada')
     room.leave('e1')
     room.leave('o1')
+  })
+
+  it('an update that makes the board larger than MAX_BOARD_BYTES is refused', () => {
+    const a = connect('a')
+    const b = connect('b')
+    edit(a, relabelJA('x'.repeat(MAX_BOARD_BYTES)))
+    expect(a.last).toEqual({ ok: false, reason: `the board would be larger than ${MAX_BOARD_BYTES} bytes` })
+    expect(ja(boardOf(b.doc))).not.toContain('xxx')
+    expect(ja(getBoard(db, id)!.board)).not.toContain('xxx')
+    // A board just under the cap is fine.
+    edit(connect('c'), relabelJA('y'.repeat(1000)))
+    expect(clients.at(-1)!.last).toEqual({ ok: true })
+  })
+
+  it('an awareness update over MAX_AWARENESS_BYTES is refused and reaches no one', () => {
+    const a = connect('a')
+    const b = connect('b')
+    const big = new Awareness(new Y.Doc())
+    big.setLocalStateField('user', { name: 'x'.repeat(MAX_AWARENESS_BYTES) })
+    const r = a.room.receiveAwareness('a', encodeAwarenessUpdate(big, [big.clientID]))
+    expect(r).toEqual({ ok: false, reason: `the presence update is larger than ${MAX_AWARENESS_BYTES} bytes` })
+    expect(b.awareness.getStates().has(big.clientID)).toBe(false)
+    big.destroy()
+  })
+
+  it('a socket message over MAX_MESSAGE_BYTES is refused before it is read', () => {
+    const room = openRoom(db, id)!
+    room.join('e1', 'Bob', { update: () => {}, awareness: () => {} }, { role: 'edit', viaLink: true })
+    const huge = new Uint8Array(MAX_MESSAGE_BYTES + 1)
+    expect(handleMessage({ id: 'e1', send: () => {} }, room, 'Bob', huge)).toEqual({ ok: false, reason: `the message is larger than ${MAX_MESSAGE_BYTES} bytes` })
+    expect(MAX_MESSAGE_BYTES).toBeGreaterThan(MAX_BOARD_BYTES)
+    room.leave('e1')
+  })
+
+  it('the socket server is told to refuse frames over MAX_MESSAGE_BYTES, keeping other options', () => {
+    const app: { options: { websocket?: object } } = { options: {} }
+    capSocketPayload(app)
+    expect(app.options.websocket).toEqual({ serverOptions: { maxPayload: MAX_MESSAGE_BYTES } })
+    const kept: { options: { websocket?: object } } = { options: { websocket: { hooks: 1, serverOptions: { perMessageDeflate: false } } } }
+    capSocketPayload(kept)
+    expect(kept.options.websocket).toEqual({ hooks: 1, serverOptions: { perMessageDeflate: false, maxPayload: MAX_MESSAGE_BYTES } })
   })
 
   it('a peer joined without access is the owner (step 1 callers)', () => {
