@@ -1,4 +1,5 @@
 import * as decoding from 'lib0/decoding'
+import * as encoding from 'lib0/encoding'
 import * as Y from 'yjs'
 import { Awareness, applyAwarenessUpdate, encodeAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness'
 import { parseBoard, type BoardFile } from '~core/schema'
@@ -17,17 +18,32 @@ export const MAX_AWARENESS_BYTES = 8192
 /** The most presence client ids one peer may have (y-websocket uses one per doc). */
 export const MAX_PEER_CLIENTS = 4
 
-/** The client ids an awareness update names (y-protocols: count, then id, clock, state each). */
-function awarenessClients(update: Uint8Array): number[] {
+/** One entry of an awareness update (y-protocols: count, then id, clock, state each). */
+interface AwarenessEntry { client: number, clock: number, state: string }
+
+function awarenessEntries(update: Uint8Array): AwarenessEntry[] {
   const d = decoding.createDecoder(update)
   const n = decoding.readVarUint(d)
-  const ids: number[] = []
+  const entries: AwarenessEntry[] = []
   for (let i = 0; i < n; i++) {
-    ids.push(decoding.readVarUint(d))
-    decoding.readVarUint(d)
-    decoding.readVarString(d)
+    entries.push({ client: decoding.readVarUint(d), clock: decoding.readVarUint(d), state: decoding.readVarString(d) })
   }
-  return ids
+  return entries
+}
+
+/** An entry that removes its client's presence (y-protocols sends the state `null`). */
+const isRemoval = (state: string): boolean => state.trim() === 'null'
+
+/** An awareness update of `entries`, in the y-protocols format. */
+function encodeEntries(entries: readonly AwarenessEntry[]): Uint8Array {
+  const e = encoding.createEncoder()
+  encoding.writeVarUint(e, entries.length)
+  for (const { client, clock, state } of entries) {
+    encoding.writeVarUint(e, client)
+    encoding.writeVarUint(e, clock)
+    encoding.writeVarString(e, state)
+  }
+  return encoding.toUint8Array(e)
 }
 
 /** How a room reaches one connected peer. */
@@ -282,21 +298,28 @@ export class Room {
   }
 
   /**
-   * Apply a peer's presence and relay it to the others. Refused whole (nothing stored or
-   * relayed, and the socket closes with 4400) when it is over MAX_AWARENESS_BYTES, names a
-   * client id another peer has, or would give this peer more than MAX_PEER_CLIENTS ids.
+   * Apply a peer's presence and relay it to the others. Entries naming another peer's client
+   * id, and removals of ids the peer doesn't own, are dropped (y-websocket echoes them).
+   * Refused whole (the socket closes with 4400) when over MAX_AWARENESS_BYTES, malformed, or
+   * it would give this peer more than MAX_PEER_CLIENTS ids.
    */
   receiveAwareness(peerId: string, update: Uint8Array): Received {
     const peer = this.peers.get(peerId)
     if (!peer) return NOT_JOINED
     if (update.byteLength > MAX_AWARENESS_BYTES) return { ok: false, reason: `the presence update is larger than ${MAX_AWARENESS_BYTES} bytes` }
     try {
-      const ids = awarenessClients(update)
-      for (const [otherId, other] of this.peers) {
-        if (otherId !== peerId && ids.some(c => other.clients.has(c))) return { ok: false, reason: 'the presence update names another peer\'s client' }
-      }
-      if (new Set([...peer.clients, ...ids]).size > MAX_PEER_CLIENTS) return { ok: false, reason: `a peer may have at most ${MAX_PEER_CLIENTS} presence clients` }
-      applyAwarenessUpdate(this.awareness, update, peerId)
+      const entries = awarenessEntries(update)
+      const others = [...this.peers].filter(([otherId]) => otherId !== peerId).map(([, other]) => other.clients)
+      // y-websocket echoes every presence change it sees, so entries naming another peer's
+      // id are dropped, not refused. A removal (null state) applies only to the sender's own
+      // ids: anything else is an echo of someone leaving, never counted toward the cap.
+      const kept = entries.filter(({ client, state }) => isRemoval(state)
+        ? peer.clients.has(client)
+        : !others.some(clients => clients.has(client)))
+      const claimed = kept.filter(e => !isRemoval(e.state)).map(e => e.client)
+      if (new Set([...peer.clients, ...claimed]).size > MAX_PEER_CLIENTS) return { ok: false, reason: `a peer may have at most ${MAX_PEER_CLIENTS} presence clients` }
+      if (kept.length === 0) return { ok: true }
+      applyAwarenessUpdate(this.awareness, kept.length === entries.length ? update : encodeEntries(kept), peerId)
       return { ok: true }
     } catch (e) {
       return { ok: false, reason: `malformed awareness update: ${(e as Error).message}` }

@@ -340,7 +340,7 @@ describe('rooms', () => {
     expect(connect('c').awareness.getStates().get(guest.doc.clientID)).toEqual({ user: { name: 'Guest', color: '#123456' } })
   })
 
-  it('a peer can\'t claim another peer\'s presence id: the update is refused and reaches no one', () => {
+  it('a peer can\'t claim another peer\'s presence id: the entry is dropped, reaches no one, and the peer stays', () => {
     const a = connect('a')
     const g = connect('g', 'Visitor', null, { name: 'Guest' })
     const c = connect('c')
@@ -352,11 +352,45 @@ describe('rooms', () => {
     // A higher clock than a's own state, so the room would take it.
     for (let i = 0; i < 5; i++) forged.setLocalState({ user: { name: 'Ada' } })
     const r = g.room.receiveAwareness('g', encodeAwarenessUpdate(forged, [a.doc.clientID]))
-    expect(r).toEqual({ ok: false, reason: 'the presence update names another peer\'s client' })
+    expect(r).toEqual({ ok: true })
     expect(c.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Local · Tablet' } })
     // a keeps its own presence when g leaves.
     leave(g)
     expect(c.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Local · Tablet' } })
+  })
+
+  it('a browser echoing another peer\'s presence (as y-websocket does) stays connected', () => {
+    const a = connect('a')
+    const b = connect('b')
+    a.awareness.setLocalState({ user: { name: 'Ada' } })
+    a.room.receiveAwareness('a', encodeAwarenessUpdate(a.awareness, [a.doc.clientID]))
+    // b re-sends what it received: its own entry plus a's.
+    b.awareness.setLocalState({ user: { name: 'Bob' } })
+    const echo = encodeAwarenessUpdate(b.awareness, [b.doc.clientID, a.doc.clientID])
+    expect(b.room.receiveAwareness('b', echo)).toEqual({ ok: true })
+    expect(a.awareness.getStates().get(b.doc.clientID)).toEqual({ user: { name: 'Bob' } })
+    expect(b.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Ada' } })
+  })
+
+  it('an echoed removal of an id the sender doesn\'t own changes nothing and closes no one', () => {
+    const a = connect('a')
+    const b = connect('b')
+    const c = connect('c')
+    a.awareness.setLocalState({ user: { name: 'Ada' } })
+    a.room.receiveAwareness('a', encodeAwarenessUpdate(a.awareness, [a.doc.clientID]))
+    const removal = (ids: number[]) => {
+      const e = encoding.createEncoder()
+      encoding.writeVarUint(e, ids.length)
+      for (const id of ids) {
+        encoding.writeVarUint(e, id)
+        encoding.writeVarUint(e, 99)
+        encoding.writeVarString(e, 'null')
+      }
+      return encoding.toUint8Array(e)
+    }
+    // A removal of a's id and of four ids nobody owns: dropped, not counted toward the cap.
+    expect(b.room.receiveAwareness('b', removal([a.doc.clientID, 901, 902, 903, 904]))).toEqual({ ok: true })
+    expect(c.awareness.getStates().get(a.doc.clientID)).toEqual({ user: { name: 'Ada' } })
   })
 
   it('a view peer sending 50 presence ids in one update is refused, and none is stored or relayed', () => {
