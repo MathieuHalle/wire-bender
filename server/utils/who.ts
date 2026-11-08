@@ -14,8 +14,12 @@ export type Who
     | { kind: 'user', userId: string, author: string, isAdmin: boolean, isPremium: boolean }
     | { kind: 'anonymous' }
 
-/** What the session cookie holds: the user's id only, R1's flag, and the link ids whose password was entered. */
-export interface SessionData { user?: { id?: unknown }, pendingDeletion?: boolean, unlocked?: unknown }
+/**
+ * What the session cookie holds: the user's id only, R1's flag, the link ids whose password
+ * was entered, and `setupOk` once the setup code was entered signed out (the next sign-in
+ * finishes the setup and drops it).
+ */
+export interface SessionData { user?: { id?: unknown }, pendingDeletion?: boolean, unlocked?: unknown, setupOk?: unknown }
 
 export interface WhoDeps {
   mode?: Mode
@@ -111,4 +115,10 @@ export async function unlockedOf(source: TrustSource, deps: WhoDeps = {}): Promi
   if (cookieOf(source, deps.sessionCookie ?? sessionCookieName()) === undefined) return []
   const list = (await (deps.readSession ?? defaultRead)(source)).unlocked
   return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : []
+}
+
+/** True when this request's session entered the setup code (POST /api/setup) and has not signed in since. */
+export async function setupOkOf(source: TrustSource, deps: WhoDeps = {}): Promise<boolean> {
+  if (cookieOf(source, deps.sessionCookie ?? sessionCookieName()) === undefined) return false
+  return (await (deps.readSession ?? defaultRead)(source)).setupOk === true
 }

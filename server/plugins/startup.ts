@@ -1,6 +1,8 @@
 import { closeDb, dataDir, useDb } from '../db'
+import { setupNotice } from '../utils/accounts'
+import { insecureCookieWarning } from '../utils/cookieSecure'
 import { schedulePurge } from '../utils/lifecycle'
-import { checkMode, startupSecretProblem } from '../utils/mode'
+import { checkMode, publicBase, startupSecretProblem } from '../utils/mode'
 
 // The mode is checked before the database is opened: a wrong mode creates nothing.
 // Closing it on shutdown releases the data folder's lock.
@@ -21,6 +23,13 @@ export default defineNitroPlugin((nitroApp) => {
     console.error(`[wirebender] ${(e as Error).message}`)
     throw e
   }
+  const mode = checkMode(process.env)
+  const insecure = insecureCookieWarning(mode, process.env)
+  if (insecure) console.warn(insecure)
+  // Public mode with no admin yet: a new setup code at every start (the last one stops
+  // working). The log is the only place it is ever shown; the database keeps its sha256.
+  const notice = setupNotice(useDb(), mode, publicBase(process.env))
+  if (notice) console.log(notice)
   // Trashed boards and deleted accounts past their 30 days: at start, then once a day (an
   // unref'd timer: it never keeps the process alive). Never under the test runner.
   if (!process.env.VITEST) {

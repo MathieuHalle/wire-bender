@@ -12,6 +12,7 @@
 // the OAuth round-trip) read it, not a per-call option. So the rule is applied where every
 // response passes, `nuxt dev` and a production build alike: the access middleware wraps the
 // response's Set-Cookie writes for these cookies (`enforceCookieSecure`).
+// Cookies must never be sent with `res.writeHead(status, headers)`: that bypasses the wrap.
 import type { Mode } from './mode'
 
 export type CookieRuleEnv = Record<string, string | undefined>
@@ -22,6 +23,25 @@ export function cookieSecure(mode: Mode, env: CookieRuleEnv, encrypted: boolean)
   if (forced !== undefined && forced !== '') return !(forced === 'false' || forced === '0')
   if (mode === 'public') return (env.WIREBENDER_URL ?? '').toLowerCase().startsWith('https://')
   return encrypted
+}
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])
+
+/**
+ * At start: the warning to log when public mode serves an http:// WIREBENDER_URL on a host
+ * other than this machine's loopback, so the session cookie goes out without Secure. Null
+ * when there is nothing to warn about.
+ */
+export function insecureCookieWarning(mode: Mode, env: CookieRuleEnv): string | null {
+  if (mode !== 'public' || cookieSecure(mode, env, false)) return null
+  let url: URL
+  try {
+    url = new URL(env.WIREBENDER_URL ?? '')
+  } catch {
+    return null
+  }
+  if (url.protocol !== 'http:' || LOOPBACK_HOSTS.has(url.hostname.toLowerCase())) return null
+  return `[wirebender] WIREBENDER_URL is http:// on ${url.hostname}: the session cookie will not be Secure, so anyone on the network path can read it. Use https.`
 }
 
 /** The cookies the rule covers: the session (by its name) and nuxt-auth-utils' `nuxt-auth-*` ones. */

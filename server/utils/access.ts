@@ -190,12 +190,16 @@ export type PublicGate = 'pass' | 'deny' | 'not-found' | 'account'
 /** Pairing is local mode's: in public mode these routes do not exist. */
 const PAIRING = /^\/(pair|api\/pair|api\/devices)(\/|$)/
 
-/** The board edits and the link unlock an anonymous visitor may send on to their route. */
+/**
+ * The board edits, the link unlock and the setup code (entered before the first admin signs
+ * in) an anonymous visitor may send on to their route.
+ */
 const ANONYMOUS_WRITES: [string, RegExp][] = [
   ['PUT', /^\/api\/boards\/[^/]+$/],
   ['POST', /^\/api\/boards\/[^/]+\/(undo|redo)$/],
   ['POST', /^\/api\/boards\/[^/]+\/revisions\/[^/]+\/restore$/],
-  ['POST', /^\/api\/links\/[^/]+\/unlock$/]
+  ['POST', /^\/api\/links\/[^/]+\/unlock$/],
+  ['POST', /^\/api\/setup$/]
 ]
 
 function anonymousWrite(method: string, pathname: string): boolean {

@@ -3,9 +3,9 @@
 // never kept or logged.
 import type { H3Event } from 'h3'
 import { useDb } from '../db'
-import { signIn, type Profile, type Provider } from './accounts'
+import { claimSetup, signIn, type Profile, type Provider } from './accounts'
 import { checkMode, configuredProviders, publicUrl } from './mode'
-import { unlockedOf, whoIs } from './who'
+import { setupOkOf, unlockedOf, whoIs } from './who'
 
 const LABEL: Record<Provider, string> = { github: 'GitHub', google: 'Google' }
 
@@ -30,6 +30,9 @@ export async function finishSignIn(event: H3Event, provider: Provider, profile: 
   const current = who.kind === 'user' ? who.userId : undefined
   const r = signIn(useDb(), provider, profile, current)
   if (!r.ok) return sendRedirect(event, `/account?error=${r.reason}`, 302)
+  // The setup code was entered first: this account becomes the admin (claimSetup refuses a
+  // deleted one, or when an admin exists by now). The new session below drops the flag.
+  if (current === undefined && !r.deleted && await setupOkOf(event)) claimSetup(useDb(), r.userId)
   if (current === undefined) {
     // Replaced, not merged: nothing from an earlier session (such as R1's flag) is kept,
     // except the share links whose password this visitor already entered.
