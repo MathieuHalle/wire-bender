@@ -3,6 +3,7 @@ import { patchAccount } from '../../../utils/accounts'
 import { checkMode } from '../../../utils/mode'
 import { readCapped } from '../../../utils/readCapped'
 import { whoIs } from '../../../utils/who'
+import { refuseToken } from '../../../utils/sendResult'
 
 const MAX_BODY = 4096
 
@@ -13,6 +14,8 @@ const MAX_BODY = 4096
  * closes the account's live sockets.
  */
 export default defineEventHandler(async (event) => {
+  const refused = refuseToken(event)
+  if (refused) return refused
   setResponseHeader(event, 'cache-control', 'no-store')
   const mode = checkMode()
   const who = mode === 'public' ? await whoIs(event, { mode }) : null

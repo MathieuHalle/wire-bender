@@ -9,7 +9,7 @@ import type { BoardFile } from '../../core/schema'
 import { closeDb, useDb } from '../../server/db'
 import { boards, revisions, tokens, users } from '../../server/db/schema'
 import { signIn } from '../../server/utils/accounts'
-import { createBoard } from '../../server/utils/boards'
+import { createBoard, getRevision } from '../../server/utils/boards'
 import { mintToken } from '../../server/utils/tokens'
 import type { NodeReqLike } from '../../server/utils/peerAddress'
 import type { SessionData } from '../../server/utils/who'
@@ -44,6 +44,7 @@ vi.stubGlobal('getRequestHeader', (event: FakeEvent, name: string) => event.node
 vi.stubGlobal('getQuery', (event: FakeEvent) => Object.fromEntries(new URLSearchParams(event.path.split('?')[1] ?? '')))
 vi.stubGlobal('setResponseHeader', () => {})
 vi.stubGlobal('setResponseHeaders', () => {})
+vi.stubGlobal('appendResponseHeader', () => {})
 vi.stubGlobal('verifyPassword', async (hash: string, plain: string) => hash === `h:${plain}`)
 vi.stubGlobal('hashPassword', async (plain: string) => `h:${plain}`)
 vi.stubGlobal('createError', (e: { statusCode: number, statusMessage: string }) => Object.assign(new Error(e.statusMessage), e))
@@ -293,6 +294,9 @@ describe('requests made with a token', () => {
     const list = (await call(route.revisions!, 'GET', `/api/boards/${id}/revisions`, { headers: cookie, params: { id } })).body as { n: number, summary: string, author: string }[]
     expect(list.find(r => r.n === 3)).toMatchObject({ author: 'Ann', summary: 'undo of #2 by Claude · Ann' })
     expect(list.find(r => r.n === 4)).toMatchObject({ author: 'Ann', summary: 'redo of #2 by Claude · Ann' })
+    // One revision read alone says the same (R1 wherever the history shows).
+    expect(getRevision(useDb(), id, 3)!.summary).toBe('undo of #2 by Claude · Ann')
+    expect(getRevision(useDb(), id, 4)!.summary).toBe('redo of #2 by Claude · Ann')
   })
 
   it('every undo and redo is summarised with the target revision\'s author (R1)', async () => {
@@ -349,9 +353,100 @@ describe('requests made with a token', () => {
     const ann = newUser('Ann')
     const { id: tokenId, token } = mint(ann)
     expect(useDb().select().from(tokens).where(eq(tokens.id, tokenId)).get()!.lastUsedAt).toBeNull()
-    await call(route.me!, 'GET', '/api/me', { headers: bearer(token) })
-    const first = useDb().select().from(tokens).where(eq(tokens.id, tokenId)).get()!.lastUsedAt
-    expect(first).not.toBeNull()
+    const lastUsed = () => useDb().select().from(tokens).where(eq(tokens.id, tokenId)).get()!.lastUsedAt
+    const t0 = Date.now()
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(t0)
+    try {
+      await call(route.me!, 'GET', '/api/me', { headers: bearer(token) })
+      expect(lastUsed()).toBe(t0)
+      // Inside the minute: no write.
+      clock.mockReturnValue(t0 + 59_000)
+      await call(route.me!, 'GET', '/api/me', { headers: bearer(token) })
+      expect(lastUsed()).toBe(t0)
+      clock.mockReturnValue(t0 + 61_000)
+      await call(route.me!, 'GET', '/api/me', { headers: bearer(token) })
+      expect(lastUsed()).toBe(t0 + 61_000)
+    } finally {
+      clock.mockRestore()
+    }
+  })
+
+  it('a failed last_used_at write never fails the request', async () => {
+    const ann = newUser('Ann')
+    const { token } = mint(ann)
+    useDb().$client.exec('CREATE TRIGGER no_touch BEFORE UPDATE ON tokens BEGIN SELECT RAISE(FAIL, \'busy\'); END')
+    const r = await call(route.me!, 'GET', '/api/me', { headers: bearer(token) })
+    expect(r.status).toBe(200)
+    expect(r.body).toMatchObject({ user: { id: ann } })
+  })
+
+  it('odd spellings of a denied route are refused too', async () => {
+    const ann = newUser('Ann')
+    const { token } = mint(ann)
+    const id = board(ann)
+    for (const [method, url] of [['DELETE', '/API/ME'], ['DELETE', '/Api/Me/'], ['DELETE', '//api/me'], ['DELETE', '/api//me'], ['DELETE', '/api/me%2f'], ['DELETE', '/api%2fme'], ['DELETE', `/api/boards/x/../${id}`], ['DELETE', `/api/boards/${id}/`], ['GET', '/api/tokens/'], ['GET', '/API/TOKENS']] as const) {
+      const r = await call(null, method, url, { headers: bearer(token) })
+      expect(r, `${method} ${url}`).toMatchObject({ status: 403, body: { error: 'Not allowed with a token.' } })
+    }
+  })
+
+  it('a token cannot unlock a password link, and no session cookie is read or sent (R5)', async () => {
+    const unlock = (await import('../../server/api/links/[linkId]/unlock.post')).default as unknown as Handler
+    const ann = newUser('Ann')
+    const bob = newUser('Bob')
+    const id = board(ann)
+    useDb().update(boards).set({ visibility: 'view', passwordHash: 'h:secret' }).where(eq(boards.id, id)).run()
+    const linkId = useDb().select().from(boards).where(eq(boards.id, id)).get()!.linkId
+    const { token } = mint(bob)
+    session = { user: { id: bob } }
+    const before = structuredClone(session)
+    const cookies: string[] = []
+    const record = (_e: unknown, name: string, value: string) => {
+      if (name.toLowerCase() === 'set-cookie') cookies.push(value)
+    }
+    vi.stubGlobal('setResponseHeader', record)
+    vi.stubGlobal('appendResponseHeader', record)
+    try {
+      for (const headers of [{ ...bearer(token), cookie: SESSION_COOKIE }, bearer(token)]) {
+        const r = await call(unlock, 'POST', `/api/links/${linkId}/unlock`, { headers, params: { linkId }, body: { password: 'secret' } })
+        expect(r).toMatchObject({ status: 403, body: { error: 'Not allowed with a token.' } })
+      }
+      // The route refuses it itself as well.
+      const e = makeEvent('POST', `/api/links/${linkId}/unlock`, { headers: bearer(token), params: { linkId }, body: { password: 'secret' } })
+      expect(await unlock(e)).toEqual({ error: 'Not allowed with a token.' })
+      expect(e.status).toBe(403)
+    } finally {
+      vi.stubGlobal('setResponseHeader', () => {})
+      vi.stubGlobal('appendResponseHeader', () => {})
+    }
+    expect(cookies).toEqual([])
+    expect(session).toEqual(before)
+    expect(readSession).not.toHaveBeenCalled()
+  })
+
+  it('the account, delete-for-good, admin and setup routes refuse a token themselves', async () => {
+    const ann = newUser('Ann')
+    useDb().update(users).set({ isAdmin: 1 }).where(eq(users.id, ann)).run()
+    const { token } = mint(ann)
+    const id = board(ann)
+    useDb().update(boards).set({ trashedAt: Date.now() }).where(eq(boards.id, id)).run()
+    const routes: [Promise<{ default: unknown }>, string, string][] = [
+      [import('../../server/api/me.delete'), 'DELETE', '/api/me'],
+      [import('../../server/api/me/restore.post'), 'POST', '/api/me/restore'],
+      [import('../../server/api/boards/[id].delete'), 'DELETE', `/api/boards/${id}`],
+      [import('../../server/api/admin/users.get'), 'GET', '/api/admin/users'],
+      [import('../../server/api/admin/users/[id].patch'), 'PATCH', `/api/admin/users/${ann}`],
+      [import('../../server/api/setup.post'), 'POST', '/api/setup']
+    ]
+    for (const [mod, method, url] of routes) {
+      const h = (await mod).default as Handler
+      // Without the middleware: the route sees the bearer itself.
+      const e = makeEvent(method, url, { headers: bearer(token), params: { id: url.includes('admin') ? ann : id }, body: { confirm: fixture.name, admin: false, code: 'x' } })
+      expect(await h(e), `${method} ${url}`).toEqual({ error: 'Not allowed with a token.' })
+      expect(e.status, `${method} ${url}`).toBe(403)
+    }
+    expect(useDb().select().from(boards).where(eq(boards.id, id)).get()).toBeDefined()
+    expect(useDb().select().from(users).where(eq(users.id, ann)).get()).toMatchObject({ deletedAt: null, isAdmin: 1 })
   })
 
   it('a bearer request without Origin passes the site check; a foreign Origin is still refused', async () => {
@@ -413,6 +508,48 @@ describe('/api/tokens routes', () => {
       expect(await h(e)).toEqual({ error: 'Not allowed with a token.' })
       expect(e.status).toBe(403)
     }
+  })
+})
+
+describe('pairing and devices (R4)', () => {
+  const PAIRING: [string, string][] = [['POST', '/api/pair/start'], ['POST', '/api/pair'], ['GET', '/api/devices'], ['GET', '/api/devices/me'], ['DELETE', '/api/devices/abc']]
+
+  it('public mode: a token gets 403 on the pairing and device routes', async () => {
+    const { token } = mint(newUser('Ann'))
+    for (const [method, url] of PAIRING) {
+      expect(await call(null, method, url, { headers: bearer(token) }), `${method} ${url}`).toMatchObject({ status: 403, body: { error: 'Not allowed with a token.' } })
+    }
+  })
+
+  it('local mode: a token cannot start pairing, pair, list devices or unpair one', async () => {
+    vi.stubEnv('WIREBENDER_MODE', 'local')
+    vi.stubEnv('WIREBENDER_URL', '')
+    const { resetPairing, startPairing, completePairing, listDevices } = await import('../../server/utils/access')
+    resetPairing()
+    const start = (await import('../../server/api/pair/start.post')).default as unknown as Handler
+    const pair = (await import('../../server/api/pair.post')).default as unknown as Handler
+    const list = (await import('../../server/api/devices/index.get')).default as unknown as Handler
+    const unpair = (await import('../../server/api/devices/[id].delete')).default as unknown as Handler
+    // The owner's tablet, paired the normal way.
+    const { code } = startPairing()
+    expect(completePairing(code, 'Tablet', '192.168.1.30').ok).toBe(true)
+    const tablet = listDevices()[0]!
+    const pending = startPairing()
+
+    const { token } = mint('local')
+    const headers = { host: 'localhost:3002', ...bearer(token) }
+    for (const address of ['127.0.0.1', '192.168.1.20']) {
+      const s = await call(start, 'POST', '/api/pair/start', { headers, address })
+      expect(s, address).toMatchObject({ status: 403, body: { error: 'Not allowed with a token.' } })
+      const p = await call(pair, 'POST', '/api/pair', { headers, address, body: { code: pending.code, name: 'Rogue' } })
+      expect(p, address).toMatchObject({ status: 403, body: { error: 'Not allowed with a token.' } })
+      expect(await call(list, 'GET', '/api/devices', { headers, address }), address).toMatchObject({ status: 403 })
+      const d = await call(unpair, 'DELETE', `/api/devices/${tablet.id}`, { headers, address, params: { id: tablet.id } })
+      expect(d, address).toMatchObject({ status: 403, body: { error: 'Not allowed with a token.' } })
+    }
+    expect(listDevices().map(d => d.name)).toEqual(['Tablet'])
+    // The pending code was never used up by the token.
+    expect(completePairing(pending.code, 'Phone', '192.168.1.31').ok).toBe(true)
   })
 })
 

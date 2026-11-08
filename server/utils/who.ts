@@ -85,7 +85,12 @@ function tokenState(db: Db, mode: Mode, bearer: string): SessionState {
   const row = db.select().from(users).where(eq(users.id, token.userId)).get()
   if (!row || row.suspendedAt !== null || row.deletedAt !== null) return invalid
   if ((mode === 'local') !== (row.id === 'local')) return invalid
-  touchToken(db, token)
+  // Bookkeeping only: a failed write (a busy or read-only database) never fails the request.
+  try {
+    touchToken(db, token)
+  } catch {
+    // The next use tries again.
+  }
   const t: WhoToken = { id: token.id, name: token.name }
   const who: Who = mode === 'local'
     ? { kind: 'local', userId: 'local', author: `${t.name} · ${LOCAL_TOKEN_OWNER}`, token: t }

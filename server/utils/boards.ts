@@ -132,20 +132,26 @@ export function listRevisions(db: Db, id: string): RevisionInfo[] {
     n: revisions.n, createdAt: revisions.createdAt, author: revisions.author, how: revisions.how, target: revisions.target, summary: revisions.summary
   }).from(revisions).where(eq(revisions.boardId, id)).orderBy(desc(revisions.n)).all()
   const authorOf = new Map(list.map(r => [r.n, r.author]))
-  return list.map((r) => {
-    if ((r.how !== 'undo' && r.how !== 'redo') || r.target === null) return r
-    const by = authorOf.get(r.target)
-    return { ...r, summary: by === undefined ? `${r.how} of #${r.target}` : `${r.how} of #${r.target} by ${by}` }
-  })
+  return list.map(r => withUndoSummary(r, r.target === null ? undefined : authorOf.get(r.target)))
+}
+
+/** R1: an undo or redo of #N reads `undo of #N by <author of #N>`; anything else keeps its summary. */
+function withUndoSummary<T extends Pick<RevisionInfo, 'how' | 'target' | 'summary'>>(r: T, targetAuthor: string | undefined): T {
+  if ((r.how !== 'undo' && r.how !== 'redo') || r.target === null) return r
+  return { ...r, summary: targetAuthor === undefined ? `${r.how} of #${r.target}` : `${r.how} of #${r.target} by ${targetAuthor}` }
+}
+
+/** The stored author of revision `n`, if it exists. */
+function authorOfRevision(db: Db, id: string, n: number | null): string | undefined {
+  if (n === null) return undefined
+  return db.select({ author: revisions.author }).from(revisions).where(and(eq(revisions.boardId, id), eq(revisions.n, n))).get()?.author
 }
 
 export function getRevision(db: Db, id: string, n: number): (RevisionInfo & { board: BoardFile }) | null {
   const row = db.select().from(revisions).where(and(eq(revisions.boardId, id), eq(revisions.n, n))).get()
   if (!row) return null
-  return {
-    n: row.n, createdAt: row.createdAt, author: row.author, how: row.how, target: row.target, summary: row.summary,
-    board: withRevision(JSON.parse(row.board) as BoardFile, row.n)
-  }
+  const info = withUndoSummary({ n: row.n, createdAt: row.createdAt, author: row.author, how: row.how, target: row.target, summary: row.summary }, authorOfRevision(db, id, row.target))
+  return { ...info, board: withRevision(JSON.parse(row.board) as BoardFile, row.n) }
 }
 
 /** If `current` differs from the head revision's board, commit it as a `recovered` revision. */

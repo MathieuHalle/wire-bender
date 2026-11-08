@@ -224,7 +224,9 @@ function anonymousWrite(method: string, pathname: string): boolean {
  * The routes a token may not use (step 3): account deletion and restore, deleting a board for
  * good, its sharing, the tokens themselves, the admin and the setup code. `*` is any method.
  * Also sign-in (`/auth/*`, which from a signed-in caller links another identity to the
- * account) and nuxt-auth-utils' cookie session routes (`/api/_auth/*`).
+ * account) and nuxt-auth-utils' cookie session routes (`/api/_auth/*`) (ruling R3); pairing and
+ * devices, since a device cookie would outlive the token (R4); and unlocking a password link,
+ * which is the browser session's state (R5).
  */
 const TOKEN_DENIED: [string, RegExp][] = [
   ['DELETE', /^\/api\/me$/],
@@ -236,7 +238,10 @@ const TOKEN_DENIED: [string, RegExp][] = [
   ['*', /^\/api\/admin(\/.*)?$/],
   ['POST', /^\/api\/setup$/],
   ['*', /^\/auth(\/.*)?$/],
-  ['*', /^\/api\/_auth(\/.*)?$/]
+  ['*', /^\/api\/_auth(\/.*)?$/],
+  ['*', /^\/api\/pair(\/.*)?$/],
+  ['*', /^\/api\/devices(\/.*)?$/],
+  ['POST', /^\/api\/links\/[^/]+\/unlock$/]
 ]
 
 export const TOKEN_REFUSED = 'Not allowed with a token.'

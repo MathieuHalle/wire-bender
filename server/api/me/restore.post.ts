@@ -5,6 +5,7 @@ import { meBody } from '../../utils/accounts'
 import { restoreSession } from '../../utils/lifecycle'
 import { checkMode, configuredProviders } from '../../utils/mode'
 import { resolveSession, unlockedOf } from '../../utils/who'
+import { refuseToken } from '../../utils/sendResult'
 
 /**
  * `POST /api/me/restore`: a deleted, not yet purged account signed in again (its session is
@@ -12,6 +13,8 @@ import { resolveSession, unlockedOf } from '../../utils/who'
  * like `GET /api/me`. Local mode has no accounts: 404.
  */
 export default defineEventHandler(async (event) => {
+  const refused = refuseToken(event)
+  if (refused) return refused
   setResponseHeader(event, 'cache-control', 'no-store')
   const mode = checkMode()
   if (mode === 'local') {
