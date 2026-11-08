@@ -1,5 +1,6 @@
 import { benchHtml } from '../../export/benchHtml'
 import type { BoardFile } from '~core/schema'
+import type { Flip } from '~core/sideView'
 
 export interface BenchResponse {
   status: 200
@@ -21,14 +22,17 @@ export function benchFilename(name: string): string {
   return `${fileStem(name)}.bench.html`
 }
 
-/** The bench sheet for `board`; `hash` keys the phone ticks so they reset when the board changes. */
-export function benchResponse(board: BoardFile, hash: string, date?: string): BenchResponse {
+/**
+ * The bench sheet for `board`; `hash` keys the phone ticks so they reset when the board
+ * changes; `flip` is how the overviews turn the bottom over (left-right by default).
+ */
+export function benchResponse(board: BoardFile, hash: string, date?: string, flip: Flip = 'lr'): BenchResponse {
   const contentType = 'text/html; charset=utf-8'
   const filename = benchFilename(board.name)
   return {
     status: 200,
     contentType,
-    body: benchHtml(board, { hash, date }),
+    body: benchHtml(board, { hash, date, flip }),
     filename,
     headers: {
       'content-type': contentType,

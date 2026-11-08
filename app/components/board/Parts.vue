@@ -16,7 +16,7 @@ const parts = computed(() => props.placed.map((p) => {
   const g = props.geo
   const pitch = props.board.board.pitchMm
   const mm = (h: { col: number, row: number }) => holeMm(h, pitch) // board mm, unmirrored
-  const v = (q: Pt): Pt => ({ x: g.x(q.x), y: q.y }) // -> drawing mm
+  const v = (q: Pt): Pt => ({ x: g.x(q.x), y: g.y(q.y) }) // -> drawing mm
   const r = p.bodyRectMm
   const centre = { x: r.x + r.w / 2, y: r.y + r.h / 2 }
   const round = !!(p.part.standing && p.fp.twoLead)
@@ -34,7 +34,7 @@ const parts = computed(() => props.placed.map((p) => {
     const dy = centre.y - p1.y
     const len = Math.hypot(dx, dy) || 1
     const q = { x: p1.x + (dx / len) * 1.6, y: p1.y + (dy / len) * 1.6 }
-    marks.push({ d: `M${v(q).x - 0.01} ${q.y}l0.02 0`, w: 0.9, color: '#16201b' }) // a dot
+    marks.push({ d: `M${v(q).x - 0.01} ${v(q).y}l0.02 0`, w: 0.9, color: '#16201b' }) // a dot
   } else if ((p.fp.mark === 'tab' || p.fp.mark === 'flat') && !round) {
     // The body edge on the tab side; without an explicit tab, the edge farthest from the leads.
     const cx = pinPts.reduce((s, q) => s + q.x, 0) / pinPts.length
@@ -84,7 +84,7 @@ const parts = computed(() => props.placed.map((p) => {
     font,
     marks,
     // Lead wire from a to b on top: under a lying body, looped over for a standing one.
-    lead: two ? `M${v(pinPts[0]!).x} ${pinPts[0]!.y}L${v(pinPts[1]!).x} ${pinPts[1]!.y}` : null,
+    lead: two ? `M${v(pinPts[0]!).x} ${v(pinPts[0]!).y}L${v(pinPts[1]!).x} ${v(pinPts[1]!).y}` : null,
     pins: p.pins.map(pin => ({
       id: `lead:${p.part.ref}.${pin.name}`,
       ...g.pt(pin.hole),

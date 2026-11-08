@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -205,6 +206,78 @@ describe('boardOverviewSvg', () => {
     expect(boardOverviewSvg(b, 'top')).toContain('data-trail="T1"')
     expect(boardOverviewSvg(b, 'top')).not.toContain('data-trail="T2"')
     expect(boardOverviewSvg(b, 'bottom')).toContain('data-trail="T2"')
+  })
+})
+
+describe('boardOverviewSvg bottom flip', () => {
+  const num = (a: string, k: string) => Number(new RegExp(`\\b${k}="([-\\d.]+)"`).exec(a)![1])
+  /** The hole grid's circles, in draw order: row by row, column by column. */
+  const holes = (svg: string) => [...svg.matchAll(/<circle ([^>]*fill="#ffffff"[^>]*)\/>/g)].map(m => ({ x: num(m[1]!, 'cx'), y: num(m[1]!, 'cy') }))
+  const pathPts = (svg: string, attr: string) => {
+    const d = new RegExp(`<path [^>]*${attr}[^>]*\\bd="([^"]+)"`).exec(svg)![1]!
+    return [...d.matchAll(/[ML]([-\d.]+) ([-\d.]+)/g)].map(m => ({ x: Number(m[1]), y: Number(m[2]) }))
+  }
+  const cols = 20
+  const rows = 10
+  const b = mk({ board: { cols, rows }, trails: [trail('T1', ['A1', 'A3', 'C3'])] })
+  const at = (svg: string, col: number, row: number) => holes(svg)[(row - 1) * cols + (col - 1)]!
+
+  it('the default is the left-right mirror, unchanged from before the flip choice', () => {
+    expect(boardOverviewSvg(b, 'bottom')).toBe(boardOverviewSvg(b, 'bottom', { flip: 'lr' }))
+    // the fixture's drawings, byte for byte as they were before the flip choice existed
+    const fx = board2()
+    const h = (x: string) => createHash('sha256').update(x).digest('hex')
+    expect(h(boardOverviewSvg(fx, 'top'))).toBe('c4041a0fff92e17a49f3691ba2e9429270fffb14e825e7e7c2b96bb19364f3c6')
+    expect(h(boardOverviewSvg(fx, 'bottom'))).toBe('ca3bc9c3f08ac70d85382429d7628438e1d89f0e127a04e479ca9d546360add4')
+    expect(h(boardOverviewSvg(fx, 'bottom', { title: false, labelSize: 1.2 }))).toBe('ac682f2ce898cf2a5f5629dde4eeaf68eeae1698dbdaf2081dc9b482c61069ef')
+  })
+
+  it('tb puts a trail at the top-bottom mirrored holes: A1 bottom left, columns not mirrored', () => {
+    const svg = boardOverviewSvg(b, 'bottom', { flip: 'tb' })
+    const a1 = at(svg, 1, 1)
+    const all = holes(svg)
+    expect(all).toHaveLength(cols * rows)
+    // A1 is the leftmost hole of the lowest row
+    expect(a1.y).toBeCloseTo(Math.max(...all.map(q => q.y)), 6)
+    expect(a1.x).toBeCloseTo(Math.min(...all.map(q => q.x)), 6)
+    // the last row is at the top, column 1 still on the left
+    expect(at(svg, 1, rows).y).toBeCloseTo(Math.min(...all.map(q => q.y)), 6)
+    expect(at(svg, 1, rows).y).toBeCloseTo(a1.y - (rows - 1) * 2.54, 3)
+    // the trail runs over the same holes, A1 -> A3 -> C3, so C3 is above A1
+    expect(pathPts(svg, 'data-trail="T1"')).toEqual([a1, at(svg, 3, 1), at(svg, 3, 3)])
+    expect(at(svg, 3, 3).y).toBeLessThan(a1.y)
+    // lr: the same trail with column 1 on the right, row A at the top
+    const lr = boardOverviewSvg(b, 'bottom')
+    expect(at(lr, 1, 1).x).toBeCloseTo(Math.max(...holes(lr).map(q => q.x)), 6)
+    expect(at(lr, 1, 1).y).toBeCloseTo(Math.min(...holes(lr).map(q => q.y)), 6)
+  })
+
+  it('tb: row letters sit by their own (moved) row, column numbers by their own column', () => {
+    const svg = boardOverviewSvg(b, 'bottom', { flip: 'tb' })
+    const label = (t: string) => [...svg.matchAll(new RegExp(`<text ([^>]*)>${t}</text>`, 'g'))].map(m => ({ x: num(m[1]!, 'x'), y: num(m[1]!, 'y') }))
+    for (const [letter, row] of [['A', 1], ['J', rows]] as const) {
+      const ls = label(letter)
+      expect(ls.length, letter).toBeGreaterThanOrEqual(2)
+      for (const l of ls) expect(l.y - 0.8, letter).toBeCloseTo(at(svg, 1, row).y, 3)
+    }
+    const col1 = Number(/<text[^>]*data-col="1"[^>]*x="([\d.]+)"/.exec(svg)![1])
+    expect(col1).toBeCloseTo(at(svg, 1, 1).x, 3)
+  })
+
+  it('tb leaves text upright, and the top side ignores the flip', () => {
+    const svg = boardOverviewSvg(b, 'bottom', { flip: 'tb' })
+    expect(svg).not.toMatch(/transform=|scale\(/)
+    expect(boardOverviewSvg(b, 'top', { flip: 'tb' })).toBe(boardOverviewSvg(b, 'top'))
+  })
+
+  it('tb ghosts follow the flip', () => {
+    const two = mk({
+      board: { cols, rows, type: 'two-sided' },
+      trails: [trail('T9', ['A2', 'A6', 'D6'], 'bottom')],
+      wires: [{ id: 'W1', kind: 'laid', side: 'top', points: ['A2', 'A6', 'D6'], bareSegments: [], joints: [] }]
+    })
+    const svg = boardOverviewSvg(two, 'bottom', { flip: 'tb' })
+    expect(pathPts(svg, 'data-ghost="W1"')).toEqual(pathPts(svg, 'data-trail="T9"'))
   })
 })
 

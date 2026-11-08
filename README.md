@@ -136,7 +136,7 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `PATCH /api/boards/:id` | `{ "name" }` renames (owner) |
 | `DELETE /api/boards/:id` | `{ "confirm": <the board's exact name> }` deletes a board in the trash for good, with its history (owner) |
 | `GET /api/boards/:id/check` | findings and counts, as in the findings panel |
-| `GET /api/boards/:id/bench` | bench sheet (HTML) |
+| `GET /api/boards/:id/bench` | bench sheet (HTML); `?flip=lr` (default) or `tb` turns the bottom overviews over left-right or top-bottom, anything else is 422 |
 | `GET /api/boards/:id/download` | the board as a `.wirebender.json` file |
 | `GET /api/boards/:id/thumbnail` | an SVG of the top side, for the board lists |
 | `GET /api/boards/:id/revisions` | history |

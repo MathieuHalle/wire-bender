@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { runCheck } from '~core/check'
 import { parseBoard, type BoardFile } from '~core/schema'
+import { parseFlip } from '~core/sideView'
 import { statsLine, ADVISORY } from '../../cli/format'
 import { tickKey } from '../../export/benchHtml'
 import type { Db } from '../db'
@@ -225,13 +226,19 @@ export function checkBoard(db: Db, req: BoardRequest): ApiResult {
   })
 }
 
-export function benchBoard(db: Db, req: BoardRequest, date?: string): ApiResult {
+/**
+ * `GET /api/boards/:key/bench?flip=lr|tb`: the bench sheet, its bottom overviews turned over
+ * left-right (the default) or top-bottom; any other `flip` is 422.
+ */
+export function benchBoard(db: Db, req: BoardRequest, date?: string, flipParam: unknown = 'lr'): ApiResult {
   return withAccess(db, req, 'view', (a) => {
     const stored = getBoard(db, a.boardId)
     if (!stored) return notFound()
+    const flip = parseFlip(flipParam)
+    if (!flip) return invalid('flip: must be lr or tb')
     // Keyed by the key asked with: a link's ticks never tie it to the board id or to another link.
     const hash = tickKey(createHash('sha256').update(`${req.key}:${stored.head}`).digest('hex'))
-    const r = benchResponse(stored.board, hash, date)
+    const r = benchResponse(stored.board, hash, date, flip)
     return ok(r.body, r.headers)
   })
 }

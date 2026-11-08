@@ -1,6 +1,8 @@
 <script setup lang="ts">
-// The 2D canvas's own controls, over its top-right corner: zoom, fit and the bottom mirror.
-// The 3D view has its own (orbit, the camera presets); these only exist in 2D.
+// The 2D canvas's own controls, over its top-right corner: zoom, fit, the bottom mirror and
+// which way it turns the board over. The 3D view has its own (orbit, the camera presets);
+// these only exist in 2D.
+import type { Flip } from '~core/sideView'
 import { ZOOM_MAX, ZOOM_MIN } from '~/utils/camera2d'
 
 defineProps<{
@@ -9,6 +11,13 @@ defineProps<{
 }>()
 const emit = defineEmits<{ 'zoom-in': [], 'zoom-out': [], 'fit': [] }>()
 const mirrorBottom = defineModel<boolean>('mirrorBottom', { required: true })
+/** Left-right (turned over sideways) or top-bottom (end over end); only drawn while mirrored. */
+const flip = defineModel<Flip>('flip', { required: true })
+
+const FLIP_CHOICES = [
+  { id: 'lr', label: 'L↔R', title: 'Mirror left↔right: the board turned over sideways' },
+  { id: 'tb', label: 'T↔B', title: 'Mirror top↔bottom: the board turned over end over end' }
+] as const
 </script>
 
 <template>
@@ -59,5 +68,24 @@ const mirrorBottom = defineModel<boolean>('mirrorBottom', { required: true })
       class="pr-2"
       label="Mirror bottom"
     />
+    <div
+      class="-ml-1 flex items-center pr-1"
+      role="group"
+      aria-label="Mirror the bottom"
+    >
+      <UButton
+        v-for="(c, i) in FLIP_CHOICES"
+        :key="c.id"
+        size="xs"
+        color="neutral"
+        :variant="flip === c.id ? 'solid' : 'outline'"
+        :class="i === 0 ? 'rounded-r-none' : 'rounded-l-none -ml-px'"
+        :label="c.label"
+        :title="mirrorBottom ? c.title : `${c.title} (turn Mirror bottom on to use it)`"
+        :aria-pressed="flip === c.id"
+        :disabled="!mirrorBottom"
+        @click="flip = c.id"
+      />
+    </div>
   </div>
 </template>

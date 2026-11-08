@@ -1,11 +1,13 @@
 <script setup lang="ts">
 // One side of the board, drawn in mm. The bottom is usually mirrored (seen from below),
-// so text is never drawn mirrored: every coordinate goes through `geo`.
+// left-right or top-bottom, so text is never drawn mirrored: every coordinate goes through
+// `geo`, and every pointer position back through `geo.hole`.
 import { edgeLabels } from '~core/edgeLabels'
 import { holeKey, holeName, type Hole } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
 import { placePart, type PlacedPart } from '~core/footprints'
 import { buildConnectivity, type Connectivity } from '~core/connectivity'
+import type { Mirror } from '~core/sideView'
 import { litOf, makeGeo, SIDE_MARGIN, sideBox, sideExtent, type Group, type Tool } from '~/utils/boardView'
 import { ALL_LAYERS, type Layers } from '~/utils/layers'
 import { CANVAS_CONTEXT } from '~/utils/canvasContext'
@@ -13,7 +15,8 @@ import { CANVAS_CONTEXT } from '~/utils/canvasContext'
 const props = withDefaults(defineProps<{
   board: BoardFile
   side: Side
-  mirrored?: boolean
+  /** How this side is drawn: as it is, or mirrored left-right or top-bottom. */
+  mirror?: Mirror
   /** The connectivity group to light up (a net as drawn, shorts included). */
   highlightNet?: Group | null
   /** Hole to ring, e.g. the one hovered on the other side. */
@@ -31,7 +34,7 @@ const props = withDefaults(defineProps<{
    * still work on the board data (connectivity is unchanged).
    */
   layers?: Layers
-}>(), { layers: () => ({ ...ALL_LAYERS }), mirrored: false, highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
+}>(), { layers: () => ({ ...ALL_LAYERS }), mirror: 'none', highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
 
 const emit = defineEmits<{
   'hole-click': [hole: Hole]
@@ -41,8 +44,14 @@ const emit = defineEmits<{
 
 const MARGIN = SIDE_MARGIN
 const LABEL = 1.25 // font size, mm
+/** What the side's accessible name adds for each mirror. */
+const MIRROR_LABEL: Record<Mirror, string> = {
+  none: '',
+  lr: ', mirrored left-right (seen from below)',
+  tb: ', mirrored top-bottom (seen from below)'
+}
 
-const geo = computed(() => makeGeo(props.board, props.mirrored))
+const geo = computed(() => makeGeo(props.board, props.mirror))
 const placedParts = computed(() => props.placed ?? props.board.parts.map(placePart))
 const connectivity = computed(() => props.conn ?? buildConnectivity(props.board))
 const lit = computed(() => litOf(props.highlightNet))
@@ -82,8 +91,8 @@ function boardPoint(ev: { clientX: number, clientY: number }) {
   const ctm = svg?.getScreenCTM()
   if (!svg || !ctm) return null
   const p = new DOMPoint(ev.clientX, ev.clientY).matrixTransform(ctm.inverse())
-  const g = geo.value
-  return { fc: geo.value.x(p.x) / g.pitch + 1, fr: p.y / g.pitch + 1 }
+  const h = geo.value.hole(p)
+  return { fc: h.col, fr: h.row }
 }
 
 function inBoard(h: Hole) {
@@ -243,7 +252,7 @@ const ringed = computed(() => {
         :class="cursorClass"
         font-family="'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace"
         role="img"
-        :aria-label="`Board ${side} side${mirrored ? ', mirrored (seen from below)' : ''}`"
+        :aria-label="`Board ${side} side${MIRROR_LABEL[mirror]}`"
         @pointermove="onMove"
         @pointerleave="onLeave"
         @click="onClick"

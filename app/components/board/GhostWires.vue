@@ -7,7 +7,7 @@ import type { Geo } from '~/utils/boardView'
 
 const props = defineProps<{ board: BoardFile, side: Side, geo: Geo }>()
 
-const ghosts = computed(() => ghostWires(props.board, props.side, props.geo.mirrored).map(w => ({
+const ghosts = computed(() => ghostWires(props.board, props.side, props.geo.mirror).map(w => ({
   id: w.id,
   d: w.points.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join('')
 })))
