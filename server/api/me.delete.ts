@@ -3,6 +3,7 @@ import { ONLY_ADMIN, isOnlyAdmin } from '../utils/accounts'
 import { deleteAccount } from '../utils/lifecycle'
 import { checkMode } from '../utils/mode'
 import { resolveSession } from '../utils/who'
+import { refuseToken } from '../utils/sendResult'
 
 /**
  * `DELETE /api/me`: delete the signed-in account (restorable for 30 days) and sign out.
@@ -10,6 +11,8 @@ import { resolveSession } from '../utils/who'
  * would leave the server with no admin, and setup never opens again.
  */
 export default defineEventHandler(async (event) => {
+  const refused = refuseToken(event)
+  if (refused) return refused
   setResponseHeader(event, 'cache-control', 'no-store')
   const mode = checkMode()
   if (mode === 'local') {

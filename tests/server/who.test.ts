@@ -41,6 +41,12 @@ describe('presenceOf', () => {
     expect(presenceOf(db, { kind: 'anonymous' })).toEqual({ name: 'Guest' })
     expect(presenceOf(db, { kind: 'local', userId: 'local', author: 'Local · This computer' })).toBeUndefined()
   })
+
+  it('a request made with a token is the token, by name, in either mode', () => {
+    const token = { id: 't1', name: 'Claude' }
+    expect(presenceOf(db, { kind: 'user', userId: 'u1', author: 'Claude · Ada', isAdmin: false, isPremium: false, token })).toEqual({ name: 'Claude', kind: 'token' })
+    expect(presenceOf(db, { kind: 'local', userId: 'local', author: 'Claude · Local', token })).toEqual({ name: 'Claude', kind: 'token' })
+  })
 })
 
 describe('checkMode', () => {

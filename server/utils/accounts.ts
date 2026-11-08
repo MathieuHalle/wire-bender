@@ -5,12 +5,17 @@
 import { createHash, randomInt, randomUUID, timingSafeEqual } from 'node:crypto'
 import { and, count, desc, eq, isNull, ne } from 'drizzle-orm'
 import type { Db } from '../db'
-import { IDENTITY_PROVIDERS, boards, identities, setup, users } from '../db/schema'
+import { IDENTITY_PROVIDERS, boards, identities, setup, tokens, users } from '../db/schema'
 import type { Mode } from './mode'
 import { kickAccount } from './rooms'
+import { tokensRevoked } from './tokenEvents'
 import type { SessionState } from './who'
 
 export type Provider = typeof IDENTITY_PROVIDERS[number]
+
+/** The ids of a user's personal API tokens. */
+export const userTokenIds = (db: Db, userId: string): string[] =>
+  db.select({ id: tokens.id }).from(tokens).where(eq(tokens.userId, userId)).all().map(t => t.id)
 
 export const PROVIDERS: readonly Provider[] = IDENTITY_PROVIDERS
 
@@ -385,6 +390,8 @@ export function patchAccount(db: Db, adminId: string, id: string, body: unknown,
   // R10: its own sockets in every room, and every socket on its boards (their links are 404
   // now). Unsuspending only clears the column: the links answer again from the next request.
   if (suspended === true) {
+    // R7 first: the account's token sockets close as a dead token's (4401), not 4403.
+    tokensRevoked(userTokenIds(db, id))
     const owned = db.select({ id: boards.id }).from(boards).where(eq(boards.ownerId, id)).all()
     kickAccount(id, new Set(owned.map(b => b.id)))
   }

@@ -4,7 +4,8 @@ import { useDb } from '../../../db'
 import { onUnpair, refusal, trust, type TrustSource } from '../../../utils/access'
 import { access, recordVisit, type Access } from '../../../utils/boardAccess'
 import { checkMode } from '../../../utils/mode'
-import { authorIdOf, presenceOf, unlockedOf, whoIs, type Who } from '../../../utils/who'
+import { INVALID_TOKEN, authorIdOf, bearerSession, presenceOf, resolveSession, unlockedOf, type Who } from '../../../utils/who'
+import { onTokensRevoked } from '../../../utils/tokenEvents'
 import { MESSAGE_AWARENESS, MESSAGE_SYNC, handleMessage, message } from '../../../utils/liveMessage'
 import { CLOSE_ACCESS, CLOSE_NO_BOARD, openRoom, type Received, type Room } from '../../../utils/rooms'
 import { wsBoardId } from '../../../utils/wsBoardId'
@@ -30,22 +31,28 @@ const CLOSE_SERVER_ERROR = 1011
 /** The author a viewer's presence goes under; a viewer never writes a revision. */
 const VISITOR = 'Visitor'
 
-type PeerWho = { ok: true, who: Who, deviceId?: string } | { ok: false }
+type PeerWho = { ok: true, who: Who, deviceId?: string } | { ok: false, reason?: string }
 
 /**
  * Who the peer is, on open. Local mode checks again: the upgrade was checked, but the
- * device may have been unpaired since. Public mode takes who the upgrade found (a session
- * can only be read there, asynchronously).
+ * device may have been unpaired since. A socket opened with a token checks the token again
+ * (it may have been revoked since), in either mode: a token is not a device. Public mode
+ * otherwise takes who the upgrade found (a session can only be read there, asynchronously).
  */
 function whoOf(peer: WsPeer): PeerWho {
+  const upgraded = peer.context?.who as Who | undefined
+  if (upgraded && upgraded.kind !== 'anonymous' && upgraded.token) {
+    const again = bearerSession(peer.request)?.who
+    const same = again && again.kind !== 'anonymous' && again.token?.id === upgraded.token.id
+    return same ? { ok: true, who: again } : { ok: false, reason: 'invalid token' }
+  }
   if (checkMode() === 'local') {
     const t = trust(peer.request)
     if (!t.ok) return { ok: false }
     const who: Who = t.device ? { kind: 'local', userId: 'local', author: t.author, device: t.device } : { kind: 'local', userId: 'local', author: t.author }
     return { ok: true, who, deviceId: t.device?.id }
   }
-  const who = peer.context?.who as Who | undefined
-  return who ? { ok: true, who } : { ok: false }
+  return upgraded ? { ok: true, who: upgraded } : { ok: false }
 }
 
 /** WebSocket close reasons are at most 123 bytes. */
@@ -55,7 +62,7 @@ function closeReason(reason: string): string {
   return new TextDecoder().decode(bytes.slice(0, 120)).replace(/�$/, '') + '...'
 }
 
-const joined = new Map<string, { room: Room, author: string, deviceId?: string, peer: WsPeer }>()
+const joined = new Map<string, { room: Room, author: string, deviceId?: string, tokenId?: string, peer: WsPeer }>()
 
 // An unpaired device's live sockets close at once.
 onUnpair((deviceId) => {
@@ -63,6 +70,16 @@ onUnpair((deviceId) => {
     if (live.deviceId !== deviceId) continue
     leave(live.peer)
     live.peer.close(CLOSE_UNTRUSTED, 'device unpaired')
+  }
+})
+
+// R7: a revoked token's live sockets (or those of a suspended or deleted user's tokens) close
+// at once; the reconnect is refused at the upgrade (401 Invalid token.).
+onTokensRevoked((ids) => {
+  for (const live of [...joined.values()]) {
+    if (live.tokenId === undefined || !ids.has(live.tokenId)) continue
+    leave(live.peer)
+    live.peer.close(CLOSE_UNTRUSTED, 'token revoked')
   }
 })
 
@@ -92,7 +109,7 @@ function join(peer: WsPeer): void {
   // Trust first: an untrusted peer learns nothing, not even whether the board exists.
   const w = whoOf(peer)
   if (!w.ok) {
-    peer.close(CLOSE_UNTRUSTED, 'not paired')
+    peer.close(CLOSE_UNTRUSTED, w.reason ?? 'not paired')
     return
   }
   const unlocked = (peer.context?.unlocked as string[] | undefined) ?? []
@@ -108,7 +125,8 @@ function join(peer: WsPeer): void {
     return
   }
   const author = w.who.kind === 'anonymous' ? VISITOR : w.who.author
-  joined.set(peer.id, { room, author, deviceId: w.deviceId, peer })
+  const tokenId = w.who.kind === 'anonymous' ? undefined : w.who.token?.id
+  joined.set(peer.id, { room, author, deviceId: w.deviceId, tokenId, peer })
   room.join(peer.id, author, {
     update: u => peer.send(message((e) => {
       encoding.writeVarUint(e, MESSAGE_SYNC)
@@ -123,7 +141,7 @@ function join(peer: WsPeer): void {
       joined.delete(peer.id)
       peer.close(code, reason)
     }
-  }, { role: a.role, viaLink: a.viaLink, authorId: authorIdOf(w.who), presence: presenceOf(useDb(), w.who) })
+  }, { role: a.role, viaLink: a.viaLink, authorId: authorIdOf(w.who), tokenId: tokenId ?? null, presence: presenceOf(useDb(), w.who) })
   recordVisit(useDb(), w.who, a, a.key!)
   peer.send(message((e) => {
     encoding.writeVarUint(e, MESSAGE_SYNC)
@@ -141,7 +159,10 @@ export default defineWebSocketHandler({
   async upgrade(request) {
     const source = request as TrustSource
     if (refusal(source)) return new Response('This request names another site.', { status: 403 })
-    const who = await whoIs(source)
+    // A bearer token decides alone, as in the API (resolveSession); there is no deny-list here.
+    const state = await resolveSession(source)
+    if (state.invalidToken) return json(401, { error: INVALID_TOKEN })
+    const who = state.who
     if (checkMode() === 'local' && who.kind === 'anonymous') return new Response('This device is not paired.', { status: 401 })
     const unlocked = await unlockedOf(source)
     const a = accessOf((request as { url: string }).url, who, unlocked)

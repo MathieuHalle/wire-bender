@@ -3,6 +3,7 @@ import { unlockLink, withUnlocked } from '../../../utils/boardAccess'
 import { checkMode } from '../../../utils/mode'
 import { remoteOf } from '../../../utils/peerAddress'
 import { readCapped } from '../../../utils/readCapped'
+import { refuseToken } from '../../../utils/sendResult'
 
 const MAX_BODY = 4096
 
@@ -21,6 +22,8 @@ function parse(text: string): { password?: unknown } | null {
  * for an anonymous visitor (the one place one gets a cookie). Local mode: 404.
  */
 export default defineEventHandler(async (event) => {
+  const refused = refuseToken(event)
+  if (refused) return refused
   // Local mode has no share links to unlock, and never touches a session.
   if (checkMode() === 'local') {
     setResponseStatus(event, 404)

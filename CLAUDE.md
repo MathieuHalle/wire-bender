@@ -3,7 +3,8 @@
 - Spec: `docs/superpowers/specs/2026-11-05-wirebender-design.md`, and `docs/superpowers/specs/2026-11-06-wirebender-service-design.md` (the service: accounts, live editing, API; it overrides the first where §11 says so). Plans: `docs/superpowers/plans/`. Read them before changing behaviour.
 - Layout: pure TypeScript in `core/` (alias `~core`), CLI in `cli/`, Nitro routes in `server/`, app in `app/`.
 
-- Boards: read and write them through the running server's `/api/boards` (see the README); never edit a board file. The file under `data/` is a fixture only.
+- Boards: use the `wirebender` MCP server tools (`get_board`, then `replace_board` with `baseRevision`). The HTTP API rules below still apply.
+- Otherwise read and write them through the running server's `/api/boards` (see the README); never edit a board file. The file under `data/` is a fixture only.
 
 ## Global constraints (short form)
 
@@ -19,6 +20,6 @@
 ## Editing boards through the API
 
 - `:id` in `/api/boards/:id` is a key: a board id (owner only) or a share link id. Roles: owner, edit, view; `PUT` needs edit.
-- In public mode a script cannot sign in yet (tokens come in step 3), so API editing is for local mode for now.
+- In public mode a script sends a token (`Authorization: Bearer wb_...`); in local mode this computer is trusted. A token cannot change sharing or manage tokens (403).
 - `GET /api/boards/:id` first, then `PUT` with `baseRevision` set to that GET's `head`. Never PUT without it.
 - A `409` means someone else changed the board in between (a tablet edit counts): GET it again, redo the change on the new board, and PUT with the new `head`. Never retry the old body.

@@ -1,6 +1,8 @@
 // WireBender CLI.
 //   wirebender check <file> [--all] [--json]
 //   wirebender export <file> [-o out.html] [--flip lr|tb]
+//   wirebender import <file> | pull <board> -o <file>   (against a server)
+//   wirebender mcp [--url <server>] [--token <token>]   (an MCP server on stdio)
 // Exit codes: 0 no errors (export: written), 1 errors found, 2 file invalid or unreadable.
 import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
@@ -10,8 +12,10 @@ import { runCheck } from '~core/check'
 import { parseFlip, type Flip } from '~core/sideView'
 import { benchHtml, tickKey } from '../export/benchHtml'
 import { ADVISORY, formatCheck } from './format'
+import { REMOTE_LINES, importCmd, pullCmd } from './commands'
+import { runMcp } from './mcp'
 
-const USAGE = 'usage: wirebender check <file> [--all] [--json]\n       wirebender export <file> [-o out.html] [--flip lr|tb]'
+const USAGE = 'usage: wirebender check <file> [--all] [--json]\n       wirebender export <file> [-o out.html] [--flip lr|tb]\n' + REMOTE_LINES + '\n       wirebender mcp [--url <server>] [--token <token>]'
 
 /** Read and validate a board file; on failure print why (and the advisory) and return null. */
 function loadBoard(file: string): { board: BoardFile, text: string } | null {
@@ -113,6 +117,9 @@ function exportCmd(args: string[]): number {
 const [cmd, ...rest] = process.argv.slice(2)
 if (cmd === 'check') process.exitCode = check(rest)
 else if (cmd === 'export') process.exitCode = exportCmd(rest)
+else if (cmd === 'import') process.exitCode = await importCmd(rest)
+else if (cmd === 'pull') process.exitCode = await pullCmd(rest)
+else if (cmd === 'mcp') process.exitCode = await runMcp(rest)
 else {
   console.error(USAGE)
   process.exitCode = 2

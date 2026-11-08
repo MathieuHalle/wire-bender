@@ -43,13 +43,13 @@ function revisionBoard(db: Db, id: string, n: number): BoardFile | null {
 export interface ForkOf { summary: string, forkedFrom: string, forkedFromLink: string | null }
 
 /** Insert a new board with revision 1. */
-export function createBoard(db: Db, board: BoardFile, how: 'create' | 'import' | 'fork', author: string, ownerId = 'local', authorId?: string | null, fork?: ForkOf): { id: string, head: 1 } {
+export function createBoard(db: Db, board: BoardFile, how: 'create' | 'import' | 'fork', author: string, ownerId = 'local', authorId?: string | null, fork?: ForkOf, tokenId?: string | null): { id: string, head: 1 } {
   const id = randomUUID()
   const now = Date.now()
   const stored = JSON.stringify(withRevision(board, 1))
   db.transaction((tx) => {
     tx.insert(boards).values({ id, name: board.name, createdAt: now, updatedAt: now, current: stored, head: 1, ownerId, linkId: randomUUID(), forkedFrom: fork?.forkedFrom ?? null, forkedFromLink: fork?.forkedFromLink ?? null }).run()
-    tx.insert(revisions).values({ boardId: id, n: 1, createdAt: now, author, how, target: null, summary: fork?.summary ?? summarize(null, board), board: stored, authorId: authorId ?? null }).run()
+    tx.insert(revisions).values({ boardId: id, n: 1, createdAt: now, author, how, target: null, summary: fork?.summary ?? summarize(null, board), board: stored, authorId: authorId ?? null, tokenId: tokenId ?? null }).run()
   })
   return { id, head: 1 }
 }
@@ -66,7 +66,7 @@ export function saveCurrent(db: Db, id: string, board: BoardFile): void {
 }
 
 /** Append revision `head + 1` and make it the board's current state, in one transaction. */
-export function commitRevision(db: Db, id: string, r: { board: BoardFile, author: string, how: string, target?: number, authorId?: string | null }): number {
+export function commitRevision(db: Db, id: string, r: { board: BoardFile, author: string, how: string, target?: number, authorId?: string | null, tokenId?: string | null }): number {
   return db.transaction((tx) => {
     const row = tx.select().from(boards).where(eq(boards.id, id)).get()
     if (!row) throw new Error(`no board ${id}`)
@@ -76,7 +76,7 @@ export function commitRevision(db: Db, id: string, r: { board: BoardFile, author
     const previous = revisionBoard(tx as unknown as Db, id, row.head)
     tx.insert(revisions).values({
       boardId: id, n, createdAt: now, author: r.author, how: r.how as RevisionHow, target: r.target ?? null,
-      summary: summarize(previous, r.board), board: stored, authorId: r.authorId ?? null
+      summary: summarize(previous, r.board), board: stored, authorId: r.authorId ?? null, tokenId: r.tokenId ?? null
     }).run()
     tx.update(boards).set({ current: stored, head: n, name: r.board.name, updatedAt: now }).where(eq(boards.id, id)).run()
     return n
@@ -122,20 +122,36 @@ export function listShared(db: Db, userId: string): SharedInfo[] {
     .orderBy(desc(linkVisits.lastOpened)).all() as SharedInfo[]
 }
 
-/** Newest first, without the board JSON. */
+/**
+ * Newest first, without the board JSON. An undo or redo is summarised `undo of #N by <author
+ * of #N>` (ruling R1), from that revision's stored author: the token or account that made it
+ * may be gone since.
+ */
 export function listRevisions(db: Db, id: string): RevisionInfo[] {
-  return db.select({
+  const list = db.select({
     n: revisions.n, createdAt: revisions.createdAt, author: revisions.author, how: revisions.how, target: revisions.target, summary: revisions.summary
   }).from(revisions).where(eq(revisions.boardId, id)).orderBy(desc(revisions.n)).all()
+  const authorOf = new Map(list.map(r => [r.n, r.author]))
+  return list.map(r => withUndoSummary(r, r.target === null ? undefined : authorOf.get(r.target)))
+}
+
+/** R1: an undo or redo of #N reads `undo of #N by <author of #N>`; anything else keeps its summary. */
+function withUndoSummary<T extends Pick<RevisionInfo, 'how' | 'target' | 'summary'>>(r: T, targetAuthor: string | undefined): T {
+  if ((r.how !== 'undo' && r.how !== 'redo') || r.target === null) return r
+  return { ...r, summary: targetAuthor === undefined ? `${r.how} of #${r.target}` : `${r.how} of #${r.target} by ${targetAuthor}` }
+}
+
+/** The stored author of revision `n`, if it exists. */
+function authorOfRevision(db: Db, id: string, n: number | null): string | undefined {
+  if (n === null) return undefined
+  return db.select({ author: revisions.author }).from(revisions).where(and(eq(revisions.boardId, id), eq(revisions.n, n))).get()?.author
 }
 
 export function getRevision(db: Db, id: string, n: number): (RevisionInfo & { board: BoardFile }) | null {
   const row = db.select().from(revisions).where(and(eq(revisions.boardId, id), eq(revisions.n, n))).get()
   if (!row) return null
-  return {
-    n: row.n, createdAt: row.createdAt, author: row.author, how: row.how, target: row.target, summary: row.summary,
-    board: withRevision(JSON.parse(row.board) as BoardFile, row.n)
-  }
+  const info = withUndoSummary({ n: row.n, createdAt: row.createdAt, author: row.author, how: row.how, target: row.target, summary: row.summary }, authorOfRevision(db, id, row.target))
+  return { ...info, board: withRevision(JSON.parse(row.board) as BoardFile, row.n) }
 }
 
 /** If `current` differs from the head revision's board, commit it as a `recovered` revision. */

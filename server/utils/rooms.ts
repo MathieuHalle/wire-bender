@@ -6,6 +6,7 @@ import { parseBoard, type BoardFile } from '~core/schema'
 import { undoState } from '#shared/undoState'
 import { RECORDS, SECTION_NAMES, boardToDoc, docToBoard, itemKey, sameItems, unknownSingles, withItems, writeBoard } from '#shared/yboard'
 import type { Db } from '../db'
+import { onTokensRevoked } from './tokenEvents'
 import type { Role } from './boardAccess'
 import { MAX_BOARD_BYTES, boardBefore, commitRevision, getBoard, getRevision, listRevisions, recover, saveCurrent } from './boards'
 
@@ -18,9 +19,25 @@ export const MAX_AWARENESS_BYTES = 8192
 /** The most presence client ids one peer may have (y-websocket uses one per doc). */
 export const MAX_PEER_CLIENTS = 4
 
-/** One entry of an awareness update (y-protocols: count, then id, clock, state each). */
+/** How long a token's presence stays after its last write (spec §6). */
+export const TOKEN_PRESENCE_MS = 30_000
+
+/**
+ * The first presence client id reserved for a token. Yjs client ids are 32-bit, so no real
+ * peer ever has one this high, and a peer that names one is refused (receiveAwareness).
+ */
+export const TOKEN_CLIENT_BASE = 2 ** 32
+
+/** The origin of the room's own presence changes (a token's entry): never a peer id. */
+const TOKEN_ORIGIN = Symbol('token presence')
+
+/** A personal API token at work on the board (never the token string). */
+export interface ActiveToken { id: string, name: string }
+
+/** One entry of an awareness update: a client id, its clock and its state as sent (JSON). */
 interface AwarenessEntry { client: number, clock: number, state: string }
 
+/** An awareness update's entries (y-protocols: count, then id, clock, state each). */
 function awarenessEntries(update: Uint8Array): AwarenessEntry[] {
   const d = decoding.createDecoder(update)
   const n = decoding.readVarUint(d)
@@ -60,14 +77,17 @@ export type Received = { ok: true } | { ok: false, reason: string, code?: number
 /** How a peer reached the board: its role, and whether by the share link (Task 5 closes those on a sharing change). */
 export interface PeerAccess { role: Role, viaLink: boolean }
 
-/** Who a peer is in presence, set by the server: its account's name and avatar, or `Guest`. */
-export interface Presence { name: string, avatar?: string }
+/**
+ * Who a peer is in presence, set by the server: its account's name and avatar, `Guest`, or
+ * a token's name with `kind: 'token'` (a socket opened with a token).
+ */
+export interface Presence { name: string, avatar?: string, kind?: 'token' }
 
 /**
  * How a peer joins: its access, the account its edits are by, and its presence. Without
  * `presence` (local mode) the peer names itself (`Local · <device>`).
  */
-export interface JoinOptions extends PeerAccess { authorId?: string | null, presence?: Presence }
+export interface JoinOptions extends PeerAccess { authorId?: string | null, tokenId?: string | null, presence?: Presence }
 
 /** Access changed, or never allowed this: a view peer tried to edit. */
 export const CLOSE_ACCESS = 4403
@@ -76,8 +96,11 @@ const NOT_JOINED: Received = { ok: false, reason: 'not in this room', code: CLOS
 /** An edit-link peer's update that changes the board's name (spec §5: only the owner renames). */
 export const OWNER_RENAMES = 'Only the owner can rename the board.'
 
-/** `authorId`: the account the revision is by ('local' for the local user), null for none. */
-export interface WriteMeta { author: string, how: string, target?: number, authorId?: string | null }
+/**
+ * `authorId`: the account the revision is by ('local' for the local user), null for none.
+ * `tokenId`: the personal API token it was made with, if any.
+ */
+export interface WriteMeta { author: string, how: string, target?: number, authorId?: string | null, tokenId?: string | null }
 
 const SERVER = 'server'
 /** The top-level types a client may change. */
@@ -149,10 +172,15 @@ function createCollision(server: Y.Doc, copy: Y.Doc, before: Map<number, number>
  * items its accepted updates touched. Groups are keyed by both (groupKey): anyone may take
  * any display name, so two accounts' edits never share a group.
  */
-interface Group { author: string, authorId: string | null, timer: ReturnType<typeof setTimeout>, keys: Set<string> }
+interface Group { author: string, authorId: string | null, tokenId: string | null, timer: ReturnType<typeof setTimeout>, keys: Set<string> }
 
-const groupKey = (author: string, authorId: string | null): string => JSON.stringify([authorId, author])
+const groupKey = (author: string, authorId: string | null, tokenId: string | null): string => JSON.stringify([authorId, tokenId, author])
 const rooms = new Map<string, Room>()
+
+// R7: a revoked token (or one whose user is suspended or deleted) leaves every board's presence at once.
+onTokensRevoked((ids) => {
+  for (const room of rooms.values()) for (const id of ids) room.tokenGone(id)
+})
 
 /** The live room for a board, opened (after `recover`) if none is open. `null` when there is no such board. */
 export function openRoom(db: Db, id: string): Room | null {
@@ -207,8 +235,11 @@ export class Room {
   readonly awareness = new Awareness(this.doc)
   private board: BoardFile
   private head: number
-  private readonly peers = new Map<string, { author: string, authorId: string | null, link: PeerLink, clients: Set<number>, access: PeerAccess, presence?: Presence }>()
+  private readonly peers = new Map<string, { author: string, authorId: string | null, tokenId: string | null, link: PeerLink, clients: Set<number>, access: PeerAccess, presence?: Presence }>()
   private readonly groups = new Map<string, Group>()
+  /** Each token's server-made presence entry, by token id: its reserved client id and expiry. */
+  private readonly tokens = new Map<string, { client: number, timer: ReturnType<typeof setTimeout> }>()
+  private nextTokenClient = TOKEN_CLIENT_BASE
   private closed = false
 
   constructor(private readonly db: Db, readonly id: string, board: BoardFile, head: number) {
@@ -223,13 +254,14 @@ export class Room {
     this.awareness.on('update', ({ added, updated, removed }: Record<'added' | 'updated' | 'removed', number[]>, origin: unknown) => {
       const from = typeof origin === 'string' ? this.peers.get(origin) : undefined
       if (from) {
-        // Updated too: a state no peer owned yet (receiveAwareness refuses another peer's)
+        // Updated too: a state no peer owned yet (receiveAwareness drops another peer's)
         // belongs to the sender from then on, so it goes when that peer leaves.
         for (const c of [...added, ...updated]) from.clients.add(c)
         for (const c of removed) from.clients.delete(c)
         // A stamped peer's name and avatar are the server's, whatever it sent and under
-        // whichever client id (a forged one shows the sender's own name).
-        if (from.presence) for (const c of [...added, ...updated]) this.stamp(c, from.presence)
+        // whichever client id (a forged one shows the sender's own name). Only the server
+        // says a presence is a token.
+        for (const c of [...added, ...updated]) this.stamp(c, from.presence)
       }
       const changed = [...added, ...updated, ...removed]
       const message = encodeAwarenessUpdate(this.awareness, changed)
@@ -237,14 +269,63 @@ export class Room {
     })
   }
 
-  /** Overwrite the name and avatar in client `c`'s presence with `presence`. */
-  private stamp(c: number, presence: Presence): void {
+  /**
+   * Overwrite the name, avatar and kind in client `c`'s presence with `presence`. Without one
+   * (local mode: the device names itself) only a `kind` the client claimed is dropped.
+   */
+  private stamp(c: number, presence: Presence | undefined): void {
     const state = this.awareness.states.get(c)
     if (!state) return
-    const sent = state.user
-    const { avatar: _avatar, ...rest } = typeof sent === 'object' && sent !== null ? sent as Record<string, unknown> : {}
-    const user = presence.avatar ? { ...rest, name: presence.name, avatar: presence.avatar } : { ...rest, name: presence.name }
+    const sent = typeof state.user === 'object' && state.user !== null ? state.user as Record<string, unknown> : null
+    if (!presence) {
+      if (sent && 'kind' in sent) {
+        const { kind: _kind, ...user } = sent
+        this.awareness.states.set(c, { ...state, user })
+      }
+      return
+    }
+    const { avatar: _avatar, kind: _kind, ...rest } = sent ?? {}
+    const user: Record<string, unknown> = { ...rest, name: presence.name }
+    if (presence.avatar) user.avatar = presence.avatar
+    if (presence.kind) user.kind = presence.kind
     this.awareness.states.set(c, { ...state, user })
+  }
+
+  /**
+   * A token just changed the board: its presence entry `{ user: { name, kind: 'token' } }`,
+   * under a client id reserved for it in this room, is set or renewed for every peer (and
+   * each new joiner), until TOKEN_PRESENCE_MS after the last call or the room closes.
+   */
+  tokenActive(token: ActiveToken): void {
+    if (this.closed) return
+    // A socket the token has open already shows it (stamped as a token): not twice.
+    if ([...this.peers.values()].some(p => p.tokenId === token.id && p.clients.size > 0)) return
+    const known = this.tokens.get(token.id)
+    clearTimeout(known?.timer)
+    const client = known?.client ?? this.nextTokenClient++
+    // Newer than anything sent under this id (applyAwarenessUpdate ignores an older or equal clock).
+    const clock = (this.awareness.meta.get(client)?.clock ?? 0) + 1
+    const timer = setTimeout(() => this.tokenGone(token.id), TOKEN_PRESENCE_MS)
+    this.tokens.set(token.id, { client, timer })
+    const e = encoding.createEncoder()
+    encoding.writeVarUint(e, 1)
+    encoding.writeVarUint(e, client)
+    encoding.writeVarUint(e, clock)
+    encoding.writeVarString(e, JSON.stringify({ user: { name: token.name, kind: 'token' } }))
+    applyAwarenessUpdate(this.awareness, encoding.toUint8Array(e), TOKEN_ORIGIN)
+  }
+
+  /** Remove a token's presence entry (it went quiet, was revoked, or the room is closing). */
+  tokenGone(tokenId: string): void {
+    const entry = this.tokens.get(tokenId)
+    if (!entry) return
+    clearTimeout(entry.timer)
+    this.tokens.delete(tokenId)
+    if (this.awareness.states.has(entry.client)) removeAwarenessStates(this.awareness, [entry.client], TOKEN_ORIGIN)
+  }
+
+  private tokensGone(): void {
+    for (const tokenId of [...this.tokens.keys()]) this.tokenGone(tokenId)
   }
 
   /**
@@ -252,8 +333,8 @@ export class Room {
    * through the sync protocol. A peer joined without `access` is the owner by board id.
    */
   join(peerId: string, author: string, link: PeerLink, options: JoinOptions = { role: 'owner', viaLink: false }): void {
-    const { authorId = null, role, viaLink, presence } = options
-    this.peers.set(peerId, { author, authorId, link, clients: new Set(), access: { role, viaLink }, presence })
+    const { authorId = null, tokenId = null, role, viaLink, presence } = options
+    this.peers.set(peerId, { author, authorId, tokenId, link, clients: new Set(), access: { role, viaLink }, presence })
     const present = [...this.awareness.getStates().keys()]
     if (present.length > 0) safely(() => link.awareness(encodeAwarenessUpdate(this.awareness, present)))
   }
@@ -267,6 +348,11 @@ export class Room {
   /** The account a joined peer's edits are by, or null. */
   peerAuthorId(peerId: string): string | null {
     return this.peers.get(peerId)?.authorId ?? null
+  }
+
+  /** The token a joined peer's socket was opened with, or null. */
+  peerTokenId(peerId: string): string | null {
+    return this.peers.get(peerId)?.tokenId ?? null
   }
 
   /**
@@ -293,15 +379,18 @@ export class Room {
     if (!changed) return { ok: true }
     this.board = checked.board
     saveCurrent(this.db, this.id, this.board)
-    this.restartGroup(author, this.peerAuthorId(peerId), checked.keys)
+    this.restartGroup(author, peer.authorId, peer.tokenId, checked.keys)
     return { ok: true }
   }
 
   /**
-   * Apply a peer's presence and relay it to the others. Entries naming another peer's client
-   * id, and removals of ids the peer doesn't own, are dropped (y-websocket echoes them).
-   * Refused whole (the socket closes with 4400) when over MAX_AWARENESS_BYTES, malformed, or
-   * it would give this peer more than MAX_PEER_CLIENTS ids.
+   * Apply a peer's presence and relay it to the others (R6). Entries naming a client id
+   * another peer has, or one reserved for tokens, are dropped and the rest applied: a
+   * y-websocket client sends back every presence change it receives, so those are mostly
+   * echoes, and a forgery is never stored or relayed either way. A removal applies only to
+   * the sender's own ids, and never counts toward the cap. Refused whole (nothing
+   * stored or relayed, and the socket closes with 4400) when it is over MAX_AWARENESS_BYTES,
+   * malformed, or the entries kept would give this peer more than MAX_PEER_CLIENTS ids.
    */
   receiveAwareness(peerId: string, update: Uint8Array): Received {
     const peer = this.peers.get(peerId)
@@ -310,12 +399,11 @@ export class Room {
     try {
       const entries = awarenessEntries(update)
       const others = [...this.peers].filter(([otherId]) => otherId !== peerId).map(([, other]) => other.clients)
-      // y-websocket echoes every presence change it sees, so entries naming another peer's
-      // id are dropped, not refused. A removal (null state) applies only to the sender's own
-      // ids: anything else is an echo of someone leaving, never counted toward the cap.
+      // A removal (null state) applies only to the sender's own ids: anything else is an echo
+      // of someone leaving (or a forgery), never counted toward the cap nor claiming an id.
       const kept = entries.filter(({ client, state }) => isRemoval(state)
         ? peer.clients.has(client)
-        : !others.some(clients => clients.has(client)))
+        : client < TOKEN_CLIENT_BASE && !others.some(clients => clients.has(client)))
       const claimed = kept.filter(e => !isRemoval(e.state)).map(e => e.client)
       if (new Set([...peer.clients, ...claimed]).size > MAX_PEER_CLIENTS) return { ok: false, reason: `a peer may have at most ${MAX_PEER_CLIENTS} presence clients` }
       if (kept.length === 0) return { ok: true }
@@ -336,7 +424,7 @@ export class Room {
   serverWrite(next: BoardFile, meta: WriteMeta): number {
     this.closeGroups()
     writeBoard(this.doc, this.board, next, SERVER)
-    const n = commitRevision(this.db, this.id, { board: next, author: meta.author, how: meta.how, target: meta.target, authorId: meta.authorId })
+    const n = commitRevision(this.db, this.id, { board: next, author: meta.author, how: meta.how, target: meta.target, authorId: meta.authorId, tokenId: meta.tokenId })
     this.board = { ...next, revision: n }
     this.head = n
     this.writeServerMap()
@@ -345,20 +433,20 @@ export class Room {
   }
 
   /** Revert the top of the board's undo stack. `null` when there is nothing to undo. */
-  undo(author: string, authorId: string | null = null): number | null {
+  undo(author: string, authorId: string | null = null, tokenId: string | null = null): number | null {
     this.closeGroups()
     const { undo } = this.stacks()
     if (undo === null) return this.nothing()
-    return this.serverWrite(boardBefore(this.db, this.id, undo), { author, how: 'undo', target: undo, authorId })
+    return this.serverWrite(boardBefore(this.db, this.id, undo), { author, how: 'undo', target: undo, authorId, tokenId })
   }
 
   /** Restore the top of the board's redo stack. `null` when there is nothing to redo. */
-  redo(author: string, authorId: string | null = null): number | null {
+  redo(author: string, authorId: string | null = null, tokenId: string | null = null): number | null {
     this.closeGroups()
     const { redo } = this.stacks()
     const rev = redo === null ? null : getRevision(this.db, this.id, redo)
     if (redo === null || !rev) return this.nothing()
-    return this.serverWrite(rev.board, { author, how: 'redo', target: redo, authorId })
+    return this.serverWrite(rev.board, { author, how: 'redo', target: redo, authorId, tokenId })
   }
 
   /** Remove a peer and its presence, and close its author's group. The last leave saves and drops the room. */
@@ -366,7 +454,7 @@ export class Room {
     const peer = this.peers.get(peerId)
     if (peer) {
       this.peers.delete(peerId)
-      this.closeGroup(groupKey(peer.author, peer.authorId))
+      this.closeGroup(groupKey(peer.author, peer.authorId, peer.tokenId))
       if (peer.clients.size > 0) removeAwarenessStates(this.awareness, [...peer.clients], null)
     }
     this.dropIfEmpty()
@@ -393,6 +481,7 @@ export class Room {
     this.peers.clear()
     for (const g of this.groups.values()) clearTimeout(g.timer)
     this.groups.clear()
+    this.tokensGone()
     this.closed = true
     if (rooms.get(this.id) === this) rooms.delete(this.id)
     for (const peer of peers) safely(() => peer.link.close?.(CLOSE_NO_BOARD, 'no such board'))
@@ -475,8 +564,8 @@ export class Room {
     }, SERVER)
   }
 
-  private restartGroup(author: string, authorId: string | null, keys: Set<string>): void {
-    const key = groupKey(author, authorId)
+  private restartGroup(author: string, authorId: string | null, tokenId: string | null, keys: Set<string>): void {
+    const key = groupKey(author, authorId, tokenId)
     const group = this.groups.get(key)
     clearTimeout(group?.timer)
     const timer = setTimeout(() => this.closeGroup(key), GROUP_IDLE_MS)
@@ -484,7 +573,7 @@ export class Room {
       group.timer = timer
       for (const k of keys) group.keys.add(k)
     } else {
-      this.groups.set(key, { author, authorId, timer, keys: new Set(keys) })
+      this.groups.set(key, { author, authorId, tokenId, timer, keys: new Set(keys) })
     }
   }
 
@@ -502,22 +591,24 @@ export class Room {
     this.groups.delete(key)
     const { author } = group
     const head = getRevision(this.db, this.id, this.head)
-    if (!head) return this.commitEdit(this.board, author, group.authorId)
+    if (!head) return this.commitEdit(this.board, author, group.authorId, group.tokenId)
     const composed = parseBoard(withItems(head.board, this.board, group.keys))
     if (composed.ok) {
       if (sameItems(head.board, composed.board)) return
-      return this.commitEdit(composed.board, author, group.authorId)
+      return this.commitEdit(composed.board, author, group.authorId, group.tokenId)
     }
     const all = [group, ...this.groups.values()]
     for (const g of all) clearTimeout(g.timer)
     this.groups.clear()
     if (sameItems(head.board, this.board)) return
     const accounts = new Set(all.map(g => g.authorId))
-    this.commitEdit(this.board, all.map(g => g.author).join(', '), accounts.size === 1 ? group.authorId : null)
+    const tokens = new Set(all.map(g => g.tokenId))
+    const one = accounts.size === 1
+    this.commitEdit(this.board, all.map(g => g.author).join(', '), one ? group.authorId : null, one && tokens.size === 1 ? group.tokenId : null)
   }
 
-  private commitEdit(board: BoardFile, author: string, authorId: string | null): void {
-    this.head = commitRevision(this.db, this.id, { board, author, how: 'edit', authorId })
+  private commitEdit(board: BoardFile, author: string, authorId: string | null, tokenId: string | null): void {
+    this.head = commitRevision(this.db, this.id, { board, author, how: 'edit', authorId, tokenId })
     this.board = { ...this.board, revision: this.head }
     // The commit stored `board` as current; the live board may hold other authors' open edits.
     if (!sameItems(board, this.board)) saveCurrent(this.db, this.id, this.board)
@@ -533,6 +624,7 @@ export class Room {
     if (this.peers.size > 0 || this.closed) return
     this.closeGroups()
     saveCurrent(this.db, this.id, this.board)
+    this.tokensGone()
     this.closed = true
     if (rooms.get(this.id) === this) rooms.delete(this.id)
     this.awareness.destroy()

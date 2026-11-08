@@ -10,5 +10,5 @@ export default defineEventHandler(async (event) => {
   if (who.kind === 'anonymous') throw createError({ statusCode: 401, statusMessage: 'not trusted' })
   const db = useDb()
   // Refused before the body is read; checked again once it is (another create may have run meanwhile).
-  return sendWrite(event, createRefusal(db, who), text => withCreateLimit(db, who, () => createOrImport(db, text, author, who.userId)))
+  return sendWrite(event, createRefusal(db, who), text => withCreateLimit(db, who, () => createOrImport(db, text, author, who.userId, who.token?.id)))
 })

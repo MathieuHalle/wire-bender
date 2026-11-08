@@ -1,8 +1,8 @@
 import type { H3Event } from 'h3'
-import { gate, publicGate, refusal, trust } from '../utils/access'
+import { TOKEN_REFUSED, gate, publicGate, refusal, tokenRefusal } from '../utils/access'
 import { cookieSecure, enforceCookieSecure, type CookieRes } from '../utils/cookieSecure'
 import { checkMode, type Mode } from '../utils/mode'
-import { resolveSession, sessionCookieName, type Who } from '../utils/who'
+import { INVALID_TOKEN, resolveSession, sessionCookieName, type SessionState } from '../utils/who'
 
 // Every request. First a request naming another site (DNS rebinding, a cross-site write)
 // is refused with 403, whoever sends it. WebSocket upgrades do not pass here; the board
@@ -15,22 +15,41 @@ import { resolveSession, sessionCookieName, type Who } from '../utils/who'
 // Public mode: who is asking comes from the session alone (never loopback or a device
 // cookie). Anonymous visitors may read; writes need a signed-in user (server/utils/access.ts
 // `publicGate`); the pairing routes do not exist.
-function local(event: H3Event) {
+//
+// Both modes: a request with `Authorization: Bearer` is decided by its token alone
+// (resolveSession): a bad one is 401 `Invalid token.`, and a good one acts as its user except
+// on the routes `tokenRefusal` lists (403).
+
+/** The answer for a request made with a token, before any route: 401, 403, or null to go on. */
+function tokenAnswer(event: H3Event, s: SessionState) {
+  if (s.invalidToken) {
+    setResponseStatus(event, 401)
+    return { error: INVALID_TOKEN }
+  }
+  if (s.who.kind !== 'anonymous' && s.who.token && tokenRefusal(event.path, event.method)) {
+    setResponseStatus(event, 403)
+    return { error: TOKEN_REFUSED }
+  }
+  return null
+}
+
+async function local(event: H3Event) {
   // nuxt-auth-utils' own session routes: local mode has no sessions, and reading one would
   // reseal (or, in a build without a secret, throw on) another server's cookie.
   if (/^\/api\/_auth(\/|$)/.test(event.path.split('?')[0]!)) {
     setResponseStatus(event, 404)
     return { error: 'not found' }
   }
-  const t = trust(event)
-  if (t.ok) {
-    event.context.author = t.author
-    event.context.device = t.device
-    event.context.who = (t.device
-      ? { kind: 'local', userId: 'local', author: t.author, device: t.device }
-      : { kind: 'local', userId: 'local', author: t.author }) satisfies Who
+  const s = await resolveSession(event, { mode: 'local' })
+  const refused = tokenAnswer(event, s)
+  if (refused) return refused
+  const trusted = s.who.kind === 'local'
+  if (s.who.kind === 'local') {
+    event.context.author = s.who.author
+    event.context.device = s.who.device
+    event.context.who = s.who
   }
-  const g = gate(event.method, event.path, t.ok)
+  const g = gate(event.method, event.path, trusted)
   if (g === 'pass') return
   if (g === 'redirect') return sendRedirect(event, '/pair', 302)
   setResponseStatus(event, 401)
@@ -39,6 +58,8 @@ function local(event: H3Event) {
 
 async function signedIn(event: H3Event) {
   const s = await resolveSession(event, { mode: 'public' })
+  const refused = tokenAnswer(event, s)
+  if (refused) return refused
   event.context.who = s.who
   if (s.who.kind === 'user') event.context.author = s.who.author
   const g = publicGate(event.method, event.path, s.who.kind === 'user', s.pendingDeletion)

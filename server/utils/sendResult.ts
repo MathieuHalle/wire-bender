@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
 import { tooLarge, type ApiResult, type BoardRequest } from './api'
+import { TOKEN_REFUSED, bearerOf } from './access'
 import { MAX_BOARD_BYTES } from './boards'
 import { readCapped } from './readCapped'
 import { unlockedOf, type Who } from './who'
@@ -52,4 +53,31 @@ export const whoOf = (event: H3Event): Who => (event.context.who as Who | undefi
 /** The board a board route is asked about (its board id or share link id) and who asks. */
 export async function boardRequest(event: H3Event): Promise<BoardRequest> {
   return { key: boardId(event), who: whoOf(event), unlocked: await unlockedOf(event) }
+}
+
+/**
+ * For a route a token may never use (the middleware's deny-list, checked again here in case a
+ * route is ever reached another way): 403 `Not allowed with a token.` for any request with a
+ * bearer header or made with a token, else null.
+ */
+export function refuseToken(event: H3Event): { error: string } | null {
+  const who = whoOf(event)
+  if (bearerOf(event) === undefined && !(who.kind !== 'anonymous' && who.token)) return null
+  setResponseStatus(event, 403)
+  return { error: TOKEN_REFUSED }
+}
+
+/**
+ * The caller of a token management route (`/api/tokens`): who the middleware found, which a
+ * bearer decides over any cookie. A request with a token is 403 (refuseToken); anonymous is 401.
+ */
+export function tokenManager(event: H3Event): { ok: true, userId: string } | { ok: false, body: { error: string } } {
+  const refused = refuseToken(event)
+  if (refused) return { ok: false, body: refused }
+  const who = whoOf(event)
+  if (who.kind === 'anonymous') {
+    setResponseStatus(event, 401)
+    return { ok: false, body: { error: 'Sign in first.' } }
+  }
+  return { ok: true, userId: who.userId }
 }
