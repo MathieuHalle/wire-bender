@@ -254,6 +254,13 @@ const ringed = computed(() => {
           :geo="geo"
           :lit="lit"
         />
+        <!-- the other side's wires, dashed, under everything of this side -->
+        <BoardGhostWires
+          v-if="layers.wires"
+          :board="board"
+          :side="side"
+          :geo="geo"
+        />
         <BoardCopper
           v-if="layers.trails"
           :board="board"
