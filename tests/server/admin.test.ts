@@ -9,10 +9,11 @@ import type { BoardFile } from '../../core/schema'
 import { closeDb, useDb } from '../../server/db'
 import { boards, users } from '../../server/db/schema'
 import { signIn } from '../../server/utils/accounts'
-import { createBoard } from '../../server/utils/boards'
+import { access, recordVisit, type Access } from '../../server/utils/boardAccess'
+import { createBoard, listShared } from '../../server/utils/boards'
 import { openRoom, type PeerLink } from '../../server/utils/rooms'
 import type { NodeReqLike } from '../../server/utils/peerAddress'
-import { whoIs, type SessionData } from '../../server/utils/who'
+import { whoIs, type SessionData, type Who } from '../../server/utils/who'
 
 interface FakeEvent { node: { req: NodeReqLike }, method: string, path: string, context: Record<string, unknown>, status?: number }
 
@@ -34,12 +35,14 @@ vi.stubGlobal('useRuntimeConfig', () => ({ session: { name: 'nuxt-auth-session' 
 type Handler = (event: FakeEvent) => unknown
 let list: Handler
 let patch: Handler
+let unknown: Handler
 const fixture = JSON.parse(readFileSync(path.resolve(__dirname, '../fixtures/channel-board-2.json'), 'utf8')) as BoardFile
 let dir: string
 
 beforeAll(async () => {
   list = (await import('../../server/api/admin/users.get')).default as unknown as Handler
   patch = (await import('../../server/api/admin/users/[id].patch')).default as unknown as Handler
+  unknown = (await import('../../server/api/[...]')).default as unknown as Handler
 })
 afterAll(() => {
   vi.unstubAllGlobals()
@@ -101,6 +104,12 @@ describe('admin routes', () => {
       expect(p.e.status).toBe(404)
     }
     expect(row(target).isPremium).toBe(0)
+    // The same answer as any unknown API path (the catch-all route).
+    for (const [method, url] of [['GET', '/api/nope'], ['PATCH', '/api/admin/nope/x'], ['POST', '/api/boards/x/nope']] as const) {
+      const e = call(method, url, bob)
+      expect(await unknown(e), url).toEqual({ error: 'not found' })
+      expect(e.status, url).toBe(404)
+    }
     // Local mode has no accounts to manage: the local user gets the same 404.
     vi.stubEnv('WIREBENDER_MODE', 'local')
     const local = call('GET', '/api/admin/users', null)
@@ -135,11 +144,14 @@ describe('admin routes', () => {
   it('a bad body is 422; an unknown account or the local user is 404', async () => {
     const admin = account('Admin', 1, true)
     const bob = account('Bob', 2)
-    for (const body of [{}, { premium: 'yes' }, { suspended: 1 }, [], 'x']) {
+    for (const body of [{}, { premium: 'yes' }, { suspended: 1 }, [], 'x', { isAdmin: true, premium: true }, { premium: true, name: 'X' }]) {
       const p = patchAs(admin, bob, body)
       expect(await p.result, JSON.stringify(body)).toMatchObject({ errors: expect.any(Array) })
       expect(p.e.status).toBe(422)
     }
+    // Nothing of a refused body was applied.
+    expect(row(bob)).toMatchObject({ isAdmin: 0, isPremium: 0 })
+    expect(await patchAs(admin, bob, { isAdmin: true }).result).toEqual({ errors: ['isAdmin: not something an admin can change (premium, suspended)'] })
     for (const id of ['nobody', 'local']) {
       const p = patchAs(admin, id, { premium: true })
       expect(await p.result).toEqual({ error: 'not found' })
@@ -170,6 +182,34 @@ describe('admin routes', () => {
     expect(row(bob).suspendedAt).toBe(first)
     expect(await patchAs(admin, bob, { suspended: false }).result).toMatchObject({ id: bob, suspendedAt: null })
     expect(signIn(useDb(), 'github', { id: 'gh-Bob', name: 'Bob' })).toEqual({ ok: true, userId: bob })
+  })
+
+  it('a suspended owner\'s links are 404 and their boards\' sockets close; unsuspend brings them back (R10)', async () => {
+    const admin = account('Admin', 1, true)
+    const bob = account('Bob', 2)
+    const cy = account('Cy', 3)
+    const { id } = createBoard(useDb(), fixture, 'import', 'Bob', bob, bob)
+    useDb().update(boards).set({ visibility: 'edit' }).where(eq(boards.id, id)).run()
+    const linkId = useDb().select().from(boards).where(eq(boards.id, id)).get()!.linkId
+    const cyWho: Who = { kind: 'user', userId: cy, author: 'Cy', isAdmin: false, isPremium: false }
+    const opened = access(useDb(), cyWho, linkId, [])
+    expect(opened).toMatchObject({ ok: true, role: 'edit' })
+    recordVisit(useDb(), cyWho, opened as Access & { ok: true }, linkId)
+    expect(listShared(useDb(), cy)).toHaveLength(1)
+
+    const closed: number[] = []
+    const link: PeerLink = { update: () => {}, awareness: () => {}, close: code => closed.push(code) }
+    openRoom(useDb(), id)!.join('cy-peer', 'Cy', link, { role: 'edit', viaLink: true, authorId: cy })
+
+    await patchAs(admin, bob, { suspended: true }).result
+    expect(closed).toEqual([4403])
+    expect(access(useDb(), cyWho, linkId, [])).toEqual({ ok: false, status: 404 })
+    expect(access(useDb(), { kind: 'anonymous' }, linkId, [])).toEqual({ ok: false, status: 404 })
+    expect(listShared(useDb(), cy)).toEqual([])
+
+    await patchAs(admin, bob, { suspended: false }).result
+    expect(access(useDb(), cyWho, linkId, [])).toMatchObject({ ok: true, role: 'edit' })
+    expect(listShared(useDb(), cy)).toHaveLength(1)
   })
 
   it('admin can\'t suspend themselves', async () => {

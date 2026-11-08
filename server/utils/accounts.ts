@@ -201,7 +201,21 @@ export function resetSetupTries(): void {
 
 export const SETUP_DONE = { error: 'Setup is done.' } as const
 
-export type SetupCheck = { status: 200 } | { status: 403 | 410 | 429, body: { error: string } }
+/**
+ * What the session keeps once a code is accepted (ruling R11): a digest of the code's stored
+ * hash, never the code or the hash. A new code (a restart) has another tag, so an earlier
+ * acceptance claims nothing.
+ */
+const setupTag = (codeHash: string): string => createHash('sha256').update(`setup-ok:${codeHash}`).digest('base64url').slice(0, 22)
+
+function sameTag(a: string, b: string): boolean {
+  const x = Buffer.from(a)
+  const y = Buffer.from(b)
+  return x.length === y.length && timingSafeEqual(x, y)
+}
+
+/** `tag`: what the session stores as `setupOk`. */
+export type SetupCheck = { status: 200, tag: string } | { status: 403 | 410 | 429, body: { error: string } }
 
 /** `POST /api/setup`: is `code` this start's setup code? 410 once an admin exists; wrong tries are limited per address. */
 export function checkSetupCode(db: Db, code: unknown, address: string | undefined, now = Date.now()): SetupCheck {
@@ -223,22 +237,24 @@ export function checkSetupCode(db: Db, code: unknown, address: string | undefine
     && timingSafeEqual(Buffer.from(sha256(normalCode(code)), 'hex'), Buffer.from(stored, 'hex'))
   if (!right) return { status: 403, body: { error: 'Wrong setup code.' } }
   wrongSetup.delete(key)
-  return { status: 200 }
+  return { status: 200, tag: setupTag(stored) }
 }
 
 /**
  * The setup is finished by `userId`, in one transaction: they become admin and premium,
  * every board of the local user becomes theirs (`owner_id` only: the history stays as
  * written, authors and author ids included), and the setup is marked done with no code
- * left. Refused once an admin exists, and for the local user or an unknown, suspended or
- * deleted account.
+ * left. Refused once an admin exists, when `tag` (checkSetupCode's) is not the current
+ * code's (R11), and for the local user or an unknown, suspended or deleted account.
  *
  * Live rooms of the moved boards are left as they are: in public mode the local user can't
  * sign in, so every peer there came by the share link, and the move changes no link's role.
  */
-export function claimSetup(db: Db, userId: string, now = Date.now()): { ok: true, moved: number } | { ok: false } {
+export function claimSetup(db: Db, userId: string, tag: string, now = Date.now()): { ok: true, moved: number } | { ok: false } {
   return db.transaction((tx) => {
     if (userId === 'local' || setupDone(tx)) return { ok: false }
+    const current = tx.select({ codeHash: setup.codeHash }).from(setup).all().find(r => r.codeHash !== null)?.codeHash ?? null
+    if (current === null || !sameTag(tag, setupTag(current))) return { ok: false }
     const user = userRow(tx, userId)
     if (!user || user.suspendedAt !== null || user.deletedAt !== null) return { ok: false }
     tx.update(users).set({ isAdmin: 1, isPremium: 1 }).where(eq(users.id, userId)).run()
@@ -292,24 +308,30 @@ export function listAccounts(db: Db): AccountRow[] {
     .map(u => accountRow(db, u, counts))
 }
 
+/** The only keys `PATCH /api/admin/users/:id` takes. */
+const PATCHABLE = ['premium', 'suspended'] as const
+
 export type PatchAccountResult
   = | { status: 200, body: AccountRow }
     | { status: 400 | 404, body: { error: string } }
     | { status: 422, body: { errors: string[] } }
 
 /**
- * `PATCH /api/admin/users/:id` `{ premium?, suspended? }` by the admin `adminId`. Suspending
- * keeps the first date and closes the account's live sockets at once; its sessions count
- * as signed out from their next request (whoIs reads the row every time). An admin can't
- * suspend their own account.
+ * `PATCH /api/admin/users/:id` `{ premium?, suspended? }` by the admin `adminId`, and no
+ * other key (422). Suspending keeps the first date; the account's sessions count as signed
+ * out from their next request (whoIs reads the row every time), and its boards behave like
+ * a deleted owner's (ruling R10). An admin can't suspend their own account.
  */
 export function patchAccount(db: Db, adminId: string, id: string, body: unknown, now = Date.now()): PatchAccountResult {
   const target = id === 'local' ? undefined : userRow(db, id)
   if (!target) return { status: 404, body: { error: 'not found' } }
   const json = typeof body === 'object' && body !== null && !Array.isArray(body) ? body as Record<string, unknown> : null
   if (!json) return { status: 422, body: { errors: ['the body must be a JSON object'] } }
+  // Anything else (isAdmin, name…) is refused, not ignored: a caller must not think it took.
+  const unknownKeys = Object.keys(json).filter(k => !(PATCHABLE as readonly string[]).includes(k))
+  if (unknownKeys.length > 0) return { status: 422, body: { errors: unknownKeys.map(k => `${k}: not something an admin can change (premium, suspended)`) } }
   const errors: string[] = []
-  for (const k of ['premium', 'suspended'] as const) if (k in json && typeof json[k] !== 'boolean') errors.push(`${k}: must be true or false`)
+  for (const k of PATCHABLE) if (k in json && typeof json[k] !== 'boolean') errors.push(`${k}: must be true or false`)
   if (!('premium' in json) && !('suspended' in json)) errors.push('give premium or suspended')
   if (errors.length > 0) return { status: 422, body: { errors } }
   const premium = json.premium as boolean | undefined
@@ -321,7 +343,11 @@ export function patchAccount(db: Db, adminId: string, id: string, body: unknown,
     if (suspended === true) tx.update(users).set({ suspendedAt: now }).where(and(eq(users.id, id), isNull(users.suspendedAt))).run()
     if (suspended === false) tx.update(users).set({ suspendedAt: null }).where(eq(users.id, id)).run()
   })
-  // Its own sockets, in every room. Its boards' share links keep working, as any owner's.
-  if (suspended === true) kickAccount(id, new Set())
+  // R10: its own sockets in every room, and every socket on its boards (their links are 404
+  // now). Unsuspending only clears the column: the links answer again from the next request.
+  if (suspended === true) {
+    const owned = db.select({ id: boards.id }).from(boards).where(eq(boards.ownerId, id)).all()
+    kickAccount(id, new Set(owned.map(b => b.id)))
+  }
   return { status: 200, body: accountRow(db, userRow(db, id)!, boardCounts(db)) }
 }

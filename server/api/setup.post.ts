@@ -19,7 +19,8 @@ function parse(text: string): { code?: unknown } | null {
 /**
  * `POST /api/setup` `{ code }` (public mode; anyone may try, wrong tries are limited). The
  * right code from a signed-in account makes it the admin at once (ruling R9, `admin: true`);
- * signed out, the session gets `setupOk` and the next sign-in does it. 410 once an admin
+ * signed out, the session gets `setupOk` (a tag of this code, R11) and the next sign-in
+ * does it, unless a restart has made a new code meanwhile. 410 once an admin
  * exists. Local mode has no setup: 404.
  */
 export default defineEventHandler(async (event) => {
@@ -44,7 +45,7 @@ export default defineEventHandler(async (event) => {
   }
   const state = await resolveSession(event, { mode })
   if (state.who.kind === 'user') {
-    if (!claimSetup(db, state.who.userId).ok) {
+    if (!claimSetup(db, state.who.userId, r.tag).ok) {
       setResponseStatus(event, 410)
       return SETUP_DONE
     }
@@ -52,6 +53,6 @@ export default defineEventHandler(async (event) => {
   }
   // Replaced, not merged: nuxt-auth-utils' merge would concatenate lists such as `unlocked`.
   const { id: _id, ...data } = await getUserSession(event)
-  await replaceUserSession(event, { ...data, setupOk: true })
+  await replaceUserSession(event, { ...data, setupOk: r.tag })
   return { ok: true, admin: false }
 })

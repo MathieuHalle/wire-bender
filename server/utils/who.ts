@@ -16,8 +16,8 @@ export type Who
 
 /**
  * What the session cookie holds: the user's id only, R1's flag, the link ids whose password
- * was entered, and `setupOk` once the setup code was entered signed out (the next sign-in
- * finishes the setup and drops it).
+ * was entered, and `setupOk` once the setup code was entered signed out: a tag of that
+ * code (R11); the next sign-in finishes the setup with it and drops it.
  */
 export interface SessionData { user?: { id?: unknown }, pendingDeletion?: boolean, unlocked?: unknown, setupOk?: unknown }
 
@@ -117,8 +117,12 @@ export async function unlockedOf(source: TrustSource, deps: WhoDeps = {}): Promi
   return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string') : []
 }
 
-/** True when this request's session entered the setup code (POST /api/setup) and has not signed in since. */
-export async function setupOkOf(source: TrustSource, deps: WhoDeps = {}): Promise<boolean> {
-  if (cookieOf(source, deps.sessionCookie ?? sessionCookieName()) === undefined) return false
-  return (await (deps.readSession ?? defaultRead)(source)).setupOk === true
+/**
+ * The tag of the setup code this request's session entered (POST /api/setup) and has not
+ * signed in since; null for none. claimSetup checks it against the current code (R11).
+ */
+export async function setupOkOf(source: TrustSource, deps: WhoDeps = {}): Promise<string | null> {
+  if (cookieOf(source, deps.sessionCookie ?? sessionCookieName()) === undefined) return null
+  const tag = (await (deps.readSession ?? defaultRead)(source)).setupOk
+  return typeof tag === 'string' && tag !== '' ? tag : null
 }

@@ -7,6 +7,10 @@ useHead({ title: 'Setup · WireBender' })
 const { me, load } = useMe()
 onMounted(() => void load(true))
 
+// A sign-in after an accepted code that did not make this account the admin (oauth.ts).
+const route = useRoute()
+const refused = computed(() => route.query.error === 'done')
+
 const code = ref('')
 const sending = ref(false)
 const error = ref<string | null>(null)
@@ -56,6 +60,16 @@ async function send() {
         Setup
       </h1>
     </header>
+
+    <p
+      v-if="me?.mode === 'public' && refused && !accepted && !done"
+      class="text-sm text-warning"
+      role="alert"
+    >
+      You are signed in, but this account was not made the admin: either the server already
+      has an admin, or it restarted and printed a new setup code after you entered yours. If
+      there is a new code in the log, enter it below.
+    </p>
 
     <p
       v-if="!me"

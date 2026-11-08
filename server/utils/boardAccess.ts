@@ -26,10 +26,10 @@ const NOT_FOUND = { ok: false, status: 404 } as const
 
 const userIdOf = (who: Who): string | null => who.kind === 'anonymous' ? null : who.userId
 
-/** True when the user exists and has not asked for their account to be deleted. */
+/** True when the user exists, has not asked for their account to be deleted, and is not suspended (ruling R10). */
 function ownerActive(db: Db, ownerId: string): boolean {
-  const row = db.select({ deletedAt: users.deletedAt }).from(users).where(eq(users.id, ownerId)).get()
-  return row !== undefined && row.deletedAt === null
+  const row = db.select({ deletedAt: users.deletedAt, suspendedAt: users.suspendedAt }).from(users).where(eq(users.id, ownerId)).get()
+  return row !== undefined && row.deletedAt === null && row.suspendedAt === null
 }
 
 /**

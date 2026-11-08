@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import type { BoardFile } from '../../core/schema'
 import { closeDb, useDb } from '../../server/db'
 import { boards, revisions, setup, users } from '../../server/db/schema'
-import { SETUP_ALPHABET, claimSetup, newSetupCode, resetSetupTries, setupDone, setupNotice, signIn } from '../../server/utils/accounts'
+import { SETUP_ALPHABET, checkSetupCode, claimSetup, newSetupCode, resetSetupTries, setupDone, setupNotice, signIn } from '../../server/utils/accounts'
 import * as api from '../../server/utils/api'
 import { access } from '../../server/utils/boardAccess'
 import { createBoard, listRevisions } from '../../server/utils/boards'
@@ -89,6 +89,13 @@ function callback() {
   return { node: { req: { method: 'GET', headers: { host: 'wire.example.org', ...cookie } } }, context: {} } as never
 }
 
+/** The session tag `POST /api/setup` would store for `code` (R11). */
+function accepted(code: string): string {
+  const r = checkSetupCode(useDb(), code, '192.0.2.1')
+  if (r.status !== 200) throw new Error('code refused')
+  return r.tag
+}
+
 const userRow = (id: string) => useDb().select().from(users).where(eq(users.id, id)).get()!
 const byName = (name: string) => useDb().select().from(users).all().find(u => u.name === name)!
 
@@ -109,7 +116,11 @@ describe('setup code', () => {
     const e = post({ code: code.replaceAll('-', '').toLowerCase() })
     expect(await setupRoute(e)).toEqual({ ok: true, admin: false })
     expect(e.status).toBeUndefined()
-    expect(session).toMatchObject({ setupOk: true })
+    // A tag of the accepted code's hash (R11): never the code, never the hash itself.
+    const tag = session.setupOk as string
+    expect(tag).toMatch(/^[\w-]{12,}$/)
+    expect(useDb().select().from(setup).get()!.codeHash).not.toContain(tag)
+    expect(tag).not.toContain(code.replaceAll('-', ''))
 
     expect(await finishSignIn(callback(), 'github', { id: '42', name: 'Ada' })).toEqual({ redirect: '/', status: 302 })
     const ada = byName('Ada')
@@ -124,10 +135,32 @@ describe('setup code', () => {
       expect(await setupRoute(again)).toEqual({ error: 'Setup is done.' })
       expect(again.status).toBe(410)
     }
-    // A second person who signs in (with a session that once held setupOk) is no admin.
-    session = { setupOk: true }
-    await finishSignIn(callback(), 'github', { id: '7', name: 'Bob' })
+    // A second person who signs in with the same accepted code is no admin, and is told so.
+    session = { setupOk: tag }
+    expect(await finishSignIn(callback(), 'github', { id: '7', name: 'Bob' })).toEqual({ redirect: '/setup?error=done', status: 302 })
     expect(byName('Bob')).toMatchObject({ isAdmin: 0, isPremium: 0 })
+    expect(session).toEqual({ user: { id: byName('Bob').id } })
+  })
+
+  it('a code accepted before a restart can no longer claim (R11)', async () => {
+    createBoard(useDb(), fixture, 'import', 'Local')
+    const old = newSetupCode(useDb())
+    expect(await setupRoute(post({ code: old }))).toEqual({ ok: true, admin: false })
+    expect(session.setupOk).toEqual(expect.any(String))
+    // The server restarts: a new code.
+    newSetupCode(useDb())
+    expect(await finishSignIn(callback(), 'github', { id: '42', name: 'Ada' })).toEqual({ redirect: '/setup?error=done', status: 302 })
+    expect(byName('Ada')).toMatchObject({ isAdmin: 0, isPremium: 0 })
+    expect(setupDone(useDb())).toBe(false)
+    expect(useDb().select({ ownerId: boards.ownerId }).from(boards).all()).toEqual([{ ownerId: 'local' }])
+    // A forged flag claims nothing either.
+    session = {}
+    for (const forged of [true, 'x', '']) {
+      session = { setupOk: forged }
+      await finishSignIn(callback(), 'github', { id: `f-${String(forged)}`, name: 'Forger' })
+      session = {}
+    }
+    expect(setupDone(useDb())).toBe(false)
   })
 
   it('a restart makes the old code useless', async () => {
@@ -208,8 +241,7 @@ describe('setup notice at start', () => {
     expect(useDb().select().from(setup).all()).toEqual([])
     const r = signIn(useDb(), 'github', { id: '42', name: 'Ada' })
     if (!r.ok) throw new Error('sign-in failed')
-    newSetupCode(useDb())
-    expect(claimSetup(useDb(), r.userId)).toMatchObject({ ok: true })
+    expect(claimSetup(useDb(), r.userId, accepted(newSetupCode(useDb())))).toMatchObject({ ok: true })
     expect(setupNotice(useDb(), 'public', 'https://wire.example.org')).toBeNull()
     expect(useDb().select().from(setup).all()).toEqual([{ codeHash: null, doneAt: expect.any(Number) }])
   })
@@ -249,18 +281,35 @@ describe('local → public', () => {
     expect(closed).toEqual([])
   })
 
-  it('claiming is all or nothing, and only once', () => {
+  it('claiming is only once, by a real account, with the current code', () => {
     const db = useDb()
     createBoard(db, fixture, 'import', 'Local')
     const ada = signIn(db, 'github', { id: '42', name: 'Ada' })
     const bob = signIn(db, 'github', { id: '7', name: 'Bob' })
     if (!ada.ok || !bob.ok) throw new Error('sign-in failed')
-    newSetupCode(db)
-    expect(claimSetup(db, 'local')).toEqual({ ok: false })
-    expect(claimSetup(db, 'nobody')).toEqual({ ok: false })
-    expect(claimSetup(db, ada.userId)).toEqual({ ok: true, moved: 1 })
-    expect(claimSetup(db, bob.userId)).toEqual({ ok: false })
+    const tag = accepted(newSetupCode(db))
+    expect(claimSetup(db, 'local', tag)).toEqual({ ok: false })
+    expect(claimSetup(db, 'nobody', tag)).toEqual({ ok: false })
+    expect(claimSetup(db, ada.userId, 'not-the-tag')).toEqual({ ok: false })
+    expect(claimSetup(db, ada.userId, tag)).toEqual({ ok: true, moved: 1 })
+    expect(claimSetup(db, bob.userId, tag)).toEqual({ ok: false })
     expect(userRow(bob.userId).isAdmin).toBe(0)
+  })
+
+  it('claiming is all or nothing', () => {
+    const db = useDb()
+    const board = createBoard(db, fixture, 'import', 'Local')
+    const ada = signIn(db, 'github', { id: '42', name: 'Ada' })
+    if (!ada.ok) throw new Error('sign-in failed')
+    const tag = accepted(newSetupCode(db))
+    // The last step (marking the setup done) fails, after the promotion and the board move.
+    db.$client.exec('CREATE TRIGGER no_setup_update BEFORE UPDATE ON setup BEGIN SELECT RAISE(ABORT, \'boom\'); END')
+    expect(() => claimSetup(db, ada.userId, tag)).toThrow('boom')
+    expect(userRow(ada.userId)).toMatchObject({ isAdmin: 0, isPremium: 0 })
+    expect(db.select({ ownerId: boards.ownerId }).from(boards).where(eq(boards.id, board.id)).get()).toEqual({ ownerId: 'local' })
+    expect(setupDone(db)).toBe(false)
+    db.$client.exec('DROP TRIGGER no_setup_update')
+    expect(claimSetup(db, ada.userId, tag)).toEqual({ ok: true, moved: 1 })
   })
 })
 

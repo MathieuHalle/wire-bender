@@ -107,7 +107,7 @@ export function listBoards(db: Db, ownerId: string, which: 'mine' | 'trash'): Bo
 /**
  * `userId`'s "Shared with me": the boards they opened by link whose link still opens, most
  * recently opened first. A visit keeps the link id it was made with, so a regenerated link
- * drops out; so do private and trashed boards, and those of a deleted account. A link
+ * drops out; so do private and trashed boards, and those of a deleted or suspended account. A link
  * password does not: the board asks for it when opened.
  */
 export function listShared(db: Db, userId: string): SharedInfo[] {
@@ -115,7 +115,7 @@ export function listShared(db: Db, userId: string): SharedInfo[] {
     .from(linkVisits)
     .innerJoin(boards, and(eq(boards.id, linkVisits.boardId), eq(boards.linkId, linkVisits.linkId)))
     .innerJoin(users, eq(users.id, boards.ownerId))
-    .where(and(eq(linkVisits.userId, userId), ne(boards.ownerId, userId), ne(boards.visibility, 'private'), isNull(boards.trashedAt), isNull(users.deletedAt)))
+    .where(and(eq(linkVisits.userId, userId), ne(boards.ownerId, userId), ne(boards.visibility, 'private'), isNull(boards.trashedAt), isNull(users.deletedAt), isNull(users.suspendedAt)))
     .orderBy(desc(linkVisits.lastOpened)).all() as SharedInfo[]
 }
 

@@ -30,9 +30,11 @@ export async function finishSignIn(event: H3Event, provider: Provider, profile: 
   const current = who.kind === 'user' ? who.userId : undefined
   const r = signIn(useDb(), provider, profile, current)
   if (!r.ok) return sendRedirect(event, `/account?error=${r.reason}`, 302)
-  // The setup code was entered first: this account becomes the admin (claimSetup refuses a
-  // deleted one, or when an admin exists by now). The new session below drops the flag.
-  if (current === undefined && !r.deleted && await setupOkOf(event)) claimSetup(useDb(), r.userId)
+  // The setup code was entered first: this account becomes the admin. claimSetup refuses
+  // when an admin exists by now or the code changed since (a restart, R11); the sign-in then
+  // stands, and /setup says why this account is no admin. The new session drops the flag.
+  const tag = current === undefined && !r.deleted ? await setupOkOf(event) : null
+  const refused = tag !== null && !claimSetup(useDb(), r.userId, tag).ok
   if (current === undefined) {
     // Replaced, not merged: nothing from an earlier session (such as R1's flag) is kept,
     // except the share links whose password this visitor already entered.
@@ -40,7 +42,7 @@ export async function finishSignIn(event: H3Event, provider: Provider, profile: 
     const session = r.deleted ? { user: { id: r.userId }, pendingDeletion: true } : { user: { id: r.userId } }
     await replaceUserSession(event, unlocked.length > 0 ? { ...session, unlocked } : session)
   }
-  return sendRedirect(event, r.deleted ? '/account' : '/', 302)
+  return sendRedirect(event, r.deleted ? '/account' : refused ? '/setup?error=done' : '/', 302)
 }
 
 /** A failed or cancelled sign-in. Only the provider and the error's status are logged (its data may hold tokens). */
