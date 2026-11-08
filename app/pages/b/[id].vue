@@ -416,7 +416,9 @@ const sideTitle = (s: Side) => (s === 'top'
       <UBadge
         :color="STATUS[status].color"
         variant="subtle"
+        :icon="status === 'offline' ? 'i-lucide-wifi-off' : undefined"
         :label="STATUS[status].label"
+        :title="readOnly ? PAUSED_TITLE : undefined"
       />
       <UButton
         v-if="hiddenN"
@@ -544,14 +546,6 @@ const sideTitle = (s: Side) => (s === 'top'
         />
       </template>
     </UAlert>
-    <UAlert
-      v-else-if="board && readOnly"
-      class="mx-4 mt-3 shrink-0"
-      color="warning"
-      variant="subtle"
-      icon="i-lucide-wifi-off"
-      :title="PAUSED_TITLE"
-    />
     <UAlert
       v-else-if="visiting && meta"
       class="mx-4 mt-3 shrink-0"
