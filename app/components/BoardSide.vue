@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // One side of the board, drawn in mm. The bottom is usually mirrored (seen from below),
 // so text is never drawn mirrored: every coordinate goes through `geo`.
+import { edgeLabels } from '~core/edgeLabels'
 import { holeKey, holeName, type Hole } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
 import { placePart, type PlacedPart } from '~core/footprints'
@@ -53,13 +54,12 @@ const viewBox = computed(() => {
   return `${b.x} ${b.y} ${b.w} ${b.h}`
 })
 
+/** The edge numbering, shared with the 3D view (`edgeLabels`). */
+const labels = computed(() => edgeLabels(geo.value.cols, geo.value.rows))
 const colLabels = computed(() =>
-  Array.from({ length: geo.value.cols }, (_, i) => ({ n: i + 1, x: geo.value.pt({ col: i + 1, row: 1 }).x })))
+  labels.value.cols.map(c => ({ n: c.text, x: geo.value.pt({ col: c.col, row: 1 }).x })))
 const rowLabels = computed(() =>
-  Array.from({ length: geo.value.rows }, (_, i) => ({
-    name: holeName({ col: 1, row: i + 1 }).replace(/\d+$/, ''),
-    y: geo.value.pt({ col: 1, row: i + 1 }).y
-  })))
+  labels.value.rows.map(r => ({ name: r.text, y: geo.value.pt({ col: 1, row: r.row }).y })))
 
 // ---- Pointer -> hole / segment ------------------------------------------------------
 const rootEl = ref<HTMLDivElement | null>(null)

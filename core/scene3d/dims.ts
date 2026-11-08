@@ -13,6 +13,12 @@ export { LEG_DIAMETER_MM }
 export const LEG_BELOW_MM = 1.5
 export const SOLDER_BASE_DIAMETER_MM = 1.8
 export const SOLDER_HEIGHT_MM = 0.9
+/** The slab's margin past the outer holes, in pitches: room for the printed numbers. */
+export const EDGE_MARGIN_PITCH = 1.5
+/** Where the printed numbers sit, in pitches past the outer holes: where one more hole would be. */
+export const LABEL_OFFSET_PITCH = 1
+/** Height of the printed numbers on the top surface, mm. */
+export const LABEL_TEXT_MM = 1.4
 /** y of the bottom surface; the top surface is y = 0. */
 export const BOARD_BOTTOM_Y = -BOARD_THICKNESS_MM
 /** y of a leg's cut end under the board. */
@@ -45,5 +51,7 @@ export const COLORS = {
   screw: '#9aa0a6',
   slot: '#2a2c2e',
   wireEntry: '#16201b',
-  tabHole: '#16150f'
+  tabHole: '#16150f',
+  /** The column and row numbers printed on the top surface. */
+  print: '#ece6d2'
 } as const
