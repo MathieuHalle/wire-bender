@@ -41,7 +41,7 @@ const ROUTES: [string, string][] = [
 // Backtick spans in the text become <code>.
 const parts = (text: string) => text.split('`').map((t, i) => ({ t, code: i % 2 === 1 }))
 
-const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localhost:3000 --env WIREBENDER_TOKEN=<your token> -- pnpm --dir <path to wire-bender> mcp'
+const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localhost:3000 --env WIREBENDER_TOKEN=<your token> -- pnpm --silent --dir <path to wire-bender> wirebender mcp'
 </script>
 
 <template>
@@ -191,7 +191,8 @@ const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localh
       </p>
       <pre class="overflow-x-auto rounded-md bg-elevated p-3 text-xs">{{ MCP_ADD }}</pre>
       <p class="text-sm text-muted">
-        To be confirmed in a later step: the exact command may change when the MCP server lands.
+        Keep <code>--silent</code>: without it pnpm prints a line before the server starts, and the client cannot read it.
+        Add <code>--url</code> after <code>mcp</code>, or change <code>WIREBENDER_SERVER</code>, for a server on another port.
       </p>
     </section>
   </div>
