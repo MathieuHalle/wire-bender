@@ -1,7 +1,7 @@
 import { useDb } from '../../db'
 import { readCapped } from '../../utils/readCapped'
 import { mintToken } from '../../utils/tokens'
-import { whoIs } from '../../utils/who'
+import { tokenManager } from '../../utils/sendResult'
 
 const MAX_BODY = 4096
 
@@ -11,11 +11,8 @@ const MAX_BODY = 4096
  */
 export default defineEventHandler(async (event) => {
   setResponseHeader(event, 'cache-control', 'no-store')
-  const who = await whoIs(event)
-  if (who.kind === 'anonymous') {
-    setResponseStatus(event, 401)
-    return { error: 'Sign in first.' }
-  }
+  const who = tokenManager(event)
+  if (!who.ok) return who.body
   const text = Number(getRequestHeader(event, 'content-length') ?? 0) > MAX_BODY ? null : await readCapped(event.node.req, MAX_BODY)
   if (text === null) {
     setResponseStatus(event, 413)

@@ -66,7 +66,7 @@ function emptyBoard(json: Record<string, unknown>): unknown {
 }
 
 /** `POST /api/boards`: `{ board }` imports, `{ name, cols, rows, type }` creates an empty board, owned by `ownerId`. */
-export function createOrImport(db: Db, text: string, author = AUTHOR, ownerId = 'local'): ApiResult {
+export function createOrImport(db: Db, text: string, author = AUTHOR, ownerId = 'local', tokenId: string | null = null): ApiResult {
   const p = parseBody(text)
   if (!p.ok) return p.result
   const { json } = p
@@ -74,7 +74,7 @@ export function createOrImport(db: Db, text: string, author = AUTHOR, ownerId = 
   if (!importing && (typeof json.name !== 'string' || json.name.trim() === '')) return invalid('name: must be a non-empty string')
   const parsed = parseBoard(importing ? json.board : emptyBoard(json))
   if (!parsed.ok) return invalid(...parsed.errors)
-  return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', author, ownerId, ownerId).id })
+  return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', author, ownerId, ownerId, undefined, tokenId).id })
 }
 
 /** `GET /api/boards?list=`: `userId`'s own boards (`mine`, the default), those in their `trash`, or the boards `shared` with them. */
@@ -133,6 +133,9 @@ export const renameRefusal = ownerRefusal
 
 /** Who a board change is by. Only the owner or a signed-in editor gets this far. */
 const authorOf = (who: Who): string => who.kind === 'anonymous' ? AUTHOR : who.author
+
+/** The token a board change by `who` was made with, if any. */
+const tokenIdOf = (who: Who): string | null => who.kind === 'anonymous' ? null : who.token?.id ?? null
 
 /** `GET /api/boards/:key`: to anyone but the owner by board id, `id` is the key they used. */
 export function getBoardResponse(db: Db, req: BoardRequest): ApiResult {
@@ -197,7 +200,7 @@ export function putBoard(db: Db, req: BoardRequest, text: string): ApiResult {
       }
       // Only the owner renames (spec §5): anyone else's board keeps the name it has now.
       const next = a.role === 'owner' ? parsed.board : { ...parsed.board, name: getBoard(db, a.boardId)!.board.name }
-      return ok({ revision: room.serverWrite(next, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who) }) })
+      return ok({ revision: room.serverWrite(next, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who), tokenId: tokenIdOf(req.who) }) })
     })
   })
 }
@@ -211,7 +214,7 @@ export function renameBoard(db: Db, req: BoardRequest, text: string): ApiResult 
     if (name === '') return invalid('name: must be a non-empty string')
     return withRoom(db, a.boardId, (room) => {
       const current = getBoard(db, a.boardId)!.board
-      return ok({ revision: room.serverWrite({ ...current, name }, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who) }) })
+      return ok({ revision: room.serverWrite({ ...current, name }, { author: authorOf(req.who), how: HOW, authorId: authorIdOf(req.who), tokenId: tokenIdOf(req.who) }) })
     })
   })
 }
@@ -276,15 +279,15 @@ export function thumbnailBoard(db: Db, req: BoardRequest): ApiResult {
   })
 }
 
-function change(db: Db, req: BoardRequest, step: (room: Room, author: string, authorId: string | null) => number | null, reason: string): ApiResult {
+function change(db: Db, req: BoardRequest, step: (room: Room, author: string, authorId: string | null, tokenId: string | null) => number | null, reason: string): ApiResult {
   return withAccess(db, req, 'edit', a => withRoom(db, a.boardId, (room) => {
-    const revision = step(room, authorOf(req.who), authorIdOf(req.who))
+    const revision = step(room, authorOf(req.who), authorIdOf(req.who), tokenIdOf(req.who))
     return revision === null ? { status: 409, body: { reason } } : ok({ revision })
   }))
 }
 
-export const undoBoard = (db: Db, req: BoardRequest): ApiResult => change(db, req, (r, author, authorId) => r.undo(author, authorId), 'nothing to undo')
-export const redoBoard = (db: Db, req: BoardRequest): ApiResult => change(db, req, (r, author, authorId) => r.redo(author, authorId), 'nothing to redo')
+export const undoBoard = (db: Db, req: BoardRequest): ApiResult => change(db, req, (r, author, authorId, tokenId) => r.undo(author, authorId, tokenId), 'nothing to undo')
+export const redoBoard = (db: Db, req: BoardRequest): ApiResult => change(db, req, (r, author, authorId, tokenId) => r.redo(author, authorId, tokenId), 'nothing to redo')
 
 export function listRevisionsResponse(db: Db, req: BoardRequest): ApiResult {
   return withAccess(db, req, 'view', a => ok(listRevisions(db, a.boardId)))
@@ -307,6 +310,6 @@ export function restoreRevision(db: Db, req: BoardRequest, segment: string): Api
     const n = revisionNumber(segment)
     const rev = n === null ? null : getRevision(db, a.boardId, n)
     if (n === null || !rev) return notFound()
-    return withRoom(db, a.boardId, room => ok({ revision: room.serverWrite(rev.board as BoardFile, { author: authorOf(req.who), how: 'restore', target: n, authorId: authorIdOf(req.who) }) }))
+    return withRoom(db, a.boardId, room => ok({ revision: room.serverWrite(rev.board as BoardFile, { author: authorOf(req.who), how: 'restore', target: n, authorId: authorIdOf(req.who), tokenId: tokenIdOf(req.who) }) }))
   })
 }

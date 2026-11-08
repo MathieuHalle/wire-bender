@@ -41,6 +41,19 @@ function nodeReq(source: TrustSource): NodeReqLike | undefined {
   return undefined
 }
 
+/**
+ * The token of an `Authorization: Bearer <token>` header (an empty string for a bare
+ * `Bearer`); undefined when the request sends no bearer header. Tokens come from this header
+ * only: never a query string, a cookie or a body.
+ */
+export function bearerOf(source: TrustSource): string | undefined {
+  const header = nodeReq(source)?.headers.authorization
+  const value = Array.isArray(header) ? header[0] : header
+  if (typeof value !== 'string') return undefined
+  const m = /^bearer(?:\s+(.*))?$/i.exec(value.trim())
+  return m ? (m[1] ?? '').trim() : undefined
+}
+
 /** A cookie of a request, upgrade request or peer; undefined if it sent none by that name. */
 export function cookieOf(source: TrustSource, name: string): string | undefined {
   return cookieValue(nodeReq(source)?.headers.cookie, name)
@@ -205,6 +218,39 @@ const ANONYMOUS_WRITES: [string, RegExp][] = [
 function anonymousWrite(method: string, pathname: string): boolean {
   const path = pathname.replace(/\/$/, '')
   return ANONYMOUS_WRITES.some(([m, re]) => m === method && re.test(path))
+}
+
+/**
+ * The routes a token may not use (step 3): account deletion and restore, deleting a board for
+ * good, its sharing, the tokens themselves, the admin and the setup code. `*` is any method.
+ * Also sign-in (`/auth/*`, which from a signed-in caller links another identity to the
+ * account) and nuxt-auth-utils' cookie session routes (`/api/_auth/*`).
+ */
+const TOKEN_DENIED: [string, RegExp][] = [
+  ['DELETE', /^\/api\/me$/],
+  ['POST', /^\/api\/me\/restore$/],
+  ['DELETE', /^\/api\/boards\/[^/]+$/],
+  ['PATCH', /^\/api\/boards\/[^/]+\/sharing$/],
+  ['POST', /^\/api\/boards\/[^/]+\/sharing\/regenerate$/],
+  ['*', /^\/api\/tokens(\/.*)?$/],
+  ['*', /^\/api\/admin(\/.*)?$/],
+  ['POST', /^\/api\/setup$/],
+  ['*', /^\/auth(\/.*)?$/],
+  ['*', /^\/api\/_auth(\/.*)?$/]
+]
+
+export const TOKEN_REFUSED = 'Not allowed with a token.'
+
+/**
+ * Whether a request made with a token is refused (403 `Not allowed with a token.`). A path
+ * with odd segments or characters is refused too, so no spelling of a denied route gets by.
+ */
+export function tokenRefusal(path: string, method: string): boolean {
+  const pathname = path.split('?')[0]!
+  if (!plainPath(pathname)) return true
+  const p = pathname.toLowerCase().replace(/\/$/, '')
+  const m = method.toUpperCase()
+  return TOKEN_DENIED.some(([dm, re]) => (dm === '*' || dm === m) && re.test(p))
 }
 
 /** What anonymous may read in public mode, besides pages: the board routes decide per board. */

@@ -16,6 +16,7 @@ import { signIn } from '../../server/utils/accounts'
 import { unlockEntry } from '../../server/utils/boardAccess'
 import { createBoard, getBoardRow } from '../../server/utils/boards'
 import { openRoom } from '../../server/utils/rooms'
+import { mintToken } from '../../server/utils/tokens'
 import { docToBoard, writeBoard } from '../../shared/yboard'
 import type { NodeReqLike } from '../../server/utils/peerAddress'
 import type { SessionData } from '../../server/utils/who'
@@ -442,6 +443,39 @@ describe('board socket', () => {
     expect(q.closed).toEqual([{ code: 4400, reason: 'Only the owner can rename the board.' }])
     expect(getBoardRow(useDb(), b.id)!.name).toBe(fixture.name)
     ws.close(q.peer)
+  })
+
+  it('an upgrade with a bearer token is authenticated like a request', async () => {
+    publicMode()
+    const ada = newUser('Ada')
+    const b = board(ada)
+    const minted = mintToken(useDb(), ada, 'Claude')
+    if (!minted.ok) throw new Error('mint failed')
+    const good = upgradeRequest(`/_ws/board/${b.id}`, '203.0.113.9', { host: 'wire.example.org', authorization: `Bearer ${minted.token}` })
+    expect(await ws.upgrade(good)).toBeUndefined()
+    expect(good.context.who).toMatchObject({ kind: 'user', userId: ada, author: 'Claude · Ada', token: { id: minted.row.id } })
+    const p = peer(good)
+    ws.open(p.peer)
+    expect(p.closed).toEqual([])
+    ws.close(p.peer)
+    // A bad token is 401, and never falls back to the cookie.
+    session = { user: { id: ada } }
+    readSession.mockClear()
+    const bad = await ws.upgrade(upgradeRequest(`/_ws/board/${b.id}`, '203.0.113.9', { host: 'wire.example.org', cookie: SESSION_COOKIE, authorization: `Bearer wb_${'x'.repeat(43)}` }))
+    expect(bad?.status).toBe(401)
+    expect(await bad!.json()).toEqual({ error: 'Invalid token.' })
+    expect(readSession).not.toHaveBeenCalled()
+  })
+
+  it('local mode: an upgrade with the local user\'s token from another address may connect', async () => {
+    const b = board('local')
+    const minted = mintToken(useDb(), 'local', 'Claude')
+    if (!minted.ok) throw new Error('mint failed')
+    const up = upgradeRequest(`/_ws/board/${b.id}`, '192.168.1.20', { host: 'localhost:3002', authorization: `Bearer ${minted.token}` })
+    expect(await ws.upgrade(up)).toBeUndefined()
+    expect(up.context.who).toMatchObject({ kind: 'local', author: 'Claude · Local' })
+    const bad = await ws.upgrade(upgradeRequest(`/_ws/board/${b.id}`, '127.0.0.1', { host: 'localhost:3002', authorization: 'Bearer nope' }))
+    expect(bad?.status).toBe(401)
   })
 
   it('access is checked again on open', async () => {

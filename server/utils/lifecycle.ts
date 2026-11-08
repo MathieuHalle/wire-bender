@@ -94,7 +94,7 @@ export function fork(db: Db, req: BoardRequest, now = Date.now()): ApiResult {
       // The live name: a rename still grouping is in the board, not yet in the row.
       const name = source.board.name
       const board = { ...source.board, name: own ? `${name} (copy)` : name }
-      const { id } = createBoard(db, board, 'fork', who.author, who.userId, who.userId, { summary: `forked from ${name}`, forkedFrom: a.boardId, forkedFromLink: a.viaLink ? req.key : null })
+      const { id } = createBoard(db, board, 'fork', who.author, who.userId, who.userId, { summary: `forked from ${name}`, forkedFrom: a.boardId, forkedFromLink: a.viaLink ? req.key : null }, who.token?.id)
       return { status: 200, body: { id } }
     }, now)
   })

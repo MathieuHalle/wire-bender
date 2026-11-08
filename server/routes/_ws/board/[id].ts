@@ -4,7 +4,7 @@ import { useDb } from '../../../db'
 import { onUnpair, refusal, trust, type TrustSource } from '../../../utils/access'
 import { access, recordVisit, type Access } from '../../../utils/boardAccess'
 import { checkMode } from '../../../utils/mode'
-import { authorIdOf, presenceOf, unlockedOf, whoIs, type Who } from '../../../utils/who'
+import { INVALID_TOKEN, authorIdOf, presenceOf, resolveSession, unlockedOf, type Who } from '../../../utils/who'
 import { MESSAGE_AWARENESS, MESSAGE_SYNC, handleMessage, message } from '../../../utils/liveMessage'
 import { CLOSE_ACCESS, CLOSE_NO_BOARD, openRoom, type Received, type Room } from '../../../utils/rooms'
 import { wsBoardId } from '../../../utils/wsBoardId'
@@ -141,7 +141,10 @@ export default defineWebSocketHandler({
   async upgrade(request) {
     const source = request as TrustSource
     if (refusal(source)) return new Response('This request names another site.', { status: 403 })
-    const who = await whoIs(source)
+    // A bearer token decides alone, as in the API (resolveSession); there is no deny-list here.
+    const state = await resolveSession(source)
+    if (state.invalidToken) return json(401, { error: INVALID_TOKEN })
+    const who = state.who
     if (checkMode() === 'local' && who.kind === 'anonymous') return new Response('This device is not paired.', { status: 401 })
     const unlocked = await unlockedOf(source)
     const a = accessOf((request as { url: string }).url, who, unlocked)

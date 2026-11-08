@@ -60,8 +60,11 @@ const NOT_JOINED: Received = { ok: false, reason: 'not in this room', code: CLOS
 /** An edit-link peer's update that changes the board's name (spec §5: only the owner renames). */
 export const OWNER_RENAMES = 'Only the owner can rename the board.'
 
-/** `authorId`: the account the revision is by ('local' for the local user), null for none. */
-export interface WriteMeta { author: string, how: string, target?: number, authorId?: string | null }
+/**
+ * `authorId`: the account the revision is by ('local' for the local user), null for none.
+ * `tokenId`: the personal API token it was made with, if any.
+ */
+export interface WriteMeta { author: string, how: string, target?: number, authorId?: string | null, tokenId?: string | null }
 
 const SERVER = 'server'
 /** The top-level types a client may change. */
@@ -313,7 +316,7 @@ export class Room {
   serverWrite(next: BoardFile, meta: WriteMeta): number {
     this.closeGroups()
     writeBoard(this.doc, this.board, next, SERVER)
-    const n = commitRevision(this.db, this.id, { board: next, author: meta.author, how: meta.how, target: meta.target, authorId: meta.authorId })
+    const n = commitRevision(this.db, this.id, { board: next, author: meta.author, how: meta.how, target: meta.target, authorId: meta.authorId, tokenId: meta.tokenId })
     this.board = { ...next, revision: n }
     this.head = n
     this.writeServerMap()
@@ -322,20 +325,20 @@ export class Room {
   }
 
   /** Revert the top of the board's undo stack. `null` when there is nothing to undo. */
-  undo(author: string, authorId: string | null = null): number | null {
+  undo(author: string, authorId: string | null = null, tokenId: string | null = null): number | null {
     this.closeGroups()
     const { undo } = this.stacks()
     if (undo === null) return this.nothing()
-    return this.serverWrite(boardBefore(this.db, this.id, undo), { author, how: 'undo', target: undo, authorId })
+    return this.serverWrite(boardBefore(this.db, this.id, undo), { author, how: 'undo', target: undo, authorId, tokenId })
   }
 
   /** Restore the top of the board's redo stack. `null` when there is nothing to redo. */
-  redo(author: string, authorId: string | null = null): number | null {
+  redo(author: string, authorId: string | null = null, tokenId: string | null = null): number | null {
     this.closeGroups()
     const { redo } = this.stacks()
     const rev = redo === null ? null : getRevision(this.db, this.id, redo)
     if (redo === null || !rev) return this.nothing()
-    return this.serverWrite(rev.board, { author, how: 'redo', target: redo, authorId })
+    return this.serverWrite(rev.board, { author, how: 'redo', target: redo, authorId, tokenId })
   }
 
   /** Remove a peer and its presence, and close its author's group. The last leave saves and drops the room. */
