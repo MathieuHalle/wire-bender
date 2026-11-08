@@ -1,4 +1,4 @@
-import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate'
+import { Unzip, UnzipInflate, UnzipPassThrough, zipSync, strToU8, strFromU8 } from 'fflate'
 import { parseBoard, type BoardFile } from './schema'
 
 export const BUNDLE_FORMAT = 'wirebender-bundle/1'
@@ -73,49 +73,91 @@ function boardOf(path: string, value: unknown): BoardFile {
   return res.board
 }
 
+const SLICE = 16 * 1024
+
+/**
+ * Unzips with fflate's streaming reader instead of `unzipSync`: `unzipSync` keeps inflating a deflate entry past its
+ * declared size, so its CPU cost is not bounded by any header. Here the zip goes in 16 KB slices, every output byte is
+ * counted as it arrives, and the first entry or total over a cap stops the work, so a slice's expansion is the most
+ * that is ever wasted. Entries are read from their local headers in order, so overlapping central entries are not replayed.
+ */
+function inflateAll(zip: Uint8Array, maxBoardBytes: number, maxUnzipped: number): Map<string, Uint8Array> {
+  const files = new Map<string, Uint8Array>()
+  const seen = new Set<string>()
+  let refusal: Refused | null = null
+  let total = 0
+  let compressed = 0
+  const refuse = (status: 413 | 422, msg: string) => {
+    refusal ??= new Refused(status, msg)
+  }
+
+  const unzip = new Unzip((file) => {
+    if (refusal) return
+    const name = shown(file.name)
+    if (file.name.endsWith('/')) return
+    if (file.name !== 'manifest.json' && file.name !== BOARD_ENTRY && !REVISION_PATH.test(file.name)) return refuse(422, `${name}: not part of a bundle`)
+    if (seen.has(file.name)) return refuse(422, `${name}: duplicate entry`)
+    seen.add(file.name)
+    if (seen.size > MAX_BUNDLE_REVISIONS + 2) return refuse(413, 'bundle has too many revisions')
+    if (file.compression !== 0 && file.compression !== 8) return refuse(422, `${name}: unsupported compression`)
+    // The sizes are unknown (undefined) for an entry that uses a data descriptor. The counting below covers that case.
+    if (file.size !== undefined && file.originalSize !== undefined) {
+      if (file.compression === 0 && file.size !== file.originalSize) return refuse(422, `${name}: sizes do not match`)
+      compressed += file.size
+      if (compressed > zip.length) return refuse(422, 'entries overlap')
+      if (Math.max(file.size, file.originalSize) > maxBoardBytes) return refuse(413, `${name} is too large`)
+    }
+    const chunks: Uint8Array[] = []
+    let length = 0
+    file.ondata = (err, data, final) => {
+      if (refusal) return
+      if (err) return refuse(422, `${name}: could not be unzipped`)
+      length += data.length
+      total += data.length
+      if (length > maxBoardBytes) {
+        file.terminate()
+        return refuse(413, `${name} is too large`)
+      }
+      if (total > maxUnzipped) {
+        file.terminate()
+        return refuse(413, 'bundle is too large when unzipped')
+      }
+      chunks.push(data)
+      if (!final) return
+      const bytes = new Uint8Array(length)
+      let at = 0
+      for (const c of chunks) {
+        bytes.set(c, at)
+        at += c.length
+      }
+      files.set(file.name, bytes)
+    }
+    file.start()
+  })
+  unzip.register(UnzipInflate)
+  unzip.register(UnzipPassThrough)
+
+  try {
+    for (let at = 0; at < zip.length && !refusal; at += SLICE) {
+      unzip.push(zip.subarray(at, at + SLICE), at + SLICE >= zip.length)
+    }
+  } catch {
+    throw refusal ?? new Refused(422, 'not a zip file')
+  }
+  if (refusal) throw refusal
+  if (seen.size === 0) throw new Refused(422, 'not a zip file')
+  return files
+}
+
 /** The server passes its `MAX_BOARD_BYTES` as `maxBoardBytes`. `maxUnzipped` is for tests. */
 export function decodeBundle(zip: Uint8Array, opts: { maxBoardBytes?: number, maxUnzipped?: number } = {}): DecodeResult {
   const maxBoardBytes = opts.maxBoardBytes ?? DEFAULT_MAX_BOARD_BYTES
   const maxUnzipped = opts.maxUnzipped ?? MAX_BUNDLE_UNZIPPED
   if (zip.length > MAX_BUNDLE_BYTES) return { ok: false, status: 413, error: 'bundle is too large' }
   try {
-    let total = 0
-    let entries = 0
-    const refusal: { value: Refused | null } = { value: null }
-    const refuse = (status: 413 | 422, msg: string) => {
-      refusal.value ??= new Refused(status, msg)
-      return false
-    }
-    let files: Record<string, Uint8Array> = {}
-    try {
-      files = unzipSync(zip, {
-        // Runs before an entry is copied or inflated, so a zip bomb is refused on its declared sizes.
-        filter: (f) => {
-          if (refusal.value) return false
-          if (f.name.endsWith('/')) return false
-          const name = shown(f.name)
-          if (f.name !== 'manifest.json' && f.name !== BOARD_ENTRY && !REVISION_PATH.test(f.name)) return refuse(422, `${name}: not part of a bundle`)
-          if (f.compression !== 0 && f.compression !== 8) return refuse(422, `${name}: unsupported compression`)
-          if (f.compression === 0 && f.size !== f.originalSize) return refuse(422, `${name}: sizes do not match`)
-          // A stored entry is copied by its `size`, a deflated one inflated to its `originalSize`: count the larger.
-          const declared = Math.max(f.size, f.originalSize)
-          if (declared > maxBoardBytes) return refuse(413, `${name} is too large`)
-          total += declared
-          if (total > maxUnzipped) return refuse(413, 'bundle is too large when unzipped')
-          if (++entries > MAX_BUNDLE_REVISIONS + 2) return refuse(413, 'bundle has too many revisions')
-          return true
-        }
-      })
-    } catch {
-      throw refusal.value ?? new Refused(422, 'not a zip file')
-    }
-    if (refusal.value) throw refusal.value
-    // An entry may inflate to more than it declared.
-    for (const [name, bytes] of Object.entries(files)) {
-      if (bytes.length > maxBoardBytes) throw new Refused(413, `${shown(name)} is too large`)
-    }
+    const files = inflateAll(zip, maxBoardBytes, maxUnzipped)
 
-    const manifest = files['manifest.json']
+    const manifest = files.get('manifest.json')
     if (!manifest) throw new Refused(422, 'bundle has no manifest.json')
     const m = parseEntry('manifest.json', manifest)
     if (!isRecord(m)) throw new Refused(422, 'manifest.json: not an object')
@@ -123,12 +165,12 @@ export function decodeBundle(zip: Uint8Array, opts: { maxBoardBytes?: number, ma
     if (typeof m.name !== 'string') throw new Refused(422, 'manifest.json: name must be a string')
     if (typeof m.exportedAt !== 'number' || !Number.isFinite(m.exportedAt)) throw new Refused(422, 'manifest.json: exportedAt must be a number')
 
-    const boardBytes = files[BOARD_ENTRY]
+    const boardBytes = files.get(BOARD_ENTRY)
     if (!boardBytes) throw new Refused(422, `bundle has no ${BOARD_ENTRY}`)
     const board = boardOf(BOARD_ENTRY, parseEntry(BOARD_ENTRY, boardBytes))
 
     const revisions: BundleRevision[] = []
-    for (const [path, bytes] of Object.entries(files)) {
+    for (const [path, bytes] of files) {
       const match = REVISION_PATH.exec(path)
       if (!match) continue
       const r = parseEntry(path, bytes)

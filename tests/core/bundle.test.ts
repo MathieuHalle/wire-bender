@@ -1,33 +1,29 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate'
+import { zipSync, unzipSync, deflateSync, strToU8, strFromU8 } from 'fflate'
 import { parseBoard, type BoardFile } from '~core/schema'
 import { BUNDLE_FORMAT, MAX_BUNDLE_BYTES, MAX_BUNDLE_REVISIONS, encodeBundle, decodeBundle, type Bundle } from '~core/bundle'
 
-const spy = vi.hoisted(() => ({ allowed: [] as number[], inject: null as Record<string, Uint8Array> | null }))
+const spy = vi.hoisted(() => ({ inflated: 0 }))
 vi.mock('fflate', async (orig) => {
   const actual = await orig<typeof import('fflate')>()
-  return {
-    ...actual,
-    // Records what the filter let through, and can add entries after unzipping, as if one inflated past its header.
-    unzipSync: (data: Uint8Array, opts?: { filter?: (f: { name: string, size: number, originalSize: number }) => boolean }) => {
-      const filter = opts?.filter
-      const files = actual.unzipSync(data, {
-        ...opts,
-        filter: filter && ((f: { name: string, size: number, originalSize: number }) => {
-          const r = filter(f)
-          if (r) spy.allowed.push(Math.max(f.size, f.originalSize))
-          return r
-        })
-      } as never)
-      return spy.inject ? { ...files, ...spy.inject } : files
+  // Counts every byte the inflater produces, so a test can prove the work stayed bounded.
+  class CountingInflate extends actual.UnzipInflate {
+    constructor() {
+      super()
+      const inner = (this as unknown as { i: { ondata: (d: Uint8Array, final: boolean) => void } }).i
+      const next = inner.ondata
+      inner.ondata = (d, final) => {
+        spy.inflated += d.length
+        next(d, final)
+      }
     }
   }
+  return { ...actual, UnzipInflate: CountingInflate }
 })
 beforeEach(() => {
-  spy.allowed = []
-  spy.inject = null
+  spy.inflated = 0
 })
 
 const board = (): BoardFile => {
@@ -115,7 +111,10 @@ describe('board bundles', () => {
   const manifest = () => json({ format: BUNDLE_FORMAT, name: 'x', exportedAt: 1, revisions: 0 })
   const good = () => ({ 'manifest.json': manifest(), 'board.wirebender.json': json(board()) })
 
-  /** Rewrite the sizes the central directory declares for one entry. */
+  const u16 = (n: number) => [n & 255, n >> 8]
+  const u32 = (n: number) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255]
+
+  /** Rewrite what the headers declare for one entry, in both the local header and the central directory. */
   function patchSizes(zip: Uint8Array, name: string, sizes: { size?: number, originalSize?: number, compression?: number }): Uint8Array {
     const out = zip.slice()
     const v = new DataView(out.buffer)
@@ -123,54 +122,111 @@ describe('board bundles', () => {
       if (v.getUint32(i, true) !== 0x02014b50) continue
       const nlen = v.getUint16(i + 28, true)
       if (strFromU8(out.subarray(i + 46, i + 46 + nlen)) !== name) continue
-      if (sizes.compression !== undefined) v.setUint16(i + 10, sizes.compression, true)
-      if (sizes.size !== undefined) v.setUint32(i + 20, sizes.size, true)
-      if (sizes.originalSize !== undefined) v.setUint32(i + 24, sizes.originalSize, true)
+      const local = v.getUint32(i + 42, true)
+      if (sizes.compression !== undefined) {
+        v.setUint16(i + 10, sizes.compression, true)
+        v.setUint16(local + 8, sizes.compression, true)
+      }
+      if (sizes.size !== undefined) {
+        v.setUint32(i + 20, sizes.size, true)
+        v.setUint32(local + 18, sizes.size, true)
+      }
+      if (sizes.originalSize !== undefined) {
+        v.setUint32(i + 24, sizes.originalSize, true)
+        v.setUint32(local + 22, sizes.originalSize, true)
+      }
       return out
     }
     throw new Error('no such entry')
   }
 
-  /** A stored zip with one local entry (`data`) that `names.length` central entries all point at, each declaring `declared` bytes. */
-  function overlapping(names: string[], data: Uint8Array, declared: number): Uint8Array {
-    const parts: Uint8Array[] = []
-    const u16 = (n: number) => [n & 255, n >> 8]
-    const u32 = (n: number) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255]
-    const first = strToU8(names[0]!)
-    parts.push(Uint8Array.from([0x50, 0x4b, 3, 4, ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(data.length), ...u32(data.length), ...u16(first.length), ...u16(0), ...first]), data)
-    const cdStart = 30 + first.length + data.length
-    let cdSize = 0
-    for (const n of names) {
-      const nb = strToU8(n)
-      const c = Uint8Array.from([0x50, 0x4b, 1, 2, ...u16(20), ...u16(20), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(data.length), ...u32(declared), ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(0), ...nb])
-      parts.push(c)
-      cdSize += c.length
+  interface RawEntry { name: string, method: 0 | 8, data: Uint8Array, usize: number, csize?: number }
+
+  /**
+   * A hand-built zip. With `overlap`, only the first entry gets a local header and every central entry points at it.
+   * Headers declare `usize` and `csize` whatever the data really is.
+   */
+  function buildZip(entries: RawEntry[], overlap = false): Uint8Array {
+    const chunks: Uint8Array[] = []
+    const offsets: number[] = []
+    let at = 0
+    const emit = (bytes: ArrayLike<number>) => {
+      const c = Uint8Array.from(bytes)
+      chunks.push(c)
+      at += c.length
     }
-    parts.push(Uint8Array.from([0x50, 0x4b, 5, 6, ...u16(0), ...u16(0), ...u16(names.length), ...u16(names.length), ...u32(cdSize), ...u32(cdStart), ...u16(0)]))
-    const out = new Uint8Array(parts.reduce((a, p) => a + p.length, 0))
+    for (const [i, e] of entries.entries()) {
+      if (overlap && i > 0) {
+        offsets.push(offsets[0]!)
+        continue
+      }
+      offsets.push(at)
+      const nb = strToU8(e.name)
+      emit([0x50, 0x4B, 3, 4, ...u16(20), ...u16(0), ...u16(e.method), ...u16(0), ...u16(0), ...u32(0), ...u32(e.csize ?? e.data.length), ...u32(e.usize), ...u16(nb.length), ...u16(0), ...nb])
+      emit(e.data)
+    }
+    const cdStart = at
+    let cdSize = 0
+    for (const [i, e] of entries.entries()) {
+      const nb = strToU8(e.name)
+      const rec = [0x50, 0x4B, 1, 2, ...u16(20), ...u16(20), ...u16(0), ...u16(e.method), ...u16(0), ...u16(0), ...u32(0), ...u32(e.csize ?? e.data.length), ...u32(e.usize), ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offsets[i]!), ...nb]
+      emit(rec)
+      cdSize += rec.length
+    }
+    emit([0x50, 0x4B, 5, 6, ...u16(0), ...u16(0), ...u16(entries.length), ...u16(entries.length), ...u32(cdSize), ...u32(cdStart), ...u16(0)])
+    const out = new Uint8Array(at)
     let o = 0
-    for (const p of parts) {
-      out.set(p, o)
-      o += p.length
+    for (const c of chunks) {
+      out.set(c, o)
+      o += c.length
     }
     return out
   }
 
-  it('stored entries that declare a tiny originalSize are counted by their real size (C1)', () => {
-    const names = Array.from({ length: 400 }, (_, i) => `revisions/${String(i + 1).padStart(6, '0')}.json`)
-    const zip = overlapping(names, new Uint8Array(1_500_000), 1)
+  const bombData = () => deflateSync(new Uint8Array(128_000_000), { level: 9 })
+  const bombNames = ['manifest.json', 'board.wirebender.json', ...Array.from({ length: 38 }, (_, i) => `revisions/${String(i + 1).padStart(6, '0')}.json`)]
+
+  it('40 overlapping entries over a deflate bomb are refused quickly with bounded inflating (C2)', () => {
+    const data = bombData()
+    const zip = buildZip(bombNames.map(name => ({ name, method: 8, data, usize: 1 })), true)
+    const t0 = performance.now()
     const res = decodeBundle(zip)
-    expect(res).toMatchObject({ ok: false, status: 422 })
-    // The refusal came from the filter, before any copy: no entry was let through.
-    expect(spy.allowed).toEqual([])
+    expect(performance.now() - t0).toBeLessThan(1000)
+    expect(res).toMatchObject({ ok: false, status: 413 })
+    // The cap plus one 16 KB slice's expansion, nowhere near the 128 MB the stream holds.
+    expect(spy.inflated).toBeLessThan(20_000_000)
   })
 
-  it('stored entries that truly are large are counted against the unzipped total (C1)', () => {
-    const names = Array.from({ length: 400 }, (_, i) => `revisions/${String(i + 1).padStart(6, '0')}.json`)
-    const res = decodeBundle(overlapping(names, new Uint8Array(1_500_000), 1_500_000))
+  it('40 separate deflate entries that inflate far past originalSize are refused quickly (C2)', () => {
+    const data = bombData()
+    const zip = buildZip(bombNames.map(name => ({ name, method: 8, data, usize: 1 })))
+    const t0 = performance.now()
+    const res = decodeBundle(zip)
+    expect(performance.now() - t0).toBeLessThan(1000)
     expect(res).toMatchObject({ ok: false, status: 413 })
-    expect(spy.allowed.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(200_000_000)
-    expect(spy.allowed.length).toBeLessThan(140)
+    if (!res.ok) expect(res.error).toContain('manifest.json')
+    expect(spy.inflated).toBeLessThan(20_000_000)
+  })
+
+  it('an entry that inflates past the cap despite its header is 413 after a bounded amount of work (C2)', () => {
+    const zip = patchSizes(zipSync({ ...good(), 'board.wirebender.json': new Uint8Array(3_000_000) }), 'board.wirebender.json', { originalSize: 1 })
+    const res = decodeBundle(zip)
+    expect(res).toMatchObject({ ok: false, status: 413 })
+    expect(spy.inflated).toBeLessThan(20_000_000)
+  })
+
+  it('a deflate entry whose compressed size is over the cap is refused before inflating (M-c)', () => {
+    const noise = Uint8Array.from({ length: 2_500_000 }, (_, i) => (i * 2654435761) >>> 24)
+    const data = deflateSync(noise, { level: 0 })
+    const res = decodeBundle(buildZip([{ name: 'manifest.json', method: 8, data, usize: 1 }]))
+    expect(res).toMatchObject({ ok: false, status: 413 })
+    expect(spy.inflated).toBe(0)
+  })
+
+  it('stored entries that add up past the unzipped cap are 413 (C1)', () => {
+    const chunk = new Uint8Array(400_000)
+    const zip = buildZip(['manifest.json', 'board.wirebender.json', 'revisions/000001.json'].map(name => ({ name, method: 0 as const, data: chunk, usize: chunk.length })))
+    expect(decodeBundle(zip, { maxUnzipped: 1_000_000 })).toMatchObject({ ok: false, status: 413 })
   })
 
   it('a stored entry whose size and originalSize differ is 422 naming it (C1)', () => {
@@ -184,7 +240,7 @@ describe('board bundles', () => {
     const zip = patchSizes(zipSync(good()), 'manifest.json', { compression: 12 })
     const res = decodeBundle(zip)
     expect(res).toMatchObject({ ok: false, status: 422 })
-    if (!res.ok) expect(res.error).toContain('manifest.json')
+    if (!res.ok) expect(res.error).toBe('manifest.json: unsupported compression')
   })
 
   it('a deflate entry whose header declares 3 MB is refused on the header alone (I2)', () => {
@@ -192,17 +248,50 @@ describe('board bundles', () => {
     const res = decodeBundle(zip)
     expect(res).toMatchObject({ ok: false, status: 413 })
     if (!res.ok) expect(res.error).toContain('board.wirebender.json')
+    // Only the 72-byte manifest before it was inflated.
+    expect(spy.inflated).toBeLessThan(1000)
   })
 
-  it('an entry that inflates past the cap despite its header is 413 (I2)', () => {
-    spy.inject = { 'board.wirebender.json': new Uint8Array(3_000_000) }
-    const res = decodeBundle(zipSync(good()))
-    expect(res).toMatchObject({ ok: false, status: 413 })
+  it('compressed sizes that add up past the zip itself are refused (C2)', () => {
+    const zip = buildZip([{ name: 'manifest.json', method: 8, data: new Uint8Array(10), usize: 10, csize: 1_000_000 }])
+    expect(decodeBundle(zip)).toEqual({ ok: false, status: 422, error: 'entries overlap' })
   })
 
   it('declared sizes that add up past the unzipped cap are 413 (I2)', () => {
     const res = decodeBundle(zipSync(good()), { maxUnzipped: 1000 })
     expect(res).toMatchObject({ ok: false, status: 413 })
+  })
+
+  it('the same entry name twice is 422 naming it (M-a)', () => {
+    const b = board()
+    const rv = json(rev(1, b))
+    const one = deflateSync(rv)
+    const zip = buildZip([
+      ...Object.entries(good()).map(([name, d]) => ({ name, method: 8 as const, data: deflateSync(d), usize: d.length })),
+      { name: 'revisions/000001.json', method: 8, data: one, usize: rv.length },
+      { name: 'revisions/000001.json', method: 8, data: one, usize: rv.length }
+    ])
+    const res = decodeBundle(zip)
+    expect(res).toEqual({ ok: false, status: 422, error: 'revisions/000001.json: duplicate entry' })
+  })
+
+  it('revision and manifest fields are each checked (M-b)', () => {
+    const b = board()
+    const bad = (name: string, o: object) => decodeBundle(zipSync({ ...good(), [name]: json({ ...rev(1, b), ...o }) }))
+    for (const o of [{ author: 1 }, { how: null }, { summary: 5 }, { target: 1.5 }, { target: 0 }, { n: 1.5 }]) {
+      expect(bad('revisions/000001.json', o)).toMatchObject({ ok: false, status: 422 })
+    }
+    expect(bad('revisions/000000.json', { n: 0 })).toMatchObject({ ok: false, status: 422 })
+    expect(decodeBundle(zipSync({ ...good(), 'manifest.json': json({ format: BUNDLE_FORMAT, name: 'x' }) }))).toMatchObject({ ok: false, status: 422 })
+    expect(decodeBundle(zipSync({ ...good(), 'manifest.json': json({ format: BUNDLE_FORMAT, name: 'x', exportedAt: 'soon' }) }))).toMatchObject({ ok: false, status: 422 })
+  })
+
+  it('exactly MAX_BUNDLE_REVISIONS revisions pass the entry count (M-b)', () => {
+    const files: Record<string, Uint8Array> = { ...good() }
+    const empty = new Uint8Array(0)
+    for (let i = 1; i <= MAX_BUNDLE_REVISIONS; i++) files[`revisions/${String(i).padStart(6, '0')}.json`] = empty
+    const res = decodeBundle(zipSync(files, { level: 0 }))
+    expect(res).toMatchObject({ ok: false, status: 422 })
   })
 
   it('a board with another format is 422 "unsupported bundle format" (I1)', () => {
