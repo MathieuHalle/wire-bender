@@ -141,9 +141,29 @@ export const SIGN_IN_TITLE = 'Sign in to edit this board'
 /** Where to go back to after a sign-in started from a board (sessionStorage key). */
 export const RETURN_KEY = 'wirebender:return'
 
-/** `path` if it is a board page of this app (a share link or board id), else null: never another site. */
-export function returnPath(path: string | null): string | null {
-  return path !== null && /^\/b\/[\w-]{1,64}$/.test(path) ? path : null
+/** A stored return path older than this is ignored (a sign-in abandoned, then done later). */
+export const RETURN_TTL_MS = 10 * 60_000
+
+/** What is stored under RETURN_KEY: the path and when it was stored. */
+export function returnEntry(path: string, now = Date.now()): string {
+  return JSON.stringify({ path, at: now })
+}
+
+/**
+ * The path in a stored entry if it is a board page of this app (a share link or board id)
+ * stored less than RETURN_TTL_MS ago, else null: never another site, never a stale one.
+ */
+export function returnPath(stored: string | null, now = Date.now()): string | null {
+  if (stored === null) return null
+  let entry: unknown
+  try {
+    entry = JSON.parse(stored)
+  } catch {
+    return null
+  }
+  const { path, at } = (typeof entry === 'object' && entry !== null ? entry : {}) as { path?: unknown, at?: unknown }
+  if (typeof path !== 'string' || typeof at !== 'number' || at > now || now - at >= RETURN_TTL_MS) return null
+  return /^\/b\/[\w-]{1,64}$/.test(path) ? path : null
 }
 
 /** A control that is off in 3D (or while not live): disabled there with the lock's title, else its own title. */

@@ -5,9 +5,10 @@
 //   that lost its connection is read-only (no edit is queued); edits sent in the instant a
 //   connection drops can be lost, since the fresh doc on reconnect starts from the server's
 //   (ruling R6).
-// - The role (owner, edit, view) is read from GET /api/boards/:key before every connect
-//   that follows a start, a 4403 or `retry`. A view copy never writes: no edits, no undo
-//   or redo (canEdit), so the server never has a reason to close it for writing.
+// - The role (owner, edit, view) is read from GET /api/boards/:key before every connect:
+//   the first, every reconnect (after any close, a 4400 or a 4403 included) and `retry`.
+//   A view copy never writes: no edits, no undo or redo (canEdit), so the server never has
+//   a reason to close it for writing.
 // - Close 4404 (no such board) stops reconnecting. Close 4400 (a rejected update) shows
 //   the reason, then reconnects fresh like any other close. Close 4403 (access changed: a
 //   sharing change, the trash, a deleted account) reconnects fresh once, with the role read

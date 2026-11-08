@@ -9,7 +9,7 @@ import { refusal } from '../../server/utils/access'
 import type { NodeReqLike } from '../../server/utils/peerAddress'
 import { signIn } from '../../server/utils/accounts'
 import { checkMode, configuredProviders, devAppSecret, MODE_ERRORS, resolveSessionSecret, sessionSecret, startupSecretProblem } from '../../server/utils/mode'
-import { resolveSession, whoIs, type SessionData } from '../../server/utils/who'
+import { presenceOf, resolveSession, whoIs, type SessionData } from '../../server/utils/who'
 
 let dir: string
 let db: Db
@@ -31,6 +31,17 @@ function event(remoteAddress: string | undefined, headers: Record<string, string
 const GITHUB = { NUXT_OAUTH_GITHUB_CLIENT_ID: 'id', NUXT_OAUTH_GITHUB_CLIENT_SECRET: 'secret' }
 const GOOGLE = { NUXT_OAUTH_GOOGLE_CLIENT_ID: 'id', NUXT_OAUTH_GOOGLE_CLIENT_SECRET: 'secret' }
 const URL_ = { WIREBENDER_URL: 'https://wire.example.org' }
+
+describe('presenceOf', () => {
+  it('a signed-in user is their account name and avatar, anonymous is Guest, local names itself', () => {
+    const r = signIn(db, 'github', { id: 'gh-ada', name: 'Ada', avatar: 'https://avatars.githubusercontent.com/u/1' })
+    if (!r.ok) throw new Error('sign-in failed')
+    expect(presenceOf(db, { kind: 'user', userId: r.userId, author: 'Ada', isAdmin: false, isPremium: false }))
+      .toEqual({ name: 'Ada', avatar: 'https://avatars.githubusercontent.com/u/1' })
+    expect(presenceOf(db, { kind: 'anonymous' })).toEqual({ name: 'Guest' })
+    expect(presenceOf(db, { kind: 'local', userId: 'local', author: 'Local · This computer' })).toBeUndefined()
+  })
+})
 
 describe('checkMode', () => {
   it('local passes; anything but local or public stops with the exact message', () => {

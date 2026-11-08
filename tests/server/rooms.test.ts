@@ -31,7 +31,7 @@ function fixture(): BoardFile {
 /** An in-memory Yjs doc wired to a room, as a browser tab would be. */
 interface Client { peerId: string, author: string, doc: Y.Doc, awareness: Awareness, room: Room, last: { ok: boolean, reason?: string } | null, left: boolean }
 
-function connect(peerId: string, author = 'Local', authorId: string | null = null): Client {
+function connect(peerId: string, author = 'Local', authorId: string | null = null, presence?: { name: string, avatar?: string }): Client {
   const room = openRoom(db, id)!
   const doc = new Y.Doc()
   const awareness = new Awareness(doc)
@@ -39,7 +39,7 @@ function connect(peerId: string, author = 'Local', authorId: string | null = nul
   room.join(peerId, author, {
     update: u => Y.applyUpdate(doc, u, 'remote'),
     awareness: u => applyAwarenessUpdate(awareness, u, 'remote')
-  }, { role: 'owner', viaLink: false, authorId })
+  }, { role: 'owner', viaLink: false, authorId, presence })
   Y.applyUpdate(doc, Y.encodeStateAsUpdate(room.doc), 'remote')
   doc.on('update', (u: Uint8Array, origin: unknown) => {
     if (origin !== 'remote') client.last = room.receive(peerId, author, u)
@@ -323,6 +323,29 @@ describe('rooms', () => {
     leave(a)
     expect(b.awareness.getStates().has(a.doc.clientID)).toBe(false)
     expect(a.room.receiveAwareness('b', new Uint8Array([9, 9, 9])).ok).toBe(false)
+  })
+
+  it('an anonymous peer that claims a name reaches the others as Guest', () => {
+    const guest = connect('g', 'Visitor', null, { name: 'Guest' })
+    const b = connect('b')
+    guest.awareness.setLocalState({ user: { name: 'Ada', color: '#123456', avatar: 'https://avatars.githubusercontent.com/u/1' } })
+    guest.room.receiveAwareness('g', encodeAwarenessUpdate(guest.awareness, [guest.doc.clientID]))
+    expect(b.awareness.getStates().get(guest.doc.clientID)).toEqual({ user: { name: 'Guest', color: '#123456' } })
+    // Under another client's id too: still the sender's own stamp.
+    const forged = new Awareness(new Y.Doc())
+    forged.setLocalState({ user: { name: 'Ada' } })
+    guest.room.receiveAwareness('g', encodeAwarenessUpdate(forged, [forged.clientID]))
+    expect(b.awareness.getStates().get(forged.clientID)).toEqual({ user: { name: 'Guest' } })
+    // A peer joining later is sent the stamped state.
+    expect(connect('c').awareness.getStates().get(guest.doc.clientID)).toEqual({ user: { name: 'Guest', color: '#123456' } })
+  })
+
+  it('a signed-in peer that claims another name arrives under its account name and avatar', () => {
+    const bob = connect('bob', 'Bob', 'u-bob', { name: 'Bob', avatar: 'https://avatars.githubusercontent.com/u/2' })
+    const b = connect('b')
+    bob.awareness.setLocalState({ user: { name: 'Ada', color: '#654321', avatar: 'https://avatars.githubusercontent.com/u/1' } })
+    bob.room.receiveAwareness('bob', encodeAwarenessUpdate(bob.awareness, [bob.doc.clientID]))
+    expect(b.awareness.getStates().get(bob.doc.clientID)).toEqual({ user: { name: 'Bob', color: '#654321', avatar: 'https://avatars.githubusercontent.com/u/2' } })
   })
 
   it('two authors\' interleaved edits commit under their own names', () => {

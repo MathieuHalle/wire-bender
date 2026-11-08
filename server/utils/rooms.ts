@@ -24,8 +24,14 @@ export type Received = { ok: true } | { ok: false, reason: string, code?: number
 /** How a peer reached the board: its role, and whether by the share link (Task 5 closes those on a sharing change). */
 export interface PeerAccess { role: Role, viaLink: boolean }
 
-/** How a peer joins: its access, and the account its edits are by. */
-export interface JoinOptions extends PeerAccess { authorId?: string | null }
+/** Who a peer is in presence, set by the server: its account's name and avatar, or `Guest`. */
+export interface Presence { name: string, avatar?: string }
+
+/**
+ * How a peer joins: its access, the account its edits are by, and its presence. Without
+ * `presence` (local mode) the peer names itself (`Local · <device>`).
+ */
+export interface JoinOptions extends PeerAccess { authorId?: string | null, presence?: Presence }
 
 /** Access changed, or never allowed this: a view peer tried to edit. */
 export const CLOSE_ACCESS = 4403
@@ -163,7 +169,7 @@ export class Room {
   readonly awareness = new Awareness(this.doc)
   private board: BoardFile
   private head: number
-  private readonly peers = new Map<string, { author: string, authorId: string | null, link: PeerLink, clients: Set<number>, access: PeerAccess }>()
+  private readonly peers = new Map<string, { author: string, authorId: string | null, link: PeerLink, clients: Set<number>, access: PeerAccess, presence?: Presence }>()
   private readonly groups = new Map<string, Group>()
   private closed = false
 
@@ -181,6 +187,9 @@ export class Room {
       if (from) {
         for (const c of added) from.clients.add(c)
         for (const c of removed) from.clients.delete(c)
+        // A stamped peer's name and avatar are the server's, whatever it sent and under
+        // whichever client id (a forged one shows the sender's own name).
+        if (from.presence) for (const c of [...added, ...updated]) this.stamp(c, from.presence)
       }
       const changed = [...added, ...updated, ...removed]
       const message = encodeAwarenessUpdate(this.awareness, changed)
@@ -188,13 +197,23 @@ export class Room {
     })
   }
 
+  /** Overwrite the name and avatar in client `c`'s presence with `presence`. */
+  private stamp(c: number, presence: Presence): void {
+    const state = this.awareness.states.get(c)
+    if (!state) return
+    const sent = state.user
+    const { avatar: _avatar, ...rest } = typeof sent === 'object' && sent !== null ? sent as Record<string, unknown> : {}
+    const user = presence.avatar ? { ...rest, name: presence.name, avatar: presence.avatar } : { ...rest, name: presence.name }
+    this.awareness.states.set(c, { ...state, user })
+  }
+
   /**
    * Add a peer. It is sent the presence of everyone already here; the doc itself comes
    * through the sync protocol. A peer joined without `access` is the owner by board id.
    */
   join(peerId: string, author: string, link: PeerLink, options: JoinOptions = { role: 'owner', viaLink: false }): void {
-    const { authorId = null, role, viaLink } = options
-    this.peers.set(peerId, { author, authorId, link, clients: new Set(), access: { role, viaLink } })
+    const { authorId = null, role, viaLink, presence } = options
+    this.peers.set(peerId, { author, authorId, link, clients: new Set(), access: { role, viaLink }, presence })
     const present = [...this.awareness.getStates().keys()]
     if (present.length > 0) safely(() => link.awareness(encodeAwarenessUpdate(this.awareness, present)))
   }

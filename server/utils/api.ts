@@ -252,7 +252,10 @@ export function thumbnailBoard(db: Db, req: BoardRequest): ApiResult {
   return withAccess(db, req, 'view', (a) => {
     const stored = getBoard(db, a.boardId)
     if (!stored) return notFound()
-    return ok(boardOverviewSvg(stored.board, 'top', { labelSize: 0 }), {
+    // The export leaves out the namespace (it is inlined in HTML, and the bench sheet reads its
+    // `<svg width=` prefix); an <img> renders nothing without it.
+    const svg = boardOverviewSvg(stored.board, 'top', { title: false, labelSize: 0 }).replace(/^<svg /, '<svg xmlns="http://www.w3.org/2000/svg" ')
+    return ok(svg, {
       'content-type': 'image/svg+xml; charset=utf-8',
       'cache-control': 'private, max-age=60',
       'x-content-type-options': 'nosniff',

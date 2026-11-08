@@ -67,8 +67,9 @@ async function loadList() {
     if (which !== tab.value) return
     // Signed out meanwhile (another tab): show the intro.
     if ((e as { statusCode?: number }).statusCode === 401 && isPublic.value) {
-      await loadMe(true)
-      return
+      const now = await loadMe(true)
+      // Still signed in (or /api/me unreachable): the list really failed; never "Loading…" for ever.
+      if ((now && !now.user) || which !== tab.value) return
     }
     listStatus.value = 'error'
   }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { RETURN_KEY } from '~/utils/boardView'
+import { RETURN_KEY, returnEntry } from '~/utils/boardView'
 
 // One button per sign-in provider the server has configured (GET /api/me `providers`).
 // Each is a full page load: the provider's page, then back to /auth/<provider>.
@@ -17,7 +17,7 @@ const props = withDefaults(defineProps<{
 function remember() {
   if (!props.returnTo) return
   try {
-    sessionStorage.setItem(RETURN_KEY, props.returnTo)
+    sessionStorage.setItem(RETURN_KEY, returnEntry(props.returnTo))
   } catch {
     // No storage (a private window): the user lands on the board list.
   }

@@ -4,7 +4,7 @@ import { useDb } from '../../../db'
 import { onUnpair, refusal, trust, type TrustSource } from '../../../utils/access'
 import { access, recordVisit, type Access } from '../../../utils/boardAccess'
 import { checkMode } from '../../../utils/mode'
-import { authorIdOf, unlockedOf, whoIs, type Who } from '../../../utils/who'
+import { authorIdOf, presenceOf, unlockedOf, whoIs, type Who } from '../../../utils/who'
 import { MESSAGE_AWARENESS, MESSAGE_SYNC, handleMessage, message } from '../../../utils/liveMessage'
 import { CLOSE_ACCESS, CLOSE_NO_BOARD, openRoom, type Received, type Room } from '../../../utils/rooms'
 import { wsBoardId } from '../../../utils/wsBoardId'
@@ -123,7 +123,7 @@ function join(peer: WsPeer): void {
       joined.delete(peer.id)
       peer.close(code, reason)
     }
-  }, { role: a.role, viaLink: a.viaLink, authorId: authorIdOf(w.who) })
+  }, { role: a.role, viaLink: a.viaLink, authorId: authorIdOf(w.who), presence: presenceOf(useDb(), w.who) })
   recordVisit(useDb(), w.who, a, a.key!)
   peer.send(message((e) => {
     encoding.writeVarUint(e, MESSAGE_SYNC)

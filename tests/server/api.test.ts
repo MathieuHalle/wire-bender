@@ -460,6 +460,10 @@ describe('access by key and role', () => {
       expect(r.status).toBe(200)
       expect(r.headers).toMatchObject({ 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'private, max-age=60' })
       expect(r.body as string).toMatch(/^<svg[\s\S]*<\/svg>\s*$/)
+      // An <img> renders an SVG only with its namespace.
+      expect((r.body as string).startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true)
+      // No in-drawing title: it can't be read at thumbnail size.
+      expect(r.body as string).not.toContain(': TOP — parts side')
       return r.body as string
     }
     const byOwner = svg(api.thumbnailBoard(db, { key: b.id, who: b.owner }))

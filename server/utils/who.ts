@@ -85,6 +85,19 @@ export async function resolveSession(source: TrustSource, deps: WhoDeps = {}): P
 /** The account a revision by `who` is stored under: the user's id, 'local' for the local user, none for anonymous. */
 export const authorIdOf = (who: Who): string | null => who.kind === 'anonymous' ? null : who.userId
 
+/**
+ * Who `who` is in a board's presence, stamped by the server over whatever the client says:
+ * a signed-in account's name and avatar (read fresh), `Guest` for anonymous. The local user
+ * gets none: each device names itself (`Local · <device>`).
+ */
+export function presenceOf(db: Db, who: Who): { name: string, avatar?: string } | undefined {
+  if (who.kind === 'local') return undefined
+  if (who.kind === 'anonymous') return { name: 'Guest' }
+  const row = db.select({ name: users.name, avatar: users.avatar }).from(users).where(eq(users.id, who.userId)).get()
+  const name = row?.name ?? who.author
+  return row?.avatar ? { name, avatar: row.avatar } : { name }
+}
+
 /** Who a request (h3 event), WebSocket upgrade request or WebSocket peer is. */
 export async function whoIs(source: TrustSource, deps: WhoDeps = {}): Promise<Who> {
   return (await resolveSession(source, deps)).who
