@@ -21,10 +21,9 @@ const ENLARGED_HEAD_MM = 22
 const CAPTION_MM = 8
 /** Printed size of the part refs and trail / wire ids on the enlarged page, mm: small, so the pads stay visible. */
 const ENLARGED_LABEL_MM = 1.5
-/** Printable area of a page, mm, portrait or turned to landscape. */
-export function enlargedArea(paper: keyof typeof PRINTABLE_MM, landscape: boolean): { w: number, h: number } {
-  const [w, h] = [PRINTABLE_MM[paper], PRINTABLE_H_MM[paper]]
-  return landscape ? { w: h, h: w } : { w, h }
+/** Printable area of a portrait page, mm. No landscape: CSS named pages are ignored by Safari and Firefox. */
+export function enlargedArea(paper: keyof typeof PRINTABLE_MM): { w: number, h: number } {
+  return { w: PRINTABLE_MM[paper], h: PRINTABLE_H_MM[paper] }
 }
 /** Card border plus padding on both sides, mm: what a 1:1 drawing loses inside a card. */
 const CARD_INSET_MM = 10
@@ -84,16 +83,14 @@ function enlarged(board: BoardFile, paper: keyof typeof PRINTABLE_MM): string {
   const top = boardOverviewSvg(board, 'top', { title: false })
   const bottom = boardOverviewSvg(board, 'bottom', { title: false })
   const [w1, h1, w2, h2] = [svgWidthMm(top), svgHeightMm(top), svgWidthMm(bottom), svgHeightMm(bottom)]
-  // Every layout this page can take: side by side or stacked, on a portrait or a landscape page.
-  const layouts = [false, true].flatMap((landscape) => {
-    const { w: W, h: Hp } = enlargedArea(paper, landscape)
-    const H = Hp - ENLARGED_HEAD_MM
-    return [
-      { landscape, pair: true, k: Math.min((W - OVERVIEW_GAP_MM) / (w1 + w2), (H - CAPTION_MM) / Math.max(h1, h2)) },
-      { landscape, pair: false, k: Math.min(W / Math.max(w1, w2), (H - 2 * CAPTION_MM - OVERVIEW_GAP_MM) / (h1 + h2)) }
-    ]
-  })
-  // The biggest drawing wins; on a tie, portrait (like the other pages) and side by side.
+  // Both layouts this page can take, side by side or stacked, on the portrait page.
+  const { w: W, h: Hp } = enlargedArea(paper)
+  const H = Hp - ENLARGED_HEAD_MM
+  const layouts = [
+    { pair: true, k: Math.min((W - OVERVIEW_GAP_MM) / (w1 + w2), (H - CAPTION_MM) / Math.max(h1, h2)) },
+    { pair: false, k: Math.min(W / Math.max(w1, w2), (H - 2 * CAPTION_MM - OVERVIEW_GAP_MM) / (h1 + h2)) }
+  ]
+  // The biggest drawing wins; on a tie, side by side.
   const best = layouts.reduce((a, b) => (b.k > a.k + 1e-9 ? b : a))
   const k = Math.floor(best.k * 100) / 100
   // Redrawn with small labels: they only shrink the drawing a little, so it still fits at k.
@@ -101,7 +98,7 @@ function enlarged(board: BoardFile, paper: keyof typeof PRINTABLE_MM): string {
   const small = (side: Side) => boardOverviewSvg(board, side, { title: false, labelSize })
   const fig = (svg: string, caption: string) =>
     `<figure><figcaption>${caption}</figcaption><div class="drawing">${scaleSvg(svg, k)}</div></figure>`
-  return `<section id="enlarged" class="page enlarged${best.landscape ? ' landscape' : ''}">
+  return `<section id="enlarged" class="page enlarged">
 <h2>Both sides, enlarged</h2>
 <p class="fitted-note"><strong>Enlarged ${Math.round(k * 100)}%, not to scale: measure on the 1:1 overview or the wire cards.</strong></p>
 <div class="${best.pair ? 'pair' : 'stack'}">
@@ -345,8 +342,6 @@ footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); 
   .fold .sketch { grid-column: 1 / -1; }
 }
 @page { size: ${paper === 'a4' ? 'A4' : 'letter'}; margin: 12mm; }
-@page landscape { size: ${paper === 'a4' ? 'A4' : 'letter'} landscape; margin: 12mm; }
-.enlarged.landscape { page: landscape; }
 @media print {
   :root { --ink: #000000; --muted: #333333; --bg: #ffffff; --line: #999999; --card: #ffffff; --err-bg: #ffffff; --err: #000000; }
   body { max-width: none; padding: 0; font-size: 10pt; color: #000; background: #fff; }
@@ -356,6 +351,8 @@ footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--line); 
   .page.section-first:not(.enlarged) { break-before: auto; page-break-before: auto; }
   /* belt and braces: nothing may push the page wider, or the browser shrinks every page */
   .drawing, .scale, .strip, .sketch, section, figure { overflow: hidden; }
+  /* safety net if a margin differs: shrink to the page rather than be cut off (no effect when it fits) */
+  .enlarged .drawing svg { max-width: 100%; height: auto; }
   .errors { border-width: 2pt; }
   .tick input { width: 4mm; height: 4mm; border: 0.3mm solid #000; background: #fff; box-shadow: none; }
   tr, h2, h3, h4, figure { break-inside: avoid; page-break-inside: avoid; }

@@ -203,8 +203,7 @@ describe('benchHtml', () => {
         })
         const big = sizes(sectionOf(out, 'enlarged'))
         expect(big).toHaveLength(2)
-        const landscape = sectionOf(out, 'enlarged').startsWith('<section id="enlarged" class="page enlarged landscape"')
-        const area = enlargedArea(paper, landscape)
+        const area = enlargedArea(paper)
         big.forEach((s, i) => {
           expect(s.w).toBeGreaterThan(one[i]!.w * 1.5)
           expect(s.w / s.h).toBeCloseTo(one[i]!.w / one[i]!.h, 2)
@@ -218,17 +217,39 @@ describe('benchHtml', () => {
       }
     })
 
-    it('channel board 2 is drawn side by side on a landscape page, its own page size', () => {
-      const sec = sectionOf(html, 'enlarged')
-      expect(sec).toContain('class="pair"')
-      expect(sec).toContain('class="page enlarged landscape"')
-      expect(html).toMatch(/@page landscape \{\s*size:\s*letter landscape;\s*margin:\s*12mm/)
-      expect(html).toMatch(/\.enlarged\.landscape \{ page: landscape; \}/)
+    it('never relies on landscape or named pages (Safari and Firefox ignore them)', () => {
+      expect(html).not.toMatch(/landscape/)
+      expect(html).not.toMatch(/\bpage:\s*\w/)
+      expect(html).not.toMatch(/@page\s+\w/)
     })
 
-    it('enlargedArea turns the printable area for landscape', () => {
-      expect(enlargedArea('letter', false)).toEqual({ w: 215.9 - 24, h: 279.4 - 24 })
-      expect(enlargedArea('letter', true)).toEqual({ w: 279.4 - 24, h: 215.9 - 24 })
+    it('enlargedArea is the portrait printable area', () => {
+      expect(enlargedArea('letter')).toEqual({ w: 215.9 - 24, h: 279.4 - 24 })
+      expect(enlargedArea('a4')).toEqual({ w: 210 - 24, h: 297 - 24 })
+    })
+
+    it('the layout fits the portrait printable area, for channel board 2 and a wide board', () => {
+      const wide = mk({ board: { cols: 60, rows: 20 }, nets: { N: {} }, parts: [axial('R1', 'A1', 'A4', 'N')] })
+      for (const base of [board2(), wide]) {
+        for (const paper of ['letter', 'a4'] as const) {
+          const sec = sectionOf(benchHtml({ ...base, bench: { ...base.bench, paper } }, { date: DATE }), 'enlarged')
+          const area = enlargedArea(paper)
+          const [t, b] = sizes(sec)
+          expect(t && b).toBeTruthy()
+          if (sec.includes('class="pair"')) {
+            expect(t!.w + b!.w + 6).toBeLessThanOrEqual(area.w + 0.01)
+            expect(Math.max(t!.h, b!.h)).toBeLessThanOrEqual(area.h)
+          } else {
+            expect(Math.max(t!.w, b!.w)).toBeLessThanOrEqual(area.w)
+            expect(t!.h + b!.h).toBeLessThanOrEqual(area.h)
+          }
+        }
+      }
+    })
+
+    it('print keeps the drawings inside the page width, without distorting them', () => {
+      const print = html.slice(html.indexOf('@media print'))
+      expect(print).toMatch(/\.enlarged \.drawing svg\s*\{\s*max-width:\s*100%;\s*height:\s*auto/)
     })
 
     it('labels on the board print really small, so they do not hide the pads', () => {
