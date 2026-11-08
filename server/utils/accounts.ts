@@ -324,9 +324,20 @@ export const ONLY_ADMIN = 'You are the only admin. Make another account admin fi
  * and not suspended, so one who can still sign in and run the server.
  */
 export function isOnlyAdmin(db: Pick<Db, 'select'>, userId: string): boolean {
-  const active = db.select({ id: users.id }).from(users)
+  const active = activeAdmins(db)
+  return active.length === 1 && active[0] === userId
+}
+
+/** The ids of the active (not deleted, not suspended) admins, the local user aside. */
+function activeAdmins(db: Pick<Db, 'select'>): string[] {
+  return db.select({ id: users.id }).from(users)
     .where(and(eq(users.isAdmin, 1), ne(users.id, 'local'), isNull(users.deletedAt), isNull(users.suspendedAt))).all()
-  return active.length === 1 && active[0]!.id === userId
+    .map(u => u.id)
+}
+
+/** Thrown inside the admin PATCH transaction to roll it back with this answer. */
+class Refused {
+  constructor(readonly result: PatchAccountResult) {}
 }
 
 /**
@@ -353,16 +364,24 @@ export function patchAccount(db: Db, adminId: string, id: string, body: unknown,
   const admin = json.admin as boolean | undefined
   if (suspended === true && id === adminId) return { status: 400, body: { error: 'You can\'t suspend your own account.' } }
 
-  const refused = db.transaction((tx) => {
-    // Checked in the transaction: two admins dropping their flags at once leave one.
-    if (admin === false && id === adminId && isOnlyAdmin(tx, id)) return true
-    if (admin !== undefined) tx.update(users).set({ isAdmin: admin ? 1 : 0 }).where(eq(users.id, id)).run()
-    if (premium !== undefined) tx.update(users).set({ isPremium: premium ? 1 : 0 }).where(eq(users.id, id)).run()
-    if (suspended === true) tx.update(users).set({ suspendedAt: now }).where(and(eq(users.id, id), isNull(users.suspendedAt))).run()
-    if (suspended === false) tx.update(users).set({ suspendedAt: null }).where(eq(users.id, id)).run()
-    return false
-  })
-  if (refused) return { status: 409, body: { error: ONLY_ADMIN } }
+  // Checked again in the transaction: the route found an admin before it read the body, and
+  // another admin's PATCH may have demoted or suspended this one since. Two admins demoting
+  // or suspending each other at once leave one (R13): the change that would leave none is
+  // rolled back with 409; one by an admin who is no longer active, with the plain 404.
+  try {
+    db.transaction((tx) => {
+      const callerActive = activeAdmins(tx).includes(adminId)
+      if (admin !== undefined) tx.update(users).set({ isAdmin: admin ? 1 : 0 }).where(eq(users.id, id)).run()
+      if (premium !== undefined) tx.update(users).set({ isPremium: premium ? 1 : 0 }).where(eq(users.id, id)).run()
+      if (suspended === true) tx.update(users).set({ suspendedAt: now }).where(and(eq(users.id, id), isNull(users.suspendedAt))).run()
+      if (suspended === false) tx.update(users).set({ suspendedAt: null }).where(eq(users.id, id)).run()
+      if (activeAdmins(tx).length === 0) throw new Refused({ status: 409, body: { error: ONLY_ADMIN } })
+      if (!callerActive) throw new Refused({ status: 404, body: { error: 'not found' } })
+    })
+  } catch (e) {
+    if (e instanceof Refused) return e.result
+    throw e
+  }
   // R10: its own sockets in every room, and every socket on its boards (their links are 404
   // now). Unsuspending only clears the column: the links answer again from the next request.
   if (suspended === true) {

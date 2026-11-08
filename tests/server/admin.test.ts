@@ -254,6 +254,36 @@ describe('admin routes', () => {
     expect(await patchAs(admin, admin, { admin: false }).result).toMatchObject({ isAdmin: false })
   })
 
+  it('two admins demoting or suspending each other at once leave one admin', async () => {
+    const ONLY = 'You are the only admin. Make another account admin first.'
+    for (const change of [{ admin: false }, { suspended: true }]) {
+      const a = account(`A${JSON.stringify(change)}`, 1, true)
+      const b = account(`B${JSON.stringify(change)}`, 2, true)
+      // Both requests pass the route's admin check before either body is read.
+      const first = patchAs(a, b, change)
+      const second = patchAs(b, a, change)
+      expect(await first.result, JSON.stringify(change)).toMatchObject({ id: b })
+      expect(await second.result, JSON.stringify(change)).toEqual({ error: ONLY })
+      expect(second.e.status).toBe(409)
+      expect(row(a)).toMatchObject({ isAdmin: 1, suspendedAt: null })
+      // Tidy up for the next round: b is admin again only if a makes it so.
+      useDb().update(users).set({ isAdmin: 0 }).where(eq(users.id, a)).run()
+    }
+  })
+
+  it('an admin demoted meanwhile can no longer change anyone', async () => {
+    const a = account('A', 1, true)
+    const b = account('B', 2, true)
+    const c = account('C', 3, true)
+    // Both pass the route's admin check; a's demotion of b commits first.
+    const demote = patchAs(a, b, { admin: false })
+    const late = patchAs(b, c, { premium: false })
+    expect(await demote.result).toMatchObject({ id: b, isAdmin: false })
+    expect(await late.result).toEqual({ error: 'not found' })
+    expect(late.e.status).toBe(404)
+    expect(row(c).isPremium).toBe(1)
+  })
+
   it('DELETE /api/me from the only admin is 409 until another account is admin (R13)', async () => {
     const del = (await import('../../server/api/me.delete')).default as unknown as Handler
     const admin = account('Admin', 1, true)
