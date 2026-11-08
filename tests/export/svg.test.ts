@@ -208,6 +208,54 @@ describe('boardOverviewSvg', () => {
   })
 })
 
+describe('boardOverviewSvg ghost wires', () => {
+  const wire = (id: string, kind: 'laid' | 'flying', side: 'top' | 'bottom', points: string[]) =>
+    ({ id, kind, side, points, bareSegments: [], joints: [] })
+  const ghosts = (svg: string) => [...svg.matchAll(/<path ([^>]*data-ghost="([^"]+)"[^>]*)\/>/g)].map(m => ({ a: m[1]!, id: m[2]! }))
+  const d = (a: string) => /\bd="([^"]+)"/.exec(a)![1]!
+  // a bottom trail along the same holes as the top wire W1: the bottom's own geometry
+  const b = mk({
+    board: { cols: 20, rows: 10, type: 'two-sided' },
+    trails: [trail('T9', ['A2', 'A6', 'D6'], 'bottom')],
+    wires: [
+      wire('W1', 'laid', 'top', ['A2', 'A6', 'D6']),
+      wire('W2', 'flying', 'top', ['B2', 'C3', 'F9']),
+      wire('W3', 'laid', 'bottom', ['H1', 'H4'])
+    ]
+  })
+
+  it('a top-side wire is dashed in the bottom overview, mirrored like the bottom\'s own copper', () => {
+    const svg = boardOverviewSvg(b, 'bottom')
+    const g = ghosts(svg)
+    expect(g.map(x => x.id)).toEqual(['W1', 'W2'])
+    const w1 = g[0]!.a
+    expect(w1).toContain('stroke-dasharray="0.7 0.45"')
+    expect(w1).toContain('fill="none"')
+    expect(w1).toContain('stroke-opacity="0.6"')
+    const trailD = d(/<path ([^>]*data-trail="T9"[^>]*)\/>/.exec(svg)![1]!)
+    expect(d(w1)).toBe(trailD)
+    // the flying wire: one straight piece between its ends
+    expect(d(g[1]!.a).match(/[ML]/g)).toEqual(['M', 'L'])
+    // the top overview draws W1 as a wire, not a ghost, and ghosts the bottom W3
+    expect(ghosts(boardOverviewSvg(b, 'top')).map(x => x.id)).toEqual(['W3'])
+  })
+
+  it('ghosts are drawn under the side\'s own copper and wires', () => {
+    const svg = boardOverviewSvg(b, 'bottom')
+    const lastGhost = svg.lastIndexOf('data-ghost=')
+    expect(lastGhost).toBeGreaterThan(-1)
+    expect(lastGhost).toBeLessThan(svg.indexOf('data-trail='))
+    expect(lastGhost).toBeLessThan(svg.indexOf('data-wire='))
+  })
+
+  it('no wires on the other side: no ghost elements', () => {
+    const one = mk({ board: { cols: 20, rows: 10 }, wires: [wire('W3', 'laid', 'bottom', ['H1', 'H4'])] })
+    expect(boardOverviewSvg(one, 'bottom')).not.toContain('data-ghost')
+    expect(boardOverviewSvg(one, 'top')).toContain('data-ghost="W3"')
+    expect(boardOverviewSvg(mk({ board: { cols: 20, rows: 10 } }), 'top')).not.toContain('data-ghost')
+  })
+})
+
 describe('stripBarSvg', () => {
   const w5: WireCard = {
     id: 'W5', kind: 'flying', side: 'bottom', net: 'GND', netClass: 'GND', color: null, pitchMm: 2.54,

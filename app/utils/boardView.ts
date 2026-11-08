@@ -1,7 +1,8 @@
 // View helpers for the board drawing: geometry (mm, optionally mirrored), net colours,
 // and lit sets for a highlighted group. Pure functions over core/ results (which group
 // sits at a hole is core's `groupAtHole`).
-import { holeKey, holeMm, type Hole } from '~core/holes'
+import { holeKey, type Hole } from '~core/holes'
+import { sideMap } from '~core/sideView'
 import type { BoardFile, Side } from '~core/schema'
 import type { Conductor, Connectivity } from '~core/connectivity'
 import type { PlacedPart } from '~core/footprints'
@@ -26,20 +27,12 @@ export interface Geo {
 }
 
 export function makeGeo(board: BoardFile, mirrored: boolean): Geo {
-  const pitch = board.board.pitchMm
-  const span = (board.board.cols - 1) * pitch
-  const x = (v: number) => (mirrored ? span - v : v)
+  const m = sideMap(board, mirrored)
+  const span = m.span
   return {
-    pitch,
+    ...m,
     cols: board.board.cols,
     rows: board.board.rows,
-    span,
-    mirrored,
-    x,
-    pt(h) {
-      const m = holeMm(h, pitch)
-      return { x: x(m.x), y: m.y }
-    },
     rect(r) {
       return { x: mirrored ? span - r.x - r.w : r.x, y: r.y, w: r.w, h: r.h }
     }

@@ -8,6 +8,7 @@ import { wireCards, type WireCard } from '../core/bench/cards'
 import type { LegFoldRow } from '../core/bench/sheet'
 import type { BoardFile, Side } from '../core/schema'
 import { safeColor } from '../core/color'
+import { ghostWires, sideMap } from '../core/sideView'
 
 export { safeColor }
 
@@ -166,24 +167,18 @@ export function scaleBarSvg(): string {
 
 /** Board mm -> drawing mm for one side (bottom mirrored as seen from below). */
 function sideGeo(board: BoardFile, side: Side) {
-  const pitch = board.board.pitchMm
-  const span = (board.board.cols - 1) * pitch
-  const mirrored = side === 'bottom'
-  const x = (v: number) => (mirrored ? span - v : v)
+  const m = sideMap(board, side === 'bottom')
+  const { span, mirrored } = m
   return {
-    pitch,
-    span,
-    mirrored,
-    x,
-    pt(h: Hole): Pt {
-      const m = holeMm(h, pitch)
-      return { x: x(m.x), y: m.y }
-    },
+    ...m,
     rect(r: { x: number, y: number, w: number, h: number }) {
       return { x: mirrored ? span - r.x - r.w : r.x, y: r.y, w: r.w, h: r.h }
     }
   }
 }
+
+/** A wire of the other side: thin, dashed, muted ink, no fill (as the bottom's part outlines). */
+const GHOST = `fill="none" stroke="${INK}" stroke-opacity="0.6" stroke-width="0.25" stroke-dasharray="0.7 0.45" stroke-linecap="round" stroke-linejoin="round"`
 
 const rowLetters = (row: number) => holeName({ col: 1, row }).replace(/\d+$/, '')
 
@@ -288,6 +283,10 @@ export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: b
     else s.rect(r.x, r.y, r.w, r.h, `rx="0.4" ${bodyAttrs}`)
     if (side === 'top') partMarks(s, pp, g)
   }
+  // the other side's wires, ghosted like the bottom's part outlines, under the leads and this side's copper
+  for (const gw of ghostWires(board, side, g.mirrored))
+    s.poly(gw.points, `data-ghost="${esc(gw.id)}" ${GHOST}`)
+
   // leads: pins on top, lead ends on the solder side
   for (const pp of placed)
     for (const pin of pp.pins) s.circle(g.pt(pin.hole), 0.45, `fill="#4b555b"`)
