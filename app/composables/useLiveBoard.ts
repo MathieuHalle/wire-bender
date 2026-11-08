@@ -424,7 +424,7 @@ async function fetchRole(key: string, unpaired: () => void): Promise<RoleRead> {
  * the signed-in name and avatar in public mode, else `Guest`.
  */
 export function useLiveBoard(id: Ref<string>): LiveBoard {
-  const toast = useToast()
+  const warn = useWarning()
   const { load } = useMe()
   const unpaired = () => window.location.assign('/pair')
   const live = createLiveBoard(id, {
@@ -433,7 +433,7 @@ export function useLiveBoard(id: Ref<string>): LiveBoard {
       // No BroadcastChannel: every tab syncs through the server, which validates each edit.
       return new WebsocketProvider(url, boardId, new Y.Doc(), { disableBc: true }) as unknown as LiveProvider
     },
-    notify: m => toast.add({ title: m, color: 'warning', icon: 'i-lucide-ban' }),
+    notify: warn,
     unpaired,
     readRole: key => fetchRole(key, unpaired)
   })

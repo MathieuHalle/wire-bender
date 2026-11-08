@@ -144,14 +144,14 @@ export function createTools(deps: ToolDeps) {
 /** The tools for the page, on its live board; keys are listened to while mounted. */
 export function useTools(live: Pick<LiveBoard, 'board' | 'apply' | 'undo' | 'redo'>, opts: { locked?: () => boolean } = {}) {
   const { board, apply, undo, redo } = live
-  const toast = useToast()
+  const warn = useWarning()
   const tools = createTools({
     board,
     apply,
     undo,
     redo,
     locked: opts.locked,
-    notify: reason => toast.add({ title: reason, color: 'warning', icon: 'i-lucide-ban' })
+    notify: warn
   })
   onMounted(() => window.addEventListener('keydown', tools.onKeydown))
   onBeforeUnmount(() => window.removeEventListener('keydown', tools.onKeydown))
