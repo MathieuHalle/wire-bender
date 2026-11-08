@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -189,7 +190,7 @@ describe('benchHtml', () => {
       expect(text(sec)).toContain('not to scale')
       expect(sec).not.toContain('aria-label="scale bar, 10 mm"')
       expect(text(sec)).toContain('Top: parts side')
-      expect(text(sec)).toContain('Bottom: solder side, seen from below (mirrored)')
+      expect(text(sec)).toContain('Bottom: solder side, seen from below (mirrored left↔right)')
     })
 
     it('draws both sides bigger than 1:1, keeping their shape, and fits the printable page', () => {
@@ -434,5 +435,40 @@ describe('benchHtml', () => {
     })
     expect(benchHtml(b, { date: DATE })).toContain('2 nets left out of this list: they are shorted (see the errors at the top).')
     expect(benchHtml(small(), { date: DATE })).not.toContain('left out of this list')
+  })
+})
+
+describe('benchHtml bottom flip', () => {
+  const sectionOf = (out: string, id: string) => {
+    const s = out.slice(out.indexOf(`<section id="${id}"`))
+    return s.slice(0, s.indexOf('</section>'))
+  }
+  const LR = 'Bottom: solder side, seen from below (mirrored left↔right)'
+  const TB = 'Bottom: solder side, seen from below (mirrored top↔bottom)'
+
+  it('the default is left-right: the same sheet as flip lr, as before the flip choice but for the caption', () => {
+    const b = board2()
+    const out = benchHtml(b, { hash: 'abc', date: '2026-11-07' })
+    expect(out).toBe(benchHtml(b, { hash: 'abc', date: '2026-11-07', flip: 'lr' }))
+    // byte for byte the sheet from before the flip choice, its caption '(mirrored)' now saying which flip
+    expect(createHash('sha256').update(out).digest('hex')).toBe('77610ee00c24699cf9065673512891c7d0a827d7bd6879a549200dde37d37663')
+    for (const id of ['overview', 'enlarged']) {
+      expect(text(sectionOf(out, id)), id).toContain(LR)
+      expect(text(sectionOf(out, id)), id).not.toContain('top↔bottom')
+    }
+  })
+
+  it('tb: the 1:1 overview and the enlarged page draw the bottom flipped top-bottom and say so', () => {
+    const b = board2()
+    const out = benchHtml(b, { date: DATE, flip: 'tb' })
+    for (const id of ['overview', 'enlarged']) {
+      const sec = sectionOf(out, id)
+      expect(text(sec), id).toContain(TB)
+      expect(text(sec), id).not.toContain('left↔right')
+    }
+    expect(sectionOf(out, 'overview')).toContain(boardOverviewSvg(b, 'bottom', { flip: 'tb' }))
+    expect(sectionOf(out, 'overview')).not.toContain(boardOverviewSvg(b, 'bottom'))
+    // the top drawing is the same either way
+    expect(sectionOf(out, 'overview')).toContain(boardOverviewSvg(b, 'top'))
   })
 })

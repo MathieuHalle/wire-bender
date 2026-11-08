@@ -1,7 +1,8 @@
 // View helpers for the board drawing: geometry (mm, optionally mirrored), net colours,
 // and lit sets for a highlighted group. Pure functions over core/ results (which group
 // sits at a hole is core's `groupAtHole`).
-import { holeKey, holeMm, type Hole } from '~core/holes'
+import { holeKey, type Hole } from '~core/holes'
+import { sideMap, type Mirror, type SideMap } from '~core/sideView'
 import type { BoardFile, Side } from '~core/schema'
 import type { Conductor, Connectivity } from '~core/connectivity'
 import type { PlacedPart } from '~core/footprints'
@@ -12,38 +13,17 @@ export type Tool = 'navigate' | 'inspect' | 'pencil' | 'erase' | 'joint'
 export type View = 'both' | Side | '3d'
 export type Group = Connectivity['groups'][number]
 
-/** Board mm -> drawing mm. Mirrored flips x so the bottom reads as seen from below. */
-export interface Geo {
-  pitch: number
+/**
+ * Board mm -> drawing mm (core's `sideMap`), with the board's size. Mirrored `lr` flips x,
+ * `tb` flips y, so the bottom reads as seen from below; `hole` maps back.
+ */
+export interface Geo extends SideMap {
   cols: number
   rows: number
-  /** x of the last column centre. */
-  span: number
-  mirrored: boolean
-  x(x: number): number
-  pt(h: Hole): { x: number, y: number }
-  rect(r: { x: number, y: number, w: number, h: number }): { x: number, y: number, w: number, h: number }
 }
 
-export function makeGeo(board: BoardFile, mirrored: boolean): Geo {
-  const pitch = board.board.pitchMm
-  const span = (board.board.cols - 1) * pitch
-  const x = (v: number) => (mirrored ? span - v : v)
-  return {
-    pitch,
-    cols: board.board.cols,
-    rows: board.board.rows,
-    span,
-    mirrored,
-    x,
-    pt(h) {
-      const m = holeMm(h, pitch)
-      return { x: x(m.x), y: m.y }
-    },
-    rect(r) {
-      return { x: mirrored ? span - r.x - r.w : r.x, y: r.y, w: r.w, h: r.h }
-    }
-  }
+export function makeGeo(board: BoardFile, mirror: Mirror): Geo {
+  return { ...sideMap(board, mirror), cols: board.board.cols, rows: board.board.rows }
 }
 
 export const FALLBACK_NET = '#8a7a55'
@@ -93,7 +73,7 @@ export const SIDE_MARGIN = 3
 /**
  * A side's drawing area in drawing mm: the board outline (half a pitch past the outer
  * holes), everything that overhangs it, and SIDE_MARGIN for the labels. Its size is the
- * same mirrored or not; only its x moves.
+ * same mirrored or not; only its x (lr) or y (tb) moves.
  */
 export function sideExtent(geo: Geo, placed: PlacedPart[]): { x0: number, y0: number, x1: number, y1: number } {
   const half = geo.pitch / 2

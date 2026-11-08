@@ -1,13 +1,15 @@
 // SVG drawings for the bench sheet. Everything meant to be laid on is drawn at 1:1:
 // width/height in mm, viewBox in mm, strokes in mm. Pure: strings in, strings out.
-// Text is never mirrored: bottom-side drawings mirror the geometry (x -> width - x) and
-// place upright labels at the mirrored positions.
+// Text is never mirrored: bottom-side drawings mirror the geometry (x -> width - x, or
+// y -> height - y when the bottom is flipped top-bottom) and place upright labels at the
+// mirrored positions.
 import { holeMm, holeName, parseHole, pathHoles, type Hole } from '../core/holes'
 import { placePart, type PlacedPart } from '../core/footprints'
 import { wireCards, type WireCard } from '../core/bench/cards'
 import type { LegFoldRow } from '../core/bench/sheet'
 import type { BoardFile, Side } from '../core/schema'
 import { safeColor } from '../core/color'
+import { ghostWires, sideMap, type Flip } from '../core/sideView'
 
 export { safeColor }
 
@@ -164,33 +166,20 @@ export function scaleBarSvg(): string {
 
 // ---- board overview --------------------------------------------------------------------
 
-/** Board mm -> drawing mm for one side (bottom mirrored as seen from below). */
-function sideGeo(board: BoardFile, side: Side) {
-  const pitch = board.board.pitchMm
-  const span = (board.board.cols - 1) * pitch
-  const mirrored = side === 'bottom'
-  const x = (v: number) => (mirrored ? span - v : v)
-  return {
-    pitch,
-    span,
-    mirrored,
-    x,
-    pt(h: Hole): Pt {
-      const m = holeMm(h, pitch)
-      return { x: x(m.x), y: m.y }
-    },
-    rect(r: { x: number, y: number, w: number, h: number }) {
-      return { x: mirrored ? span - r.x - r.w : r.x, y: r.y, w: r.w, h: r.h }
-    }
-  }
+/** Board mm -> drawing mm for one side (bottom mirrored along `flip`, as seen from below). */
+function sideGeo(board: BoardFile, side: Side, flip: Flip) {
+  return sideMap(board, side === 'bottom' ? flip : 'none')
 }
+
+/** A wire of the other side: thin, dashed, muted ink, no fill (as the bottom's part outlines). */
+const GHOST = `fill="none" stroke="${INK}" stroke-opacity="0.6" stroke-width="0.25" stroke-dasharray="0.7 0.45" stroke-linecap="round" stroke-linejoin="round"`
 
 const rowLetters = (row: number) => holeName({ col: 1, row }).replace(/\d+$/, '')
 
 function partMarks(s: Scene, pp: PlacedPart, g: ReturnType<typeof sideGeo>) {
   const pitch = g.pitch
   const mm = (h: Hole) => holeMm(h, pitch)
-  const v = (q: Pt): Pt => ({ x: g.x(q.x), y: q.y })
+  const v = (q: Pt): Pt => ({ x: g.x(q.x), y: g.y(q.y) })
   const r = pp.bodyRectMm
   const centre = { x: r.x + r.w / 2, y: r.y + r.h / 2 }
   const round = !!(pp.part.standing && pp.fp.twoLead)
@@ -238,11 +227,12 @@ function partMarks(s: Scene, pp: PlacedPart, g: ReturnType<typeof sideGeo>) {
 /**
  * `title: false` leaves out the in-drawing title. `labelSize` (drawing mm) draws the part
  * refs and trail / wire ids at that size instead of the 1:1 minimum: a drawing printed
- * enlarged passes a small one so the labels don't hide the pads.
+ * enlarged passes a small one so the labels don't hide the pads. `flip` is how the bottom
+ * is turned over (`lr` by default); the top ignores it.
  */
-export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: boolean, labelSize?: number } = {}): string {
+export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: boolean, labelSize?: number, flip?: Flip } = {}): string {
   const s = new Scene()
-  const g = sideGeo(board, side)
+  const g = sideGeo(board, side, opts.flip ?? 'lr')
   const { cols, rows } = board.board
   const p = g.pitch
   const half = p / 2
@@ -269,7 +259,7 @@ export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: b
     s.text({ x, y: height + half + (outer ? 5.2 : 2.5) }, String(col), MIN_FONT, 'middle', lab)
   }
   for (let row = 1; row <= rows; row++) {
-    const y = (row - 1) * p + 0.8
+    const y = g.pt({ col: 1, row }).y + 0.8
     s.text({ x: -half - 0.8, y }, rowLetters(row), MIN_FONT, 'end', lab)
     s.text({ x: g.span + half + 0.8, y }, rowLetters(row), MIN_FONT, 'start', lab)
   }
@@ -288,6 +278,10 @@ export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: b
     else s.rect(r.x, r.y, r.w, r.h, `rx="0.4" ${bodyAttrs}`)
     if (side === 'top') partMarks(s, pp, g)
   }
+  // the other side's wires, ghosted like the bottom's part outlines, under the leads and this side's copper
+  for (const gw of ghostWires(board, side, g.mirror))
+    s.poly(gw.points, `data-ghost="${esc(gw.id)}" ${GHOST}`)
+
   // leads: pins on top, lead ends on the solder side
   for (const pp of placed)
     for (const pin of pp.pins) s.circle(g.pt(pin.hole), 0.45, `fill="#4b555b"`)

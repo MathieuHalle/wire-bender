@@ -5,6 +5,7 @@ import { ADVISORY } from '../core/advisory'
 import { benchModel, type BenchModel, type MeterRow } from '../core/bench/sheet'
 import { netLabel, type WireCard } from '../core/bench/cards'
 import type { BoardFile, Side } from '../core/schema'
+import type { Flip } from '../core/sideView'
 import {
   bendSvgs, boardOverviewSvg, COPPER, esc, INSULATED_FALLBACK, legFoldSvg, mmExact, mmText, safeColor, scaleBarSvg,
   SPARE_TAIL_LABEL, stripBarSvg
@@ -31,6 +32,11 @@ const CARD_INSET_MM = 10
 const COLUMN_GAP_MM = 5
 
 const PAPER_LABEL = { letter: 'Letter', a4: 'A4' } as const
+
+/** The bottom drawings' caption: which way the board was turned over. */
+export function bottomCaption(flip: Flip): string {
+  return `Bottom: solder side, seen from below (mirrored ${flip === 'tb' ? 'top↔bottom' : 'left↔right'})`
+}
 
 const svgWidthMm = (svg: string) => Number(/^<svg width="([\d.]+)mm"/.exec(svg)?.[1] ?? 0)
 const svgHeightMm = (svg: string) => Number(/^<svg width="[\d.]+mm" height="([\d.]+)mm"/.exec(svg)?.[1] ?? 0)
@@ -78,10 +84,10 @@ export const OVERVIEW_FITTED_NOTE = 'Overview not to scale (board wider than the
  * Page 2: both sides as big as one page allows, side by side or one above the other,
  * whichever draws them bigger. For reading at the bench, so not to scale: no scale bar.
  */
-function enlarged(board: BoardFile, paper: keyof typeof PRINTABLE_MM): string {
+function enlarged(board: BoardFile, paper: keyof typeof PRINTABLE_MM, flip: Flip): string {
   // No in-drawing title: the captions name the sides, and the title would widen the drawing.
   const top = boardOverviewSvg(board, 'top', { title: false })
-  const bottom = boardOverviewSvg(board, 'bottom', { title: false })
+  const bottom = boardOverviewSvg(board, 'bottom', { title: false, flip })
   const [w1, h1, w2, h2] = [svgWidthMm(top), svgHeightMm(top), svgWidthMm(bottom), svgHeightMm(bottom)]
   // Both layouts this page can take, side by side or stacked, on the portrait page.
   const { w: W, h: Hp } = enlargedArea(paper)
@@ -95,7 +101,7 @@ function enlarged(board: BoardFile, paper: keyof typeof PRINTABLE_MM): string {
   const k = Math.floor(best.k * 100) / 100
   // Redrawn with small labels: they only shrink the drawing a little, so it still fits at k.
   const labelSize = ENLARGED_LABEL_MM / k
-  const small = (side: Side) => boardOverviewSvg(board, side, { title: false, labelSize })
+  const small = (side: Side) => boardOverviewSvg(board, side, { title: false, labelSize, flip })
   const fig = (svg: string, caption: string) =>
     `<figure><figcaption>${caption}</figcaption><div class="drawing">${scaleSvg(svg, k)}</div></figure>`
   return `<section id="enlarged" class="page enlarged">
@@ -103,14 +109,14 @@ function enlarged(board: BoardFile, paper: keyof typeof PRINTABLE_MM): string {
 <p class="fitted-note"><strong>Enlarged ${Math.round(k * 100)}%, not to scale: measure on the 1:1 overview or the wire cards.</strong></p>
 <div class="${best.pair ? 'pair' : 'stack'}">
 ${fig(small('top'), 'Top: parts side')}
-${fig(small('bottom'), 'Bottom: solder side, seen from below (mirrored)')}
+${fig(small('bottom'), bottomCaption(flip))}
 </div>
 </section>`
 }
 
-function overview(board: BoardFile, printable: number): string {
+function overview(board: BoardFile, printable: number, flip: Flip): string {
   const top = boardOverviewSvg(board, 'top')
-  const bottom = boardOverviewSvg(board, 'bottom')
+  const bottom = boardOverviewSvg(board, 'bottom', { flip })
   const sideBySide = svgWidthMm(top) + OVERVIEW_GAP_MM + svgWidthMm(bottom) <= printable
   // A board wider than the page would make the browser shrink every printed page; instead
   // the overviews alone are scaled down to fit (CSS), say so, and carry no scale bar.
@@ -122,7 +128,7 @@ function overview(board: BoardFile, printable: number): string {
 ${fitted ? `<p class="fitted-note"><strong>${esc(OVERVIEW_FITTED_NOTE)}</strong></p>` : scaleBar()}
 <div class="${sideBySide ? 'pair' : 'stack'}">
 ${fig(top, 'Top: parts side')}
-${fig(bottom, 'Bottom: solder side, seen from below (mirrored)')}
+${fig(bottom, bottomCaption(flip))}
 </div>
 </section>`
 }
@@ -500,16 +506,18 @@ export function tickKey(sha256Hex: string): string {
 /**
  * The whole bench sheet. `hash` (e.g. of the board file's text) keys the phone ticks so they
  * reset when the board changes; without it the revision is used. `date` (YYYY-MM-DD) pins the
- * "generated" date; it defaults to today.
+ * "generated" date; it defaults to today. `flip` is how the board overviews turn the bottom
+ * over: left-right (the default) or top-bottom.
  */
-export function benchHtml(board: BoardFile, opts: { hash?: string, date?: string } = {}): string {
+export function benchHtml(board: BoardFile, opts: { hash?: string, date?: string, flip?: Flip } = {}): string {
+  const flip = opts.flip ?? 'lr'
   const m = benchModel(board)
   const printable = PRINTABLE_MM[m.paper]
   const id = tickIds()
   const date = opts.date ?? today()
   const key = `wirebender:${m.name}:${opts.hash ?? m.revision}`
   const parts = [
-    overview(board, printable), enlarged(board, m.paper), placement(m, id), cards(m, board, printable, id),
+    overview(board, printable, flip), enlarged(board, m.paper, flip), placement(m, id), cards(m, board, printable, id),
     legFolds(m, board.board.pitchMm, id), meter(m, id)
   ].map(html => ({ html, ...sectionHead(html) }))
   return `<!doctype html>

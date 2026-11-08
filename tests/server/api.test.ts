@@ -218,6 +218,26 @@ describe('check, bench, download', () => {
     expect(api.benchBoard(db, own('nope')).status).toBe(404)
   })
 
+  it('bench ?flip= draws the bottom left-right (the default) or top-bottom; anything else is 422', () => {
+    const id = importFixture()
+    const page = (flip?: unknown) => api.benchBoard(db, own(id), '2026-11-06', flip)
+    const lr = page()
+    expect(lr.status).toBe(200)
+    expect(lr.body as string).toContain('seen from below (mirrored left↔right)')
+    expect(page('lr').body).toBe(lr.body)
+    const tb = page('tb')
+    expect(tb.status).toBe(200)
+    expect(tb.body as string).toContain('seen from below (mirrored top↔bottom)')
+    expect(tb.body as string).not.toContain('left↔right')
+    for (const bad of ['', 'TB', 'none', 'lr,tb', ['tb', 'lr'], 1]) {
+      const r = page(bad)
+      expect(r.status, JSON.stringify(bad)).toBe(422)
+      expect(r.body).toEqual({ errors: ['flip: must be lr or tb'] })
+    }
+    // an unknown board is still the 404, whatever the flip
+    expect(api.benchBoard(db, own('nope'), undefined, 'bad').status).toBe(404)
+  })
+
   it('download sets the filename and returns a board that parses', () => {
     const id = importFixture()
     const r = api.downloadBoard(db, own(id))

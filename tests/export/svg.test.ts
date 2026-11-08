@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -205,6 +206,126 @@ describe('boardOverviewSvg', () => {
     expect(boardOverviewSvg(b, 'top')).toContain('data-trail="T1"')
     expect(boardOverviewSvg(b, 'top')).not.toContain('data-trail="T2"')
     expect(boardOverviewSvg(b, 'bottom')).toContain('data-trail="T2"')
+  })
+})
+
+describe('boardOverviewSvg bottom flip', () => {
+  const num = (a: string, k: string) => Number(new RegExp(`\\b${k}="([-\\d.]+)"`).exec(a)![1])
+  /** The hole grid's circles, in draw order: row by row, column by column. */
+  const holes = (svg: string) => [...svg.matchAll(/<circle ([^>]*fill="#ffffff"[^>]*)\/>/g)].map(m => ({ x: num(m[1]!, 'cx'), y: num(m[1]!, 'cy') }))
+  const pathPts = (svg: string, attr: string) => {
+    const d = new RegExp(`<path [^>]*${attr}[^>]*\\bd="([^"]+)"`).exec(svg)![1]!
+    return [...d.matchAll(/[ML]([-\d.]+) ([-\d.]+)/g)].map(m => ({ x: Number(m[1]), y: Number(m[2]) }))
+  }
+  const cols = 20
+  const rows = 10
+  const b = mk({ board: { cols, rows }, trails: [trail('T1', ['A1', 'A3', 'C3'])] })
+  const at = (svg: string, col: number, row: number) => holes(svg)[(row - 1) * cols + (col - 1)]!
+
+  it('the default is the left-right mirror, unchanged from before the flip choice', () => {
+    expect(boardOverviewSvg(b, 'bottom')).toBe(boardOverviewSvg(b, 'bottom', { flip: 'lr' }))
+    // the fixture's drawings, byte for byte as they were before the flip choice existed
+    const fx = board2()
+    const h = (x: string) => createHash('sha256').update(x).digest('hex')
+    expect(h(boardOverviewSvg(fx, 'top'))).toBe('c4041a0fff92e17a49f3691ba2e9429270fffb14e825e7e7c2b96bb19364f3c6')
+    expect(h(boardOverviewSvg(fx, 'bottom'))).toBe('ca3bc9c3f08ac70d85382429d7628438e1d89f0e127a04e479ca9d546360add4')
+    expect(h(boardOverviewSvg(fx, 'bottom', { title: false, labelSize: 1.2 }))).toBe('ac682f2ce898cf2a5f5629dde4eeaf68eeae1698dbdaf2081dc9b482c61069ef')
+  })
+
+  it('tb puts a trail at the top-bottom mirrored holes: A1 bottom left, columns not mirrored', () => {
+    const svg = boardOverviewSvg(b, 'bottom', { flip: 'tb' })
+    const a1 = at(svg, 1, 1)
+    const all = holes(svg)
+    expect(all).toHaveLength(cols * rows)
+    // A1 is the leftmost hole of the lowest row
+    expect(a1.y).toBeCloseTo(Math.max(...all.map(q => q.y)), 6)
+    expect(a1.x).toBeCloseTo(Math.min(...all.map(q => q.x)), 6)
+    // the last row is at the top, column 1 still on the left
+    expect(at(svg, 1, rows).y).toBeCloseTo(Math.min(...all.map(q => q.y)), 6)
+    expect(at(svg, 1, rows).y).toBeCloseTo(a1.y - (rows - 1) * 2.54, 3)
+    // the trail runs over the same holes, A1 -> A3 -> C3, so C3 is above A1
+    expect(pathPts(svg, 'data-trail="T1"')).toEqual([a1, at(svg, 3, 1), at(svg, 3, 3)])
+    expect(at(svg, 3, 3).y).toBeLessThan(a1.y)
+    // lr: the same trail with column 1 on the right, row A at the top
+    const lr = boardOverviewSvg(b, 'bottom')
+    expect(at(lr, 1, 1).x).toBeCloseTo(Math.max(...holes(lr).map(q => q.x)), 6)
+    expect(at(lr, 1, 1).y).toBeCloseTo(Math.min(...holes(lr).map(q => q.y)), 6)
+  })
+
+  it('tb: row letters sit by their own (moved) row, column numbers by their own column', () => {
+    const svg = boardOverviewSvg(b, 'bottom', { flip: 'tb' })
+    const label = (t: string) => [...svg.matchAll(new RegExp(`<text ([^>]*)>${t}</text>`, 'g'))].map(m => ({ x: num(m[1]!, 'x'), y: num(m[1]!, 'y') }))
+    for (const [letter, row] of [['A', 1], ['J', rows]] as const) {
+      const ls = label(letter)
+      expect(ls.length, letter).toBeGreaterThanOrEqual(2)
+      for (const l of ls) expect(l.y - 0.8, letter).toBeCloseTo(at(svg, 1, row).y, 3)
+    }
+    const col1 = Number(/<text[^>]*data-col="1"[^>]*x="([\d.]+)"/.exec(svg)![1])
+    expect(col1).toBeCloseTo(at(svg, 1, 1).x, 3)
+  })
+
+  it('tb leaves text upright, and the top side ignores the flip', () => {
+    const svg = boardOverviewSvg(b, 'bottom', { flip: 'tb' })
+    expect(svg).not.toMatch(/transform=|scale\(/)
+    expect(boardOverviewSvg(b, 'top', { flip: 'tb' })).toBe(boardOverviewSvg(b, 'top'))
+  })
+
+  it('tb ghosts follow the flip', () => {
+    const two = mk({
+      board: { cols, rows, type: 'two-sided' },
+      trails: [trail('T9', ['A2', 'A6', 'D6'], 'bottom')],
+      wires: [{ id: 'W1', kind: 'laid', side: 'top', points: ['A2', 'A6', 'D6'], bareSegments: [], joints: [] }]
+    })
+    const svg = boardOverviewSvg(two, 'bottom', { flip: 'tb' })
+    expect(pathPts(svg, 'data-ghost="W1"')).toEqual(pathPts(svg, 'data-trail="T9"'))
+  })
+})
+
+describe('boardOverviewSvg ghost wires', () => {
+  const wire = (id: string, kind: 'laid' | 'flying', side: 'top' | 'bottom', points: string[]) =>
+    ({ id, kind, side, points, bareSegments: [], joints: [] })
+  const ghosts = (svg: string) => [...svg.matchAll(/<path ([^>]*data-ghost="([^"]+)"[^>]*)\/>/g)].map(m => ({ a: m[1]!, id: m[2]! }))
+  const d = (a: string) => /\bd="([^"]+)"/.exec(a)![1]!
+  // a bottom trail along the same holes as the top wire W1: the bottom's own geometry
+  const b = mk({
+    board: { cols: 20, rows: 10, type: 'two-sided' },
+    trails: [trail('T9', ['A2', 'A6', 'D6'], 'bottom')],
+    wires: [
+      wire('W1', 'laid', 'top', ['A2', 'A6', 'D6']),
+      wire('W2', 'flying', 'top', ['B2', 'C3', 'F9']),
+      wire('W3', 'laid', 'bottom', ['H1', 'H4'])
+    ]
+  })
+
+  it('a top-side wire is dashed in the bottom overview, mirrored like the bottom\'s own copper', () => {
+    const svg = boardOverviewSvg(b, 'bottom')
+    const g = ghosts(svg)
+    expect(g.map(x => x.id)).toEqual(['W1', 'W2'])
+    const w1 = g[0]!.a
+    expect(w1).toContain('stroke-dasharray="0.7 0.45"')
+    expect(w1).toContain('fill="none"')
+    expect(w1).toContain('stroke-opacity="0.6"')
+    const trailD = d(/<path ([^>]*data-trail="T9"[^>]*)\/>/.exec(svg)![1]!)
+    expect(d(w1)).toBe(trailD)
+    // the flying wire: one straight piece between its ends
+    expect(d(g[1]!.a).match(/[ML]/g)).toEqual(['M', 'L'])
+    // the top overview draws W1 as a wire, not a ghost, and ghosts the bottom W3
+    expect(ghosts(boardOverviewSvg(b, 'top')).map(x => x.id)).toEqual(['W3'])
+  })
+
+  it('ghosts are drawn under the side\'s own copper and wires', () => {
+    const svg = boardOverviewSvg(b, 'bottom')
+    const lastGhost = svg.lastIndexOf('data-ghost=')
+    expect(lastGhost).toBeGreaterThan(-1)
+    expect(lastGhost).toBeLessThan(svg.indexOf('data-trail='))
+    expect(lastGhost).toBeLessThan(svg.indexOf('data-wire='))
+  })
+
+  it('no wires on the other side: no ghost elements', () => {
+    const one = mk({ board: { cols: 20, rows: 10 }, wires: [wire('W3', 'laid', 'bottom', ['H1', 'H4'])] })
+    expect(boardOverviewSvg(one, 'bottom')).not.toContain('data-ghost')
+    expect(boardOverviewSvg(one, 'top')).toContain('data-ghost="W3"')
+    expect(boardOverviewSvg(mk({ board: { cols: 20, rows: 10 } }), 'top')).not.toContain('data-ghost')
   })
 })
 

@@ -11,6 +11,8 @@ import { NO_ACCESS } from '~/composables/useLiveBoard'
 import { fallbackAlert } from '~/utils/board3dFallback'
 import { defaultPanel, loadPanel, savePanel, type PanelState } from '~/utils/sidePanel'
 import { ALL_LAYERS } from '~/utils/layers'
+import { benchUrl, loadFlip, saveFlip } from '~/utils/bottomFlip'
+import type { Flip, Mirror } from '~core/sideView'
 
 // `id` is the key the board was opened by: its board id (the owner) or its share link id
 // (everyone else, who never sees the board id).
@@ -86,6 +88,10 @@ watch(view, (v) => {
 })
 
 const mirrorBottom = ref(true)
+/** How the mirrored bottom is turned over (left-right or top-bottom): the viewer's, stored once mounted. */
+const bottomFlip = ref<Flip>('lr')
+/** How the bottom is drawn in 2D. */
+const bottomMirror = computed<Mirror>(() => (mirrorBottom.value ? bottomFlip.value : 'none'))
 /** The canvas zoom, in percent of "fit both sides". */
 const zoomPct = ref(100)
 const canvas = ref<{ frame(which: 'both' | Side, animate?: boolean): void, zoomStep(dir: 1 | -1): void } | null>(null)
@@ -144,8 +150,10 @@ onMounted(() => {
   // Nothing stored: open from lg up, collapsed below (on a phone it would take the canvas's room).
   const wide = window.matchMedia?.('(min-width: 1024px)').matches ?? true
   panel.value = loadPanel(storage, { ...defaultPanel(), open: wide })
+  bottomFlip.value = loadFlip(storage)
   loaded.value = true
   watch(panel, p => savePanel(p, storage), { deep: true })
+  watch(bottomFlip, f => saveFlip(f, storage))
 })
 /** The layers the views draw: the stored ones once loaded. */
 const layers = computed(() => (loaded.value ? panel.value.layers : ALL_LAYERS))
@@ -195,7 +203,7 @@ const frames = computed(() => {
   const b = board.value
   if (!b) return []
   const size = (s: Side) => {
-    const box = sideBox(makeGeo(b, s === 'bottom' && mirrorBottom.value), placed.value)
+    const box = sideBox(makeGeo(b, s === 'bottom' ? bottomMirror.value : 'none'), placed.value)
     return { w: box.w, h: box.h }
   }
   const at = sideFrames({ top: size('top'), bottom: size('bottom') })
@@ -262,9 +270,12 @@ const STATUS = {
   offline: { label: 'offline', color: 'warning' }
 } as const
 
-/** The sheet is made from the board as the server holds it, which is what every copy shows. */
+/**
+ * The sheet is made from the board as the server holds it, which is what every copy shows;
+ * its bottom overviews are turned over the way this viewer picked.
+ */
 function openBench() {
-  window.open(`/api/boards/${encodeURIComponent(id.value)}/bench`, '_blank', 'noopener')
+  window.open(benchUrl(id.value, bottomFlip.value), '_blank', 'noopener')
 }
 
 function onKey(e: KeyboardEvent) {
@@ -286,7 +297,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 const sideTitle = (s: Side) => (s === 'top'
   ? 'Top (parts side)'
-  : `Bottom (solder side${mirrorBottom.value ? ', mirrored: seen from below' : ', seen through the board'})`)
+  : `Bottom (solder side${mirrorBottom.value ? `, mirrored ${bottomFlip.value === 'tb' ? 'top↔bottom' : 'left↔right'}: seen from below` : ', seen through the board'})`)
 </script>
 
 <template>
@@ -585,6 +596,7 @@ const sideTitle = (s: Side) => (s === 'top'
             <template #overlay-end>
               <CanvasControls
                 v-model:mirror-bottom="mirrorBottom"
+                v-model:flip="bottomFlip"
                 :zoom="zoomPct"
                 @zoom-in="canvas?.zoomStep(1)"
                 @zoom-out="canvas?.zoomStep(-1)"
@@ -595,7 +607,7 @@ const sideTitle = (s: Side) => (s === 'top'
               <BoardSide
                 :board="board"
                 :side="f.id"
-                :mirrored="f.id === 'bottom' && mirrorBottom"
+                :mirror="f.id === 'bottom' ? bottomMirror : 'none'"
                 :highlight-net="highlight"
                 :hover-hole="hover?.hole ?? null"
                 :tool="tool"
