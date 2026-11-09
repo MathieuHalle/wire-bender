@@ -203,6 +203,8 @@ To change a board safely while others may be editing it, `GET` it first and `PUT
 
 The app's `/api` page lists these routes and the errors.
 
+The board file itself, and the bundle zip, are described in [docs/format/wirebender-1.md](docs/format/wirebender-1.md), with a [JSON Schema](docs/format/wirebender-1.schema.json) (regenerate it with `pnpm schema`) and [example boards](docs/format/examples/).
+
 ## Tokens
 
 A token lets a script or an AI client use the API as you. Make one on `/account` (**Tokens**): give it a name, copy it at once, it is shown only that one time. A token starts with `wb_`; keep it private and never commit it. You can have 20. **Revoke** stops it at once, and closes its open live connections.

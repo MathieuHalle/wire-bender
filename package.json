@@ -12,7 +12,8 @@
     "typecheck": "nuxt typecheck",
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
-    "check": "tsx --tsconfig tsconfig.cli.json cli/wirebender.ts check",
+    "schema": "tsx --tsconfig tsconfig.cli.json cli/schema.ts",
+    "check":"tsx --tsconfig tsconfig.cli.json cli/wirebender.ts check",
     "wirebender": "tsx --tsconfig tsconfig.cli.json cli/wirebender.ts"
   },
   "dependencies": {

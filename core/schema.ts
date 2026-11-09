@@ -82,7 +82,7 @@ const partSchema = z.strictObject({
 
 const benchDefaults = { endLeadMm: 5, bendAllowanceMm: 1, spareMm: 5, flyingSlackMm: 10, roundToMm: 5, paper: 'letter' as const }
 
-const boardFileSchema = z.strictObject({
+export const boardFileSchema = z.strictObject({
   format: z.literal('wirebender/1'),
   revision: z.number().int().default(0),
   name: z.string(),

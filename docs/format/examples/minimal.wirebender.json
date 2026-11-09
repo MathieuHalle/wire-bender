@@ -1,0 +1,47 @@
+{
+  "format": "wirebender/1",
+  "revision": 0,
+  "name": "Minimal",
+  "board": {
+    "cols": 10,
+    "rows": 6,
+    "pitchMm": 2.54,
+    "type": "one-sided",
+    "blocked": []
+  },
+  "netClasses": {},
+  "nets": {
+    "VCC": {},
+    "SIG": {}
+  },
+  "rules": {
+    "keepAway": [],
+    "adjacency": []
+  },
+  "parts": [
+    {
+      "ref": "R1",
+      "footprint": "axial",
+      "at": "B2",
+      "to": "B5",
+      "rotation": 0,
+      "value": "10k",
+      "pins": {
+        "a": "VCC",
+        "b": "SIG"
+      }
+    }
+  ],
+  "trails": [],
+  "wires": [],
+  "legFolds": [],
+  "solderBridges": [],
+  "bench": {
+    "endLeadMm": 5,
+    "bendAllowanceMm": 1,
+    "spareMm": 5,
+    "flyingSlackMm": 10,
+    "roundToMm": 5,
+    "paper": "letter"
+  }
+}

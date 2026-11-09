@@ -68,6 +68,19 @@ const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localh
       JSON over HTTP, for scripts and AI tools. Everything the app does with boards goes through these routes.
     </p>
 
+    <p class="text-sm">
+      The board JSON is described in the
+      <a
+        href="https://github.com/MathieuHalle/wire-bender/blob/main/docs/format/wirebender-1.md"
+        class="underline"
+        target="_blank"
+        rel="noopener"
+      >
+        board file format
+      </a>
+      page, with a JSON Schema and examples.
+    </p>
+
     <section class="space-y-2">
       <h2 class="text-base font-medium">
         Sign in with a token
