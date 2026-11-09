@@ -195,6 +195,8 @@ describe('sessionSecret', () => {
       expect(() => statSync(path.join(other, 'session-secret'))).toThrow()
       expect(resolveSessionSecret(other, {})).toMatchObject({ from: 'file', file: path.join(other, 'session-secret') })
       expect(() => resolveSessionSecret(other, { NUXT_APP_SECRET: 'short' })).toThrow(/NUXT_APP_SECRET/)
+      expect(() => resolveSessionSecret(other, { NUXT_APP_SECRET: `replace-me-${'0'.repeat(40)}` })).toThrow(/placeholder.*openssl rand -hex 32/)
+      expect(() => resolveSessionSecret(other, { NUXT_SESSION_PASSWORD: `replace-me-${'0'.repeat(40)}` })).toThrow(/NUXT_SESSION_PASSWORD is still the placeholder/)
     } finally {
       rmSync(other, { recursive: true, force: true })
     }
@@ -206,8 +208,23 @@ describe('sessionSecret', () => {
     expect(() => statSync(path.join(dir, 'session-secret'))).toThrow()
   })
 
+  it('public mode with no secret set writes no file and says to make one with openssl (N1)', () => {
+    expect(startupSecretProblem('public', 'generated-by-the-build'.repeat(2), dir, {}))
+      .toBe('public mode needs NUXT_APP_SECRET set to the session secret when the server starts: set NUXT_APP_SECRET to the output of openssl rand -hex 32')
+    expect(startupSecretProblem('public', undefined, dir, {})).toMatch(/openssl rand -hex 32/)
+    expect(() => statSync(path.join(dir, 'session-secret'))).toThrow()
+  })
+
+  it('the placeholder is refused whatever its case or leading whitespace (N1)', () => {
+    for (const given of [`REPLACE-ME-${'0'.repeat(40)}`, `  replace-me-${'0'.repeat(40)}`, `\tRePlAcE-mE${'0'.repeat(40)}`]) {
+      expect(() => resolveSessionSecret(dir, { NUXT_APP_SECRET: given })).toThrow(/placeholder.*openssl rand -hex 32/)
+    }
+  })
+
   it('public mode refuses a build secret that is not the session secret, naming the fix', () => {
     const file = path.join(dir, 'session-secret')
+    // A file made earlier by `pnpm dev:public` on this data folder: point at it, so its sessions survive.
+    sessionSecret(dir, {})
     expect(startupSecretProblem('public', 'generated-by-the-build'.repeat(2), dir, {}))
       .toBe(`public mode needs NUXT_APP_SECRET set to the session secret when the server starts: NUXT_APP_SECRET=$(cat ${file})`)
     expect(startupSecretProblem('public', undefined, dir, { NUXT_SESSION_PASSWORD: 'p'.repeat(40) }))

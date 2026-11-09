@@ -64,9 +64,9 @@ pnpm dev:public --dotenv ~/wirebender.env
 
 1. `NUXT_APP_SECRET`
 2. `NUXT_SESSION_PASSWORD`
-3. the file `<data>/session-secret`, which the server creates once (random, readable only by you)
+3. the file `<data>/session-secret`, which `pnpm dev:public` creates once (random, readable only by you)
 
-`pnpm dev:public` sets it for you: before the server starts, it copies the first of these into `NUXT_APP_SECRET`, which is what nuxt-auth-utils seals sessions with. (`pnpm dev` is local mode, which has no sessions and needs no secret.) A production build in public mode must have `NUXT_APP_SECRET` set before it starts; nothing copies it there. If only `NUXT_SESSION_PASSWORD` or the file is set, the server refuses to start and names the fix, `NUXT_APP_SECRET="$NUXT_SESSION_PASSWORD"` or `NUXT_APP_SECRET=$(cat <data>/session-secret)`; start the server with that variable set.
+`pnpm dev:public` sets it for you: before the server starts, it copies the first of these into `NUXT_APP_SECRET`, which is what nuxt-auth-utils seals sessions with. (`pnpm dev` is local mode, which has no sessions and needs no secret.) A production build in public mode must have `NUXT_APP_SECRET` set before it starts; nothing copies it there. If only `NUXT_SESSION_PASSWORD` or the file is set, the server refuses to start and names the fix, `NUXT_APP_SECRET="$NUXT_SESSION_PASSWORD"` or `NUXT_APP_SECRET=$(cat <data>/session-secret)`; start the server with that variable set. With none of the three, a production build writes no file: it refuses to start and says to set `NUXT_APP_SECRET` to the output of `openssl rand -hex 32`.
 
 Whenever `NUXT_SESSION_PASSWORD` is set, nuxt-auth-utils logs that it "is not used anymore" and to set `NUXT_APP_SECRET` instead. Under `pnpm dev:public` this is harmless, because WireBender has copied it into `NUXT_APP_SECRET`. In a production build, set `NUXT_APP_SECRET` as the start-up message says.
 
@@ -106,12 +106,95 @@ Boards opened by someone else's link are listed under **Shared with me**. A sign
 Everything is stored in `WIREBENDER_DATA` (default `./.data`, which git ignores):
 
 - `wirebender.sqlite`: all boards, their revision history, the accounts and the paired devices.
-- `backups/`: the server writes `pre-migration-<time>.sqlite` here before it changes the database layout.
-- `session-secret`: public mode only, made once when no `NUXT_APP_SECRET` or `NUXT_SESSION_PASSWORD` is set. Anyone who has it can forge a session as any account: keep it private, including in your backups.
+- `backups/`: `pre-migration-<time>.sqlite` is written here before the server changes the database layout (a migration that fails is rolled back and the server refuses to start). `daily-<time>.sqlite` is an online snapshot taken at start and then once a day while the server runs, checked with `PRAGMA integrity_check` before older ones are pruned. The newest 14 daily snapshots are kept; `pre-migration-*` files are never pruned.
+- `session-secret`: public mode only, made once by `pnpm dev:public` when no `NUXT_APP_SECRET` or `NUXT_SESSION_PASSWORD` is set. Anyone who has it can forge a session as any account: keep it private, including in your backups.
 
 Revisions are never edited. They are deleted only with their board: when the trash is purged (30 days after the board was trashed, or with a purged account), or by **Delete for good**. To back up, stop the server and copy the whole data folder. To restore, put the folder back. Use `WIREBENDER_DATA=/some/folder pnpm dev` to keep experiments apart from your real boards.
 
-One server per data folder: the server holds `<data>/wirebender.lock` while it runs, and a second server on the same folder refuses to start, naming the folder. So `PORT=3002 pnpm dev` without its own `WIREBENDER_DATA` will not start while another server uses `./.data`; give each server its own folder. A lock left by a server that crashed (its process is gone) is taken over.
+One server per data folder: the server holds `<data>/wirebender.lock` while it runs, and a second server on the same folder refuses to start, naming the folder. So `PORT=3002 pnpm dev` without its own `WIREBENDER_DATA` will not start while another server uses `./.data`; give each server its own folder. A lock left by a server that crashed (its process is gone) is taken over, also in Docker, where the restarted server has the same pid as the one that was killed.
+
+### Backups
+
+Daily snapshots are in `<WIREBENDER_DATA>/backups/`, 14 kept. They live on the same disk as the database, so copy them off the machine:
+
+```sh
+rsync -a --include='daily-*.sqlite' --exclude='*' you@server:/path/to/data/backups/ ./wirebender-backups/
+docker compose cp wirebender:/data/backups/. ./wirebender-backups
+```
+
+(Use your own data folder. The `docker compose` line runs in the folder with `compose.yaml`.) The snapshots hold the accounts too, so keep the copies private.
+
+To restore, stop the server, then copy a snapshot over the database and delete the old `-wal` and `-shm` files beside it:
+
+```sh
+cp backups/daily-2026-11-09T03-00-00.000Z.sqlite wirebender.sqlite
+rm -f wirebender.sqlite-wal wirebender.sqlite-shm
+```
+
+With Docker (named volume `wirebender-data`), restore a snapshot like this: stop the server, put the file in the volume, start it:
+
+```sh
+docker compose stop wirebender
+docker compose run --rm --no-deps -v "$PWD/wirebender-backups:/restore:ro" --entrypoint sh wirebender -c \
+  'cp /restore/daily-2026-11-09T03-00-00.000Z.sqlite /data/wirebender.sqlite && rm -f /data/wirebender.sqlite-wal /data/wirebender.sqlite-shm'
+docker compose up -d
+```
+
+### Moving a board between servers (with history)
+
+On the board list, a board's menu has **Board file** (the current board only) and **Board with history** (a `.wirebender.zip` holding every revision). On the other server, **Import** accepts either file; a zip creates a new board with its history. Revisions that came from a zip show `(imported)` after the author in the History tab: the author is a name only, and Undo works across them. From a script: `GET /api/boards/:id/bundle` and `POST /api/boards/import-bundle` (raw zip body, `Content-Type: application/zip`), or the CLI below. Bundle downloads share the download-all limit below (6 a minute per account, or per address for a visitor on a view link; past it, `429 Too many exports. Wait a minute and try again.`).
+
+### Download everything
+
+The Account page has **Download all my boards**: one zip with a bundle per board (not the trashed ones). It is rate limited (6 a minute; the app shows a message when you hit it). The admin page has **Download every board**, a server-wide zip that includes trashed boards. It is for moving boards, not a whole-server restore: each bundle imports as a new board owned by whoever imports it, and accounts, sharing and tokens are not in it. To restore a whole server, use a snapshot (see Backups).
+
+## Self-host with Docker
+
+The image runs the server in public mode. You need Docker with Compose, and a sign-in provider (see Public mode above).
+
+```sh
+cp .env.example .env
+```
+
+Edit `.env`: set `WIREBENDER_URL` to the address people will use (e.g. `https://wire.example.org`), set `NUXT_APP_SECRET` to the output of `openssl rand -hex 32`, and fill in the GitHub pair, and uncomment the Google pair only if you use Google. With no sign-in pair or no secret, the server refuses to start and says why in its log. `.env` is ignored by the repo; never commit it. Then:
+
+```sh
+docker compose up -d
+docker compose logs wirebender    # the setup code for the first admin is printed here
+```
+
+The server listens on port 3000 (`ports` in `compose.yaml` maps it to the host). Register the OAuth app with these callback URLs, using your `WIREBENDER_URL`:
+
+- GitHub: `<WIREBENDER_URL>/auth/github`
+- Google: `<WIREBENDER_URL>/auth/google`
+
+Then open `WIREBENDER_URL`, sign in and enter the setup code at `/setup` (see First admin).
+
+The data (the database and the backups) is in the named volume `wirebender-data` (Compose prefixes it with the project name, by default the folder name), mounted at `/data`, so it survives `docker compose down` and upgrades. `docker compose down -v` deletes it. The session secret is in `.env`, not in the volume: back up `.env` too, or every session ends. The daily snapshots are in `/data/backups`: see Backups above for copying them off the machine and restoring one into the volume.
+
+The container runs as uid 1000. To use a host folder instead of the named volume (`./data:/data`), make it writable by that user first: `mkdir data && sudo chown 1000:1000 data`.
+
+`GET /api/health` answers `{ "ok": true, "mode": "public" }` without signing in, and 503 when the database does not respond; the image's healthcheck uses it.
+
+**Upgrade:**
+
+```sh
+git pull && docker compose up -d --build
+```
+
+The server writes a `pre-migration-*` backup before it changes the database layout (see Data and backups).
+
+### HTTPS with Caddy
+
+Sign-in needs `https` in front of the server. With Caddy on the same machine, a `Caddyfile` of one site is enough; Caddy gets and renews the certificate:
+
+```
+wire.example.org {
+    reverse_proxy localhost:3000
+}
+```
+
+`WIREBENDER_URL` must be `https://wire.example.org`, the address people type. Live editing uses WebSockets, and `reverse_proxy` passes them through with no extra setting. With Caddy, change the port mapping in `compose.yaml` to `"127.0.0.1:3000:3000"`, so only Caddy can reach the container. Docker's published ports bypass the host firewall (ufw, firewalld): with `3000:3000`, plain http on port 3000 is open to the internet next to Caddy.
 
 ## Pair a device
 
@@ -131,6 +214,7 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | --- | --- |
 | `GET /api/boards?list=mine\|shared\|trash` | list your boards (`id`, `name`, `head`, `visibility`, `hasPassword`, ...; `mine` by default), those in the trash, or those shared with you (`key`, `name`, `owner`, `role`, `lastOpened`) |
 | `POST /api/boards` | `{ "board": <board json> }` imports; `{ "name", "cols", "rows", "type" }` creates an empty board; answers `{ id }` |
+| `POST /api/boards/import-bundle` | a bundle zip as the raw body (`Content-Type: application/zip`, up to 50 MB) becomes a new board with its history, `201 { id, name, head, revisions }` (signed in; counts toward the board limits and the create rate) |
 | `GET /api/boards/:id` | `{ id, name, head, board, role, signInToEdit, owner: { name }, forkedFrom }`. `id` is the key you asked with; `role` is `owner`, `edit` or `view`; `signInToEdit` is true for a signed-out visitor on an edit link; `forkedFrom` is `{ key, name }` of the board this one was forked from, for its owner while they can still open that board by the link they forked it through, else `null` |
 | `PUT /api/boards/:id` | `{ "board": <board json>, "baseRevision"?: n }`; `409` with `{ current }` if `baseRevision` is not the head. Only the owner's PUT can change the name; anyone else's keeps it |
 | `PATCH /api/boards/:id` | `{ "name" }` renames (owner) |
@@ -138,6 +222,7 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `GET /api/boards/:id/check` | findings and counts, as in the findings panel |
 | `GET /api/boards/:id/bench` | bench sheet (HTML); `?flip=lr` (default) or `tb` turns the bottom overviews over left-right or top-bottom, anything else is 422 |
 | `GET /api/boards/:id/download` | the board as a `.wirebender.json` file |
+| `GET /api/boards/:id/bundle` | the board with its whole history as `<name>.wirebender.zip` (view; one at a time and 6 a minute with the other exports, per account or per address, then `429`) |
 | `GET /api/boards/:id/thumbnail` | an SVG of the top side, for the board lists |
 | `GET /api/boards/:id/revisions` | history |
 | `GET /api/boards/:id/revisions/:n` | the board as it was at revision `n` |
@@ -155,9 +240,11 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `PATCH /api/me` | `{ "name" }` sets your display name (1 to 60 characters) |
 | `DELETE /api/me` | deletes your account, restorable for 30 days, and signs you out (public mode; `409` for the only admin) |
 | `POST /api/me/restore` | restores your deleted account after signing in again (public mode) |
+| `GET /api/me/export` | `wirebender-boards-<date>.zip`, a bundle per board of yours, not the trashed ones (signed in; one at a time and 6 a minute, then `429`) |
 | `POST /api/setup` | `{ "code" }` the setup code from the log, `{ ok, admin }` (public mode, until an admin exists; see First admin) |
 | `GET /api/admin/users` | every account (`id`, `name`, `providers`, `boards`, `isPremium`, `isAdmin`, `suspendedAt`, `deletedAt`, ...) (admin) |
 | `PATCH /api/admin/users/:id` | `{ "premium"?, "suspended"?, "admin"? }`, each `true` or `false`; any other key is `422` (admin) |
+| `GET /api/admin/export` | `wirebender-server-<date>.zip`, a bundle of every board of every account, trashed ones too, as `<owner>/<board>.wirebender.zip` (admin; not with a token) |
 | `POST /api/pair/start` | this computer only: a new pairing code, `{ code, expiresAt, url }` (local mode) |
 | `POST /api/pair` | `{ "code", "name" }` pairs the calling device (the one call an unpaired device may make); sets its cookie (local mode) |
 | `GET /api/devices` | the paired devices (`id`, `name`, `createdAt`, `lastSeen`) (local mode) |
@@ -166,6 +253,7 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `GET /api/tokens` | your tokens (`id`, `name`, `prefix`, `createdAt`, `lastUsedAt`), never the token itself |
 | `POST /api/tokens` | `{ "name" }` makes a token; answers `201 { id, name, prefix, token }`, the only time `token` is shown (up to 20 tokens) |
 | `DELETE /api/tokens/:id` | revokes one of your tokens, `204` |
+| `GET /api/health` | `{ ok: true, mode }` without signing in, or `503 { ok: false }` when the database does not respond; `HEAD` works too |
 
 Sign-in starts at `/auth/github` or `/auth/google`, and `/_ws/board/:id` is the live board's WebSocket (y-websocket protocol; a message over 4,000,000 bytes, a presence update over 8 KB, or a change that makes the board larger than 2,000,000 bytes is refused; only the owner's changes may rename the board). In public mode nuxt-auth-utils also answers `GET` and `DELETE /api/_auth/session` (sign out); any other `/api` path is `404`.
 
@@ -176,6 +264,8 @@ Send a token as `Authorization: Bearer <token>`. Every API write is its own revi
 To change a board safely while others may be editing it, `GET` it first and `PUT` with `"baseRevision"` set to the `head` from that `GET`. A `409` means someone changed it in between (live edits still being grouped count). `PUT` answers `{ current }`, the head now; undo, redo and restore answer `{ reason }`. Read the board again, redo the change on it, and send that with the new head; never retry the old body.
 
 The app's `/api` page lists these routes and the errors.
+
+The board file itself, and the bundle zip, are described in [docs/format/wirebender-1.md](docs/format/wirebender-1.md), with a [JSON Schema](docs/format/wirebender-1.schema.json) (regenerate it with `pnpm schema`) and [example boards](docs/format/examples/).
 
 ## Tokens
 
@@ -204,9 +294,11 @@ Besides `check` and `export`, the CLI can talk to a running server:
 ```sh
 pnpm wirebender import board.wirebender.json [--url http://localhost:3000] [--token wb_...]
 pnpm wirebender pull <board> -o board.wirebender.json [--force] [--url ...] [--token ...]
+pnpm wirebender import board.wirebender.zip      # a board with its history
+pnpm wirebender pull <board> --bundle [-o board.wirebender.zip] [--force]
 ```
 
-`--url` defaults to `$WIREBENDER_SERVER`, then `http://localhost:3000`; `--token` to `$WIREBENDER_TOKEN`. `import` checks the file, creates a board and prints its address. `pull` saves a board (an id or share link id) to a file; it will not replace an existing file without `--force`. Exit codes: `0` done, `1` the server refused (its message is printed), `2` bad usage, a bad board file, or an existing output file.
+`--url` defaults to `$WIREBENDER_SERVER`, then `http://localhost:3000`; `--token` to `$WIREBENDER_TOKEN`. `import` checks the file, creates a board and prints its address. `pull` saves a board (an id or share link id) to a file; it will not replace an existing file without `--force`. A file ending `.zip` is a board bundle: `import` checks it locally (a bad one exits `2` without calling the server) and prints `imported <name> (<n> revisions) → <url>/b/<id>`. `pull --bundle` saves the board with its full history; `-o` defaults to `<board>.wirebender.zip`, and `--force` works as before. Exit codes: `0` done, `1` the server refused (its message is printed), `2` bad usage, a bad board file, or an existing output file.
 
 ## MCP server for Claude Code
 

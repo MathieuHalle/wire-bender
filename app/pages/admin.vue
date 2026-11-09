@@ -4,6 +4,7 @@
 // Nothing else: the admin sees how many boards an account has, never the boards. For anyone
 // but the admin the API answers 404, and so does this page.
 import type { Provider } from '~/composables/useMe'
+import { saveZip } from '~/utils/download'
 
 useHead({ title: 'Admin · WireBender' })
 
@@ -31,6 +32,16 @@ const notFound = computed(() => error.value?.statusCode === 404)
 
 const busy = ref<string | null>(null)
 const toast = useToast()
+
+const exporting = ref(false)
+async function downloadEvery() {
+  exporting.value = true
+  const refused = await saveZip('/api/admin/export', 'wirebender-server.zip')
+  exporting.value = false
+  toast.add(refused
+    ? { title: refused, color: 'error', icon: 'i-lucide-ban' }
+    : { title: 'Download started', color: 'success', icon: 'i-lucide-check' })
+}
 
 const day = (t: number) => new Date(t).toLocaleDateString(undefined, { dateStyle: 'medium' })
 
@@ -66,6 +77,15 @@ async function change(a: Account, body: { premium?: boolean, suspended?: boolean
       <h1 class="text-xl font-semibold">
         {{ notFound ? 'Page not found' : 'Accounts' }}
       </h1>
+      <UButton
+        v-if="accounts"
+        class="ml-auto"
+        icon="i-lucide-download"
+        label="Download every board"
+        variant="outline"
+        :loading="exporting"
+        @click="downloadEvery"
+      />
     </header>
 
     <template v-if="notFound">

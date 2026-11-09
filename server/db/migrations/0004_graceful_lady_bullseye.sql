@@ -1,0 +1,1 @@
+ALTER TABLE `revisions` ADD `imported` integer DEFAULT 0 NOT NULL;

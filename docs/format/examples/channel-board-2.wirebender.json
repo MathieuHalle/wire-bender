@@ -1,0 +1,1250 @@
+{
+  "format": "wirebender/1",
+  "revision": 39,
+  "name": "Channel board 2",
+  "board": {
+    "cols": 18,
+    "rows": 24,
+    "pitchMm": 2.54,
+    "type": "two-sided",
+    "blocked": []
+  },
+  "netClasses": {
+    "GND": {},
+    "HV12": {},
+    "LOGIC": {}
+  },
+  "nets": {
+    "COIL_A": {
+      "class": "HV12",
+      "color": "#c19a00"
+    },
+    "COIL_B": {
+      "class": "HV12",
+      "color": "#c19a00"
+    },
+    "DATA_A": {
+      "class": "HV12",
+      "color": "#1f6fd6"
+    },
+    "DATA_B": {
+      "class": "HV12",
+      "color": "#1f6fd6"
+    },
+    "DRV_A": {
+      "class": "HV12",
+      "color": "#7cb342"
+    },
+    "DRV_B": {
+      "class": "HV12",
+      "color": "#7cb342"
+    },
+    "F12A": {
+      "class": "HV12",
+      "color": "#f08c00"
+    },
+    "F12B": {
+      "class": "HV12",
+      "color": "#f08c00"
+    },
+    "GATE_A": {
+      "class": "HV12",
+      "color": "#1d9e50"
+    },
+    "GATE_B": {
+      "class": "HV12",
+      "color": "#1d9e50"
+    },
+    "GND": {
+      "class": "GND",
+      "color": "#111111"
+    },
+    "IN_A": {
+      "class": "LOGIC",
+      "color": "#0aa294"
+    },
+    "IN_B": {
+      "class": "LOGIC",
+      "color": "#0aa294"
+    },
+    "LIFT_A1": {
+      "class": "HV12"
+    },
+    "LIFT_A2": {
+      "class": "HV12"
+    },
+    "LIFT_A3": {
+      "class": "HV12"
+    },
+    "LIFT_A4": {
+      "class": "HV12"
+    },
+    "LIFT_A5": {
+      "class": "HV12"
+    },
+    "LIFT_A6": {
+      "class": "HV12"
+    },
+    "LIFT_B1": {
+      "class": "HV12"
+    },
+    "LIFT_B2": {
+      "class": "HV12"
+    },
+    "LIFT_B3": {
+      "class": "HV12"
+    },
+    "LIFT_B4": {
+      "class": "HV12"
+    },
+    "LIFT_B5": {
+      "class": "HV12"
+    },
+    "LIFT_B6": {
+      "class": "HV12"
+    },
+    "V12": {
+      "class": "HV12",
+      "color": "#d62839"
+    },
+    "W1A": {
+      "class": "HV12",
+      "color": "#8a2be2"
+    },
+    "W1B": {
+      "class": "HV12",
+      "color": "#8a2be2"
+    },
+    "W2A": {
+      "class": "HV12",
+      "color": "#c77dff"
+    },
+    "W2B": {
+      "class": "HV12",
+      "color": "#c77dff"
+    }
+  },
+  "rules": {
+    "keepAway": [
+      {
+        "a": "LOGIC",
+        "b": "HV12",
+        "holes": 1
+      }
+    ],
+    "adjacency": [
+      {
+        "classes": [
+          "HV12",
+          "GND"
+        ],
+        "level": "supply"
+      },
+      {
+        "classes": [
+          "HV12",
+          "LOGIC"
+        ],
+        "level": "mcu"
+      }
+    ]
+  },
+  "parts": [
+    {
+      "ref": "JA",
+      "footprint": "terminal-2p-508",
+      "at": "A3",
+      "rotation": 0,
+      "value": "Screw terminal 2-pos",
+      "label": "JA string A (1=W1, 2=W2)",
+      "pins": {
+        "1": "W1A",
+        "2": "W2A"
+      }
+    },
+    {
+      "ref": "JB",
+      "footprint": "terminal-2p-508",
+      "at": "A15",
+      "rotation": 0,
+      "flip": true,
+      "value": "Screw terminal 2-pos",
+      "label": "JB string B (1=W1, 2=W2)",
+      "pins": {
+        "1": "W1B",
+        "2": "W2B"
+      }
+    },
+    {
+      "ref": "J3",
+      "footprint": "terminal-2p-508",
+      "at": "A7",
+      "rotation": 0,
+      "value": "Screw terminal 2-pos",
+      "label": "J3 power (1=GND, 2=V12)",
+      "pins": {
+        "1": "GND",
+        "2": "V12"
+      },
+      "roles": {
+        "1": "pwr",
+        "2": "pwr"
+      }
+    },
+    {
+      "ref": "KA",
+      "footprint": "relay-g5v2",
+      "at": "D3",
+      "rotation": 0,
+      "value": "Relay G5V-2-H1 DC12",
+      "label": "KA",
+      "pins": {
+        "1": "COIL_A",
+        "4": "W1A",
+        "6": "F12A",
+        "8": "DATA_A",
+        "9": "F12A",
+        "11": "DATA_A",
+        "13": "W2A",
+        "16": "V12"
+      }
+    },
+    {
+      "ref": "KB",
+      "footprint": "relay-g5v2",
+      "at": "D12",
+      "rotation": 0,
+      "value": "Relay G5V-2-H1 DC12",
+      "label": "KB",
+      "pins": {
+        "1": "V12",
+        "4": "W2B",
+        "6": "DATA_B",
+        "8": "F12B",
+        "9": "DATA_B",
+        "11": "F12B",
+        "13": "W1B",
+        "16": "COIL_B"
+      }
+    },
+    {
+      "ref": "QA",
+      "footprint": "to220-gds",
+      "at": "O5",
+      "rotation": 270,
+      "value": "MOSFET IRLB3813",
+      "label": "QA",
+      "pins": {
+        "G": "GATE_A",
+        "D": "DATA_A",
+        "S": "GND"
+      },
+      "roles": {
+        "G": "in"
+      }
+    },
+    {
+      "ref": "QB",
+      "footprint": "to220-gds",
+      "at": "O13",
+      "rotation": 90,
+      "value": "MOSFET IRLB3813",
+      "label": "QB",
+      "pins": {
+        "G": "GATE_B",
+        "D": "DATA_B",
+        "S": "GND"
+      },
+      "roles": {
+        "G": "in"
+      }
+    },
+    {
+      "ref": "U1",
+      "footprint": "dip8",
+      "at": "W8",
+      "rotation": 270,
+      "value": "TC4426 gate driver",
+      "label": "U1 TC4426",
+      "pins": {
+        "1": null,
+        "2": "IN_A",
+        "3": "GND",
+        "4": "IN_B",
+        "5": "DRV_B",
+        "6": "V12",
+        "7": "DRV_A",
+        "8": null
+      },
+      "roles": {
+        "2": "in",
+        "3": "pwr",
+        "4": "in",
+        "5": "out",
+        "6": "pwr",
+        "7": "out"
+      }
+    },
+    {
+      "ref": "JH",
+      "footprint": "header-1x5",
+      "at": "W18",
+      "rotation": 180,
+      "value": "Header 1x5",
+      "label": "JH cable",
+      "pins": {
+        "1": "GND",
+        "2": "IN_A",
+        "3": "IN_B",
+        "4": "COIL_B",
+        "5": "COIL_A"
+      },
+      "roles": {
+        "1": "pwr",
+        "2": "out",
+        "3": "out",
+        "4": "oc",
+        "5": "oc"
+      }
+    },
+    {
+      "ref": "FA",
+      "footprint": "polyfuse-radial",
+      "at": "F9",
+      "to": "F7",
+      "rotation": 0,
+      "value": "Polyfuse MF-R110",
+      "label": "FA 1.1A",
+      "pins": {
+        "a": "V12",
+        "b": "F12A"
+      }
+    },
+    {
+      "ref": "FB",
+      "footprint": "polyfuse-radial",
+      "at": "H9",
+      "to": "H11",
+      "rotation": 0,
+      "value": "Polyfuse MF-R110",
+      "label": "FB 1.1A",
+      "pins": {
+        "a": "V12",
+        "b": "F12B"
+      }
+    },
+    {
+      "ref": "RGA",
+      "footprint": "axial",
+      "at": "P5",
+      "to": "T5",
+      "rotation": 0,
+      "label": "RGA 10R",
+      "pins": {
+        "a": "GATE_A",
+        "b": "DRV_A"
+      }
+    },
+    {
+      "ref": "RGB",
+      "footprint": "axial",
+      "at": "Q13",
+      "to": "T13",
+      "rotation": 0,
+      "label": "RGB 10R",
+      "pins": {
+        "a": "GATE_B",
+        "b": "DRV_B"
+      }
+    },
+    {
+      "ref": "C1",
+      "footprint": "cap-disc",
+      "at": "S10",
+      "to": "R10",
+      "rotation": 0,
+      "label": "C1 100n",
+      "pins": {
+        "a": "V12",
+        "b": "GND"
+      }
+    },
+    {
+      "ref": "RPA",
+      "footprint": "axial",
+      "at": "T17",
+      "to": "U17",
+      "rotation": 0,
+      "standing": true,
+      "label": "RPA 10k",
+      "pins": {
+        "a": "GND",
+        "b": "IN_A"
+      }
+    },
+    {
+      "ref": "RPB",
+      "footprint": "axial",
+      "at": "T16",
+      "to": "U16",
+      "rotation": 0,
+      "standing": true,
+      "label": "RPB 10k",
+      "pins": {
+        "a": "GND",
+        "b": "IN_B"
+      }
+    },
+    {
+      "ref": "DA1",
+      "footprint": "axial",
+      "at": "L2",
+      "to": "L1",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DA1 1N4001",
+      "pins": {
+        "a": "DATA_A",
+        "b": "LIFT_A1"
+      }
+    },
+    {
+      "ref": "DA2",
+      "footprint": "axial",
+      "at": "M1",
+      "to": "N1",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DA2 1N4001",
+      "pins": {
+        "a": "LIFT_A1",
+        "b": "LIFT_A2"
+      }
+    },
+    {
+      "ref": "DA3",
+      "footprint": "axial",
+      "at": "O1",
+      "to": "P1",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DA3 1N4001",
+      "pins": {
+        "a": "LIFT_A2",
+        "b": "LIFT_A3"
+      }
+    },
+    {
+      "ref": "DA4",
+      "footprint": "axial",
+      "at": "Q1",
+      "to": "Q2",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DA4 1N4001",
+      "pins": {
+        "a": "LIFT_A3",
+        "b": "LIFT_A4"
+      }
+    },
+    {
+      "ref": "DA5",
+      "footprint": "axial",
+      "at": "P2",
+      "to": "O2",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DA5 1N4001",
+      "pins": {
+        "a": "LIFT_A4",
+        "b": "LIFT_A5"
+      }
+    },
+    {
+      "ref": "DA6",
+      "footprint": "axial",
+      "at": "N2",
+      "to": "N3",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DA6 1N4001",
+      "pins": {
+        "a": "LIFT_A5",
+        "b": "LIFT_A6"
+      }
+    },
+    {
+      "ref": "DA7",
+      "footprint": "axial",
+      "at": "O3",
+      "to": "P3",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DA7 1N4001",
+      "pins": {
+        "a": "LIFT_A6",
+        "b": "GND"
+      }
+    },
+    {
+      "ref": "DB1",
+      "footprint": "axial",
+      "at": "L16",
+      "to": "L17",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DB1 1N4001",
+      "pins": {
+        "a": "DATA_B",
+        "b": "LIFT_B1"
+      }
+    },
+    {
+      "ref": "DB2",
+      "footprint": "axial",
+      "at": "M17",
+      "to": "N17",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DB2 1N4001",
+      "pins": {
+        "a": "LIFT_B1",
+        "b": "LIFT_B2"
+      }
+    },
+    {
+      "ref": "DB3",
+      "footprint": "axial",
+      "at": "O17",
+      "to": "P17",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DB3 1N4001",
+      "pins": {
+        "a": "LIFT_B2",
+        "b": "LIFT_B3"
+      }
+    },
+    {
+      "ref": "DB4",
+      "footprint": "axial",
+      "at": "Q17",
+      "to": "Q16",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DB4 1N4001",
+      "pins": {
+        "a": "LIFT_B3",
+        "b": "LIFT_B4"
+      }
+    },
+    {
+      "ref": "DB5",
+      "footprint": "axial",
+      "at": "P16",
+      "to": "O16",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DB5 1N4001",
+      "pins": {
+        "a": "LIFT_B4",
+        "b": "LIFT_B5"
+      }
+    },
+    {
+      "ref": "DB6",
+      "footprint": "axial",
+      "at": "N16",
+      "to": "N15",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DB6 1N4001",
+      "pins": {
+        "a": "LIFT_B5",
+        "b": "LIFT_B6"
+      }
+    },
+    {
+      "ref": "DB7",
+      "footprint": "axial",
+      "at": "O15",
+      "to": "P15",
+      "rotation": 0,
+      "standing": true,
+      "value": "Diode 1N4001",
+      "label": "DB7 1N4001",
+      "pins": {
+        "a": "LIFT_B6",
+        "b": "GND"
+      }
+    }
+  ],
+  "trails": [
+    {
+      "id": "T1",
+      "side": "bottom",
+      "points": [
+        "R1",
+        "R18"
+      ],
+      "joints": [
+        "R1",
+        "R3",
+        "R7",
+        "R8",
+        "R10",
+        "R11",
+        "R15",
+        "R16",
+        "R18"
+      ]
+    },
+    {
+      "id": "T2",
+      "side": "bottom",
+      "points": [
+        "A9",
+        "P9"
+      ],
+      "joints": [
+        "A9",
+        "D9",
+        "F9",
+        "H9",
+        "P9"
+      ]
+    },
+    {
+      "id": "T3",
+      "side": "bottom",
+      "points": [
+        "A3",
+        "B3",
+        "B2",
+        "G2",
+        "G3"
+      ],
+      "joints": [
+        "A3",
+        "G3"
+      ]
+    },
+    {
+      "id": "T4",
+      "side": "bottom",
+      "points": [
+        "A5",
+        "G5",
+        "G6"
+      ],
+      "joints": [
+        "A5",
+        "G6"
+      ]
+    },
+    {
+      "id": "T5",
+      "side": "bottom",
+      "points": [
+        "D6",
+        "D9"
+      ],
+      "joints": [
+        "D6",
+        "D9"
+      ]
+    },
+    {
+      "id": "T6",
+      "side": "bottom",
+      "points": [
+        "F7",
+        "K7",
+        "K6"
+      ],
+      "joints": [
+        "F7",
+        "I7",
+        "K6"
+      ]
+    },
+    {
+      "id": "T7",
+      "side": "bottom",
+      "points": [
+        "K3",
+        "M3"
+      ],
+      "joints": [
+        "K3",
+        "M3"
+      ]
+    },
+    {
+      "id": "T8",
+      "side": "bottom",
+      "points": [
+        "I6",
+        "I5",
+        "M5"
+      ],
+      "joints": [
+        "I6",
+        "M5"
+      ]
+    },
+    {
+      "id": "T9",
+      "side": "bottom",
+      "points": [
+        "L2",
+        "M2",
+        "M6",
+        "O6"
+      ],
+      "joints": [
+        "L2",
+        "M3",
+        "M5",
+        "O6"
+      ]
+    },
+    {
+      "id": "T10",
+      "side": "bottom",
+      "points": [
+        "O5",
+        "P5"
+      ],
+      "joints": [
+        "O5",
+        "P5"
+      ]
+    },
+    {
+      "id": "T11",
+      "side": "bottom",
+      "points": [
+        "O7",
+        "R7"
+      ],
+      "joints": [
+        "O7",
+        "R7"
+      ]
+    },
+    {
+      "id": "T12",
+      "side": "bottom",
+      "points": [
+        "A15",
+        "B15",
+        "B16",
+        "G16",
+        "G15"
+      ],
+      "joints": [
+        "A15",
+        "G15",
+        "E16"
+      ]
+    },
+    {
+      "id": "T13",
+      "side": "bottom",
+      "points": [
+        "A13",
+        "G13",
+        "G12"
+      ],
+      "joints": [
+        "A13",
+        "G12"
+      ]
+    },
+    {
+      "id": "T14",
+      "side": "bottom",
+      "points": [
+        "D12",
+        "D9"
+      ],
+      "joints": [
+        "D12",
+        "D9"
+      ]
+    },
+    {
+      "id": "T15",
+      "side": "bottom",
+      "points": [
+        "H11",
+        "K11",
+        "K12"
+      ],
+      "joints": [
+        "H11",
+        "I11",
+        "K12"
+      ]
+    },
+    {
+      "id": "T16",
+      "side": "bottom",
+      "points": [
+        "K15",
+        "M15"
+      ],
+      "joints": [
+        "K15",
+        "M15"
+      ]
+    },
+    {
+      "id": "T17",
+      "side": "bottom",
+      "points": [
+        "I12",
+        "I13",
+        "M13"
+      ],
+      "joints": [
+        "I12",
+        "M13"
+      ]
+    },
+    {
+      "id": "T18",
+      "side": "bottom",
+      "points": [
+        "L16",
+        "M16",
+        "M12",
+        "O12"
+      ],
+      "joints": [
+        "L16",
+        "M15",
+        "M13",
+        "O12"
+      ]
+    },
+    {
+      "id": "T19",
+      "side": "bottom",
+      "points": [
+        "O13",
+        "Q13"
+      ],
+      "joints": [
+        "O13",
+        "Q13"
+      ]
+    },
+    {
+      "id": "T20",
+      "side": "bottom",
+      "points": [
+        "O11",
+        "R11"
+      ],
+      "joints": [
+        "O11",
+        "R11"
+      ]
+    },
+    {
+      "id": "T23",
+      "side": "bottom",
+      "points": [
+        "T11",
+        "T13"
+      ],
+      "joints": [
+        "T11",
+        "T13"
+      ]
+    },
+    {
+      "id": "T25",
+      "side": "bottom",
+      "points": [
+        "X11",
+        "W11"
+      ],
+      "joints": [
+        "X11",
+        "W11"
+      ]
+    },
+    {
+      "id": "T27",
+      "side": "bottom",
+      "points": [
+        "W17",
+        "U17"
+      ],
+      "joints": [
+        "W17",
+        "V17",
+        "U17"
+      ]
+    },
+    {
+      "id": "T28",
+      "side": "bottom",
+      "points": [
+        "W9",
+        "X9"
+      ],
+      "joints": [
+        "W9",
+        "X9"
+      ]
+    },
+    {
+      "id": "T30",
+      "side": "bottom",
+      "points": [
+        "W18",
+        "R18"
+      ],
+      "joints": [
+        "W18",
+        "R18",
+        "T18"
+      ]
+    },
+    {
+      "id": "T31",
+      "side": "bottom",
+      "points": [
+        "V10",
+        "W10"
+      ],
+      "joints": [
+        "W10"
+      ]
+    },
+    {
+      "id": "T32",
+      "side": "bottom",
+      "points": [
+        "S11",
+        "S10",
+        "T10"
+      ],
+      "joints": [
+        "S11",
+        "S10",
+        "T10"
+      ]
+    },
+    {
+      "id": "T33",
+      "side": "bottom",
+      "points": [
+        "A7",
+        "C7"
+      ],
+      "joints": [
+        "A7",
+        "C7"
+      ]
+    },
+    {
+      "id": "T34",
+      "side": "bottom",
+      "points": [
+        "P3",
+        "Q3",
+        "R3"
+      ],
+      "joints": [
+        "P3",
+        "R3"
+      ]
+    },
+    {
+      "id": "T35",
+      "side": "bottom",
+      "points": [
+        "P15",
+        "Q15",
+        "R15"
+      ],
+      "joints": [
+        "P15",
+        "R15"
+      ]
+    },
+    {
+      "id": "T29",
+      "side": "bottom",
+      "points": [
+        "W16",
+        "U16"
+      ],
+      "joints": [
+        "W16",
+        "V16",
+        "U16"
+      ]
+    },
+    {
+      "id": "T21",
+      "side": "bottom",
+      "points": [
+        "V10",
+        "V1",
+        "R1"
+      ],
+      "joints": [
+        "V10",
+        "R1"
+      ]
+    },
+    {
+      "id": "T39",
+      "side": "bottom",
+      "points": [
+        "T18",
+        "T16"
+      ],
+      "joints": [
+        "T18",
+        "T16",
+        "T17"
+      ]
+    }
+  ],
+  "wires": [
+    {
+      "id": "W1",
+      "kind": "laid",
+      "side": "bottom",
+      "points": [
+        "I2",
+        "I7"
+      ],
+      "color": "#f08c00",
+      "bareSegments": [],
+      "joints": []
+    },
+    {
+      "id": "W2",
+      "kind": "laid",
+      "side": "bottom",
+      "points": [
+        "I16",
+        "I11"
+      ],
+      "color": "#f08c00",
+      "bareSegments": [],
+      "joints": []
+    },
+    {
+      "id": "W3",
+      "kind": "laid",
+      "side": "bottom",
+      "points": [
+        "P9",
+        "P11",
+        "S11"
+      ],
+      "color": "#d62839",
+      "bareSegments": [],
+      "joints": []
+    },
+    {
+      "id": "W4",
+      "kind": "laid",
+      "side": "bottom",
+      "points": [
+        "S9",
+        "S4",
+        "T4"
+      ],
+      "color": "#7cb342",
+      "bareSegments": [],
+      "joints": []
+    },
+    {
+      "id": "W5",
+      "kind": "flying",
+      "side": "top",
+      "points": [
+        "V17",
+        "X9"
+      ],
+      "color": "#0aa294",
+      "bareSegments": [],
+      "joints": []
+    },
+    {
+      "id": "W6",
+      "kind": "laid",
+      "side": "top",
+      "points": [
+        "V16",
+        "V12",
+        "X12",
+        "X11"
+      ],
+      "color": "#0aa294",
+      "bareSegments": [],
+      "joints": []
+    },
+    {
+      "id": "W7",
+      "kind": "laid",
+      "side": "bottom",
+      "points": [
+        "C3",
+        "C14",
+        "X14"
+      ],
+      "color": "#c19a00",
+      "bareSegments": [],
+      "joints": []
+    },
+    {
+      "id": "W8",
+      "kind": "laid",
+      "side": "bottom",
+      "points": [
+        "C15",
+        "V15"
+      ],
+      "color": "#c19a00",
+      "bareSegments": [],
+      "joints": []
+    },
+    {
+      "id": "W9",
+      "kind": "laid",
+      "side": "bottom",
+      "points": [
+        "C7",
+        "C8",
+        "R8"
+      ],
+      "color": "#111111",
+      "bareSegments": [],
+      "joints": []
+    }
+  ],
+  "legFolds": [
+    {
+      "lead": "DA1.b",
+      "to": "M1"
+    },
+    {
+      "lead": "DA2.b",
+      "to": "O1"
+    },
+    {
+      "lead": "DA3.b",
+      "to": "Q1"
+    },
+    {
+      "lead": "DA4.b",
+      "to": "P2"
+    },
+    {
+      "lead": "DA5.b",
+      "to": "N2"
+    },
+    {
+      "lead": "DA6.b",
+      "to": "O3"
+    },
+    {
+      "lead": "DB1.b",
+      "to": "M17"
+    },
+    {
+      "lead": "DB2.b",
+      "to": "O17"
+    },
+    {
+      "lead": "DB3.b",
+      "to": "Q17"
+    },
+    {
+      "lead": "DB4.b",
+      "to": "P16"
+    },
+    {
+      "lead": "DB5.b",
+      "to": "N16"
+    },
+    {
+      "lead": "DB6.b",
+      "to": "O15"
+    }
+  ],
+  "solderBridges": [
+    {
+      "side": "bottom",
+      "a": "I2",
+      "b": "I3"
+    },
+    {
+      "side": "bottom",
+      "a": "I16",
+      "b": "I15"
+    },
+    {
+      "side": "bottom",
+      "a": "S9",
+      "b": "T9"
+    },
+    {
+      "side": "bottom",
+      "a": "T4",
+      "b": "T5"
+    },
+    {
+      "side": "bottom",
+      "a": "C3",
+      "b": "D3"
+    },
+    {
+      "side": "bottom",
+      "a": "X14",
+      "b": "W14"
+    },
+    {
+      "side": "bottom",
+      "a": "C15",
+      "b": "D15"
+    },
+    {
+      "side": "bottom",
+      "a": "V15",
+      "b": "W15"
+    }
+  ],
+  "bench": {
+    "endLeadMm": 5,
+    "bendAllowanceMm": 1,
+    "spareMm": 5,
+    "flyingSlackMm": 10,
+    "roundToMm": 5,
+    "paper": "letter"
+  }
+}

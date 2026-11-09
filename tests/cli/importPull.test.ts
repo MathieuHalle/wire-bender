@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { importCmd, pullCmd } from '../../cli/commands'
 import { openDb, type Db } from '../../server/db'
 import * as api from '../../server/utils/api'
+import { encodeBundle } from '../../core/bundle'
+import { parseBoard } from '../../core/schema'
 
 const fixturePath = path.resolve(__dirname, '../fixtures/channel-board-2.json')
 let dir: string
@@ -128,3 +130,72 @@ describe('against the real server functions', () => {
 function board() {
   return JSON.parse(readFileSync(fixturePath, 'utf8'))
 }
+
+describe('bundles', () => {
+  const goodZip = () => {
+    const b = parseBoard(JSON.parse(readFileSync(fixturePath, 'utf8')))
+    if (!b.ok) throw new Error('fixture')
+    return encodeBundle({
+      name: b.board.name,
+      exportedAt: 1,
+      board: b.board,
+      revisions: [1, 2].map(n => ({ n, createdAt: n, author: 'A', how: 'edit' as const, target: null, summary: 's', board: b.board }))
+    })
+  }
+
+  it('import of a bundle prints the revision count', async () => {
+    const f = reply(201, { id: 'zz', name: 'My board', head: 2, revisions: 2 })
+    vi.stubGlobal('fetch', f)
+    const file = path.join(dir, 'a.wirebender.zip')
+    writeFileSync(file, goodZip())
+    expect(await importCmd([file, '--url', 'http://h:1', '--token', 'wb_x'])).toBe(0)
+    expect(out.join('\n')).toBe('imported My board (2 revisions) → http://h:1/b/zz')
+    const [url, init] = f.mock.calls[0] as unknown as [string, { method: string, headers: Record<string, string> }]
+    expect(url).toBe('http://h:1/api/boards/import-bundle')
+    expect(init.method).toBe('POST')
+    expect(init.headers['content-type']).toBe('application/zip')
+    expect(init.headers.authorization).toBe('Bearer wb_x')
+  })
+
+  it('import of a bad bundle exits 2 without calling the server', async () => {
+    const f = reply(201, { id: 'x' })
+    vi.stubGlobal('fetch', f)
+    const file = path.join(dir, 'bad.wirebender.zip')
+    writeFileSync(file, 'not a zip')
+    expect(await importCmd([file])).toBe(2)
+    expect(f).not.toHaveBeenCalled()
+    expect(out.join('\n')).toContain('Advisory only.')
+  })
+
+  it('pull --bundle writes the zip bytes', async () => {
+    const zip = goodZip()
+    const f = vi.fn(async () => new Response(zip, { status: 200 }))
+    vi.stubGlobal('fetch', f)
+    const file = path.join(dir, 'o.wirebender.zip')
+    expect(await pullCmd(['abc', '-o', file, '--bundle', '--url', 'http://h'])).toBe(0)
+    expect(new Uint8Array(readFileSync(file))).toEqual(zip)
+    expect((f.mock.calls[0] as unknown[])[0]).toBe('http://h/api/boards/abc/bundle')
+  })
+
+  it('pull --bundle defaults the name and keeps the --force rule', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(goodZip(), { status: 200 })))
+    const cwd = process.cwd()
+    process.chdir(dir)
+    try {
+      expect(await pullCmd(['abc', '--bundle'])).toBe(0)
+      expect(existsSync(path.join(dir, 'abc.wirebender.zip'))).toBe(true)
+      expect(await pullCmd(['abc', '--bundle'])).toBe(2)
+      expect(await pullCmd(['abc', '--bundle', '--force'])).toBe(0)
+    } finally {
+      process.chdir(cwd)
+    }
+  })
+
+  it('pull --bundle passes a refusal through and writes nothing', async () => {
+    vi.stubGlobal('fetch', reply(404, { error: 'Not found.' }))
+    const file = path.join(dir, 'n.wirebender.zip')
+    expect(await pullCmd(['abc', '-o', file, '--bundle'])).toBe(1)
+    expect(err.join('\n')).toContain('Not found.')
+    expect(existsSync(file)).toBe(false)
+  })
+})

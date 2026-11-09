@@ -1,0 +1,22 @@
+# Nothing private or machine-made goes to the daemon, at any depth.
+**/.env
+**/.env.*
+**/.env-*
+!.env.example
+**/.data
+**/*.sqlite*
+**/scratchpad
+**/node_modules
+**/.output
+**/.nuxt
+**/.nitro
+**/.cache
+**/.git
+.claude
+.superpowers
+**/*.log
+**/.DS_Store
+reference
+docs
+tests
+Screenshot*.png

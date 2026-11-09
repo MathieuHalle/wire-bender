@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RETURN_KEY, returnPath } from '~/utils/boardView'
+import { saveZip } from '~/utils/download'
 
 // The board lists: My boards (newest change first), Shared with me (public mode: boards
 // opened by someone else's link, by their link id only), and Trash (Restore, or Delete for
@@ -23,7 +24,7 @@ const signedOut = computed(() => isPublic.value && !user.value)
 const canList = computed(() => mode.value === 'local' || (isPublic.value && !!user.value))
 
 const EMPTY: Record<List, string> = {
-  mine: 'No boards yet. Import a .wirebender.json file or start a new board.',
+  mine: 'No boards yet. Import a .wirebender.json or .wirebender.zip file or start a new board.',
   shared: 'Nothing shared with you yet. Boards you open from someone else\'s link show up here.',
   trash: 'The trash is empty.'
 }
@@ -143,6 +144,15 @@ async function onPick(ev: Event) {
   input.value = ''
   if (!file) return
   importErrors.value = null
+  if (file.name.toLowerCase().endsWith('.zip')) {
+    try {
+      const { id } = await $fetch<{ id: string }>('/api/boards/import-bundle', { method: 'POST', body: file, headers: { 'content-type': 'application/zip' } })
+      await navigateTo(`/b/${id}`)
+    } catch (e) {
+      importErrors.value = { file: file.name, errors: errorsOf(e) }
+    }
+    return
+  }
   let board: unknown
   try {
     board = JSON.parse(await file.text())
@@ -245,12 +255,19 @@ watch(sharing, (s, was) => {
   if (!s && was) void refresh()
 })
 
+async function downloadBundle(b: BoardRow) {
+  const refused = await saveZip(`/api/boards/${encodeURIComponent(b.id)}/bundle`, 'board.wirebender.zip')
+  if (refused) toast.add({ title: refused, color: 'error', icon: 'i-lucide-ban' })
+}
+
 /** A board of mine's actions besides Open and Share. */
 const more = (b: BoardRow) => [[
   { label: 'Rename', icon: 'i-lucide-text-cursor-input', onSelect: () => openRename(b) },
   { label: 'Duplicate', icon: 'i-lucide-copy', onSelect: () => void copyOf(b.id, b.name, true) },
   // An attachment: the browser saves it and stays on this page.
-  { label: 'Download', icon: 'i-lucide-download', onSelect: () => window.location.assign(`/api/boards/${b.id}/download`) }
+  { label: 'Board file', icon: 'i-lucide-download', onSelect: () => window.location.assign(`/api/boards/${b.id}/download`) },
+  // The bundle can be big, so it goes through fetch, which can show a refusal as a toast.
+  { label: 'Board with history', icon: 'i-lucide-history', onSelect: () => void downloadBundle(b) }
 ], [
   { label: 'Move to trash', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => void toTrash(b) }
 ]]
@@ -290,7 +307,7 @@ const more = (b: BoardRow) => [[
       <input
         ref="picker"
         type="file"
-        accept=".json,application/json"
+        accept=".json,.zip,application/json,application/zip"
         class="hidden"
         @change="onPick"
       >

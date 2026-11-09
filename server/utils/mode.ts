@@ -74,6 +74,7 @@ function fromEnv(env: Env, name: 'NUXT_APP_SECRET' | 'NUXT_SESSION_PASSWORD'): s
   const given = env[name]
   if (!given) return undefined
   if (given.length < MIN_SECRET) throw new Error(`${name} must be at least ${MIN_SECRET} characters`)
+  if (given.trimStart().toLowerCase().startsWith('replace-me')) throw new Error(`${name} is still the placeholder from .env.example: set it to the output of openssl rand -hex 32`)
   return given
 }
 
@@ -86,14 +87,17 @@ function fromEnv(env: Env, name: 'NUXT_APP_SECRET' | 'NUXT_SESSION_PASSWORD'): s
  * nuxt-auth-utils 0.6 seals sessions with a key derived from Nuxt's `appSecret`, which Nitro
  * reads from `NUXT_APP_SECRET` once, when the server loads: this secret must be in that
  * variable before the server process starts (modules/session-secret.ts does it for `nuxt dev`).
+ *
+ * With `create` false (a production start) a missing file is not made: null instead.
  */
-export function resolveSessionSecret(dataDir: string, env: Env = process.env): SessionSecret {
+export function resolveSessionSecret(dataDir: string, env?: Env): SessionSecret
+export function resolveSessionSecret(dataDir: string, env: Env, create: false): SessionSecret | null
+export function resolveSessionSecret(dataDir: string, env: Env = process.env, create = true): SessionSecret | null {
   const file = path.join(dataDir, SECRET_FILE)
   const app = fromEnv(env, 'NUXT_APP_SECRET')
   if (app) return { secret: app, from: 'NUXT_APP_SECRET', file }
   const password = fromEnv(env, 'NUXT_SESSION_PASSWORD')
   if (password) return { secret: password, from: 'NUXT_SESSION_PASSWORD', file }
-  mkdirSync(dataDir, { recursive: true })
   let text: string | null = null
   try {
     text = readFileSync(file, 'utf8')
@@ -101,6 +105,8 @@ export function resolveSessionSecret(dataDir: string, env: Env = process.env): S
     if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e
   }
   if (text === null) {
+    if (!create) return null
+    mkdirSync(dataDir, { recursive: true })
     const secret = randomBytes(32).toString('hex')
     // `wx`: if another process made it first, this fails instead of replacing it.
     writeFileSync(file, `${secret}\n`, { mode: 0o600, flag: 'wx' })
@@ -120,11 +126,14 @@ const SECRET_NEEDED = 'public mode needs NUXT_APP_SECRET set to the session secr
 /**
  * At start. Local mode: nothing (no file, never an error). Public mode: the error to stop
  * with when sessions would be sealed with another `appSecret` (a build started without
- * `NUXT_APP_SECRET`), naming the exact fix; else null.
+ * `NUXT_APP_SECRET`), naming the exact fix; else null. No session-secret file is ever made
+ * here: with no secret at all, the fix is a new one from openssl. A file made earlier (by
+ * `pnpm dev:public`) is pointed at instead, so its sessions survive.
  */
 export function startupSecretProblem(mode: Mode, appSecret: unknown, dataDir: string, env: Env = process.env): string | null {
   if (mode === 'local') return null
-  const s = resolveSessionSecret(dataDir, env)
+  const s = resolveSessionSecret(dataDir, env, false)
+  if (s === null) return `${SECRET_NEEDED}: set NUXT_APP_SECRET to the output of openssl rand -hex 32`
   if (appSecret === s.secret) return null
   return s.from === 'file'
     ? `${SECRET_NEEDED}: NUXT_APP_SECRET=$(cat ${s.file})`

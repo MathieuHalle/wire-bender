@@ -55,6 +55,16 @@ async function saveName() {
   }
 }
 
+const exporting = ref(false)
+async function downloadAll() {
+  exporting.value = true
+  const refused = await saveZip('/api/me/export', 'wirebender-boards.zip')
+  exporting.value = false
+  toast.add(refused
+    ? { title: refused, color: 'error', icon: 'i-lucide-ban' }
+    : { title: 'Download started', color: 'success', icon: 'i-lucide-check' })
+}
+
 async function signOut() {
   await $fetch('/api/_auth/session', { method: 'DELETE' })
   await refresh()
@@ -105,6 +115,14 @@ async function signOut() {
         others in, run WireBender in public mode with GitHub or Google sign-in.
       </p>
       <TokensPanel />
+      <UButton
+        icon="i-lucide-download"
+        label="Download all my boards"
+        variant="outline"
+        class="self-start"
+        :loading="exporting"
+        @click="downloadAll"
+      />
       <UButton
         to="/"
         label="Back to boards"
@@ -184,6 +202,15 @@ async function signOut() {
       </section>
 
       <TokensPanel />
+
+      <UButton
+        icon="i-lucide-download"
+        label="Download all my boards"
+        variant="outline"
+        class="self-start"
+        :loading="exporting"
+        @click="downloadAll"
+      />
 
       <UButton
         label="Sign out"

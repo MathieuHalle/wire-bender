@@ -66,12 +66,12 @@ export function createRefusal(db: Db, who: Who, now = Date.now()): ApiResult | n
   return capRefusal(db, who)
 }
 
-/** Make a board with `make` unless a limit refuses; only a made board (200) counts toward the rate. */
+/** Make a board with `make` unless a limit refuses; only a made board (200 or 201) counts toward the rate. */
 export function withCreateLimit(db: Db, who: Who, make: () => ApiResult, now = Date.now()): ApiResult {
   const refused = createRefusal(db, who, now)
   if (refused) return refused
   const r = make()
-  if (r.status === 200 && who.kind === 'user') {
+  if ((r.status === 200 || r.status === 201) && who.kind === 'user') {
     if (createsBy.size > SWEEP_AT) for (const id of [...createsBy.keys()]) recentCreates(id, now)
     createsBy.set(who.userId, [...recentCreates(who.userId, now), now])
   }
