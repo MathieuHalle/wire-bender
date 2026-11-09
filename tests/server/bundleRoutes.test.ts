@@ -3,12 +3,14 @@
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { eq } from 'drizzle-orm'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { MAX_BUNDLE_BYTES, encodeBundle } from '../../core/bundle'
 import type { BoardFile } from '../../core/schema'
 import { closeDb, useDb } from '../../server/db'
 import { boards } from '../../server/db/schema'
 import type { NodeReqLike } from '../../server/utils/peerAddress'
+import { EXPORTS_PER_MINUTE, TOO_MANY_EXPORTS, resetExportRate } from '../../server/utils/bundles'
 import { resetCreateRate } from '../../server/utils/lifecycle'
 import type { Who } from '../../server/utils/who'
 
@@ -46,6 +48,7 @@ afterAll(() => {
 })
 beforeEach(() => {
   resetCreateRate()
+  resetExportRate()
   dir = mkdtempSync(path.join(os.tmpdir(), 'wirebender-bundle-routes-'))
   vi.stubEnv('WIREBENDER_DATA', dir)
   vi.stubEnv('WIREBENDER_MODE', 'local')
@@ -145,6 +148,29 @@ describe('the export routes', () => {
     const e = call('GET', local, {})
     expect(await meExport(e)).toBeInstanceOf(Uint8Array)
     expect(e.status).toBe(200)
+  })
+
+  it('the 7th bundle in a minute is 429, counted per client address for a signed-out visitor', async () => {
+    const db = useDb()
+    const created = await importRoute(call('POST', local, { 'content-type': 'application/zip' }, [Buffer.from(zip)])) as { id: string }
+    db.update(boards).set({ visibility: 'view' }).where(eq(boards.id, created.id)).run()
+    const linkId = db.select().from(boards).where(eq(boards.id, created.id)).get()!.linkId
+    const from = (address: string) => {
+      const e = call('GET', { kind: 'anonymous' }, {}, [], { id: linkId })
+      e.node.req.socket = { remoteAddress: address, localPort: 3003 }
+      return e
+    }
+    for (let i = 0; i < EXPORTS_PER_MINUTE; i++) {
+      const e = from('203.0.113.7')
+      expect(await bundleRoute(e)).toBeInstanceOf(Uint8Array)
+      expect(e.status).toBe(200)
+    }
+    const seventh = from('203.0.113.7')
+    expect(await bundleRoute(seventh)).toEqual({ error: TOO_MANY_EXPORTS })
+    expect(seventh.status).toBe(429)
+    const other = from('203.0.113.8')
+    await bundleRoute(other)
+    expect(other.status).toBe(200)
   })
 
   it('a bundle of an unknown board is 404', async () => {

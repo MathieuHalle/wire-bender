@@ -142,7 +142,7 @@ docker compose up -d
 
 ### Moving a board between servers (with history)
 
-On the board list, a board's menu has **Board file** (the current board only) and **Board with history** (a `.wirebender.zip` holding every revision). On the other server, **Import** accepts either file; a zip creates a new board with its history. Revisions that came from a zip show `(imported)` after the author in the History tab: the author is a name only, and Undo works across them. From a script: `GET /api/boards/:id/bundle` and `POST /api/boards/import-bundle` (raw zip body, `Content-Type: application/zip`), or the CLI below.
+On the board list, a board's menu has **Board file** (the current board only) and **Board with history** (a `.wirebender.zip` holding every revision). On the other server, **Import** accepts either file; a zip creates a new board with its history. Revisions that came from a zip show `(imported)` after the author in the History tab: the author is a name only, and Undo works across them. From a script: `GET /api/boards/:id/bundle` and `POST /api/boards/import-bundle` (raw zip body, `Content-Type: application/zip`), or the CLI below. Bundle downloads share the download-all limit below (6 a minute per account, or per address for a visitor on a view link; past it, `429 Too many exports. Wait a minute and try again.`).
 
 ### Download everything
 

@@ -10,7 +10,7 @@ import type { BoardFile } from '../../core/schema'
 import { openDb, type Db } from '../../server/db'
 import { boards, revisions, users } from '../../server/db/schema'
 import { signIn } from '../../server/utils/accounts'
-import { beginExport, endExport, exportAll, exportAllResult, exportBundle, exportServer, exportServerResult, importBundle, resetExportRate, EXPORTS_PER_MINUTE } from '../../server/utils/bundles'
+import { beginExport, endExport, exportAll, exportAllResult, exportBundle, exportServer, exportServerResult, importBundle, resetExportRate, EXPORTS_PER_MINUTE, TOO_MANY_EXPORTS } from '../../server/utils/bundles'
 import { tokenRefusal } from '../../server/utils/access'
 import { commitRevision, createBoard, listBoards, listRevisions } from '../../server/utils/boards'
 import { CREATES_PER_MINUTE, resetCreateRate, withCreateLimit } from '../../server/utils/lifecycle'
@@ -222,6 +222,33 @@ describe('download-all and admin export', () => {
     for (let i = 3; i < EXPORTS_PER_MINUTE; i++) expect(exportAllResult(db, local, 1000 + i).status).toBe(200)
     expect(exportAllResult(db, local, 2000).status).toBe(429)
     expect(exportAllResult(db, local, 1000 + 61_000).status).toBe(200)
+  })
+
+  it('a board bundle is throttled the same way, per user, sharing download-all\'s count', () => {
+    const { id } = createBoard(db, named(fixture, 'Amp'), 'create', 'Local')
+    for (let i = 0; i < EXPORTS_PER_MINUTE - 1; i++) expect(exportBundle(db, { key: id, who: local }, undefined, 1000).status).toBe(200)
+    expect(exportAllResult(db, local, 1000).status).toBe(200)
+    const refused = exportBundle(db, { key: id, who: local }, undefined, 1000)
+    expect(refused).toEqual({ status: 429, body: { error: TOO_MANY_EXPORTS } })
+    expect(exportBundle(db, { key: id, who: local }, undefined, 62_000).status).toBe(200)
+  })
+
+  it('anonymous bundle downloads on a view link are throttled per client address', () => {
+    const ann = account('Ann')
+    const { id } = createBoard(db, named(fixture, 'Shared'), 'create', 'Ann', ann.userId, ann.userId)
+    db.update(boards).set({ visibility: 'view' }).where(eq(boards.id, id)).run()
+    const linkId = db.select().from(boards).where(eq(boards.id, id)).get()!.linkId
+    const anon: Who = { kind: 'anonymous' }
+    for (let i = 0; i < EXPORTS_PER_MINUTE; i++) expect(exportBundle(db, { key: linkId, who: anon }, '203.0.113.5', 1000).status).toBe(200)
+    expect(exportBundle(db, { key: linkId, who: anon }, '203.0.113.5', 1000).status).toBe(429)
+    expect(exportBundle(db, { key: linkId, who: anon }, '203.0.113.6', 1000).status).toBe(200)
+    // The owner's own count is apart from the anonymous callers'.
+    expect(exportBundle(db, { key: id, who: ann }, '203.0.113.5', 1000).status).toBe(200)
+  })
+
+  it('a refused bundle (404) does not use up the count', () => {
+    for (let i = 0; i < EXPORTS_PER_MINUTE + 1; i++) expect(exportBundle(db, { key: 'nope', who: local }, undefined, 1000).status).toBe(404)
+    expect(exportAllResult(db, local, 1000).status).toBe(200)
   })
 
   it('the admin export is throttled the same way', () => {

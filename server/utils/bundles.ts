@@ -32,12 +32,23 @@ function bundleOf(db: Db, id: string): { name: string, zip: Uint8Array } | null 
   return { name: stored.name, zip: encodeBundle({ name: stored.name, exportedAt: Date.now(), board: stored.board, revisions: list }) }
 }
 
-/** `GET /api/boards/:key/bundle`: the board with its whole history as `<name>.wirebender.zip`. Needs view. */
-export function exportBundle(db: Db, req: BoardRequest): ApiResult {
+/**
+ * `GET /api/boards/:key/bundle`: the board with its whole history as `<name>.wirebender.zip`. Needs view.
+ * Throttled like download-all (one at a time, EXPORTS_PER_MINUTE a minute, the same count), per user, or per
+ * client `address` for a signed-out visitor on a view link. Only a granted request counts.
+ */
+export function exportBundle(db: Db, req: BoardRequest, address?: string, now = Date.now()): ApiResult {
   return withAccess(db, req, 'view', (a) => {
-    const b = bundleOf(db, a.boardId)
-    if (!b) return { status: 404, body: { error: 'not found' } }
-    return { status: 200, body: b.zip, headers: downloadHeaders(`${fileStem(b.name)}.wirebender.zip`) }
+    const key = req.who.kind === 'anonymous' ? `peer:${address ?? 'unknown'}` : req.who.userId
+    const refused = beginExport(key, now)
+    if (refused) return refused
+    try {
+      const b = bundleOf(db, a.boardId)
+      if (!b) return { status: 404, body: { error: 'not found' } }
+      return { status: 200, body: b.zip, headers: downloadHeaders(`${fileStem(b.name)}.wirebender.zip`) }
+    } finally {
+      endExport(key)
+    }
   })
 }
 
