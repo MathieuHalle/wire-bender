@@ -199,7 +199,12 @@ describe('download-all and admin export', () => {
 
   it('numbers duplicate names case-insensitively and replaces characters Windows refuses', () => {
     for (const name of ['Amp', 'amp', 'a/b\\c:d*e?f"g<h>i|j']) createBoard(db, named(fixture, name), 'create', 'Local')
-    expect(Object.keys(files(exportAll(db, 'local'))).sort()).toEqual(['Amp.wirebender.zip', 'a_b_c_d_e_f_g_h_i_j.wirebender.zip', 'amp (2).wirebender.zip'])
+    // Boards made in the same millisecond tie on createdAt and fall back to their random id, so either may be first.
+    const keys = Object.keys(files(exportAll(db, 'local'))).sort()
+    expect([
+      ['Amp.wirebender.zip', 'a_b_c_d_e_f_g_h_i_j.wirebender.zip', 'amp (2).wirebender.zip'],
+      ['Amp (2).wirebender.zip', 'a_b_c_d_e_f_g_h_i_j.wirebender.zip', 'amp.wirebender.zip']
+    ]).toContainEqual(keys)
   })
 
   it('a download-all with no boards is an empty zip, and anonymous gets 401', () => {
