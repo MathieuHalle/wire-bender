@@ -108,8 +108,8 @@ describe('board bundles', () => {
     expect(res).toMatchObject({ ok: false, status: 413 })
   })
 
-  const manifest = () => json({ format: BUNDLE_FORMAT, name: 'x', exportedAt: 1, revisions: 0 })
-  const good = () => ({ 'manifest.json': manifest(), 'board.wirebender.json': json(board()) })
+  const manifest = (revisions: number) => json({ format: BUNDLE_FORMAT, name: 'x', exportedAt: 1, revisions })
+  const good = (revisions = 0) => ({ 'manifest.json': manifest(revisions), 'board.wirebender.json': json(board()) })
 
   const u16 = (n: number) => [n & 255, n >> 8]
   const u32 = (n: number) => [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255]
@@ -146,7 +146,7 @@ describe('board bundles', () => {
    * A hand-built zip. With `overlap`, only the first entry gets a local header and every central entry points at it.
    * Headers declare `usize` and `csize` whatever the data really is.
    */
-  function buildZip(entries: RawEntry[], overlap = false): Uint8Array {
+  function buildZip(entries: RawEntry[], overlap = false, centralCount = entries.length): Uint8Array {
     const chunks: Uint8Array[] = []
     const offsets: number[] = []
     let at = 0
@@ -167,13 +167,13 @@ describe('board bundles', () => {
     }
     const cdStart = at
     let cdSize = 0
-    for (const [i, e] of entries.entries()) {
+    for (const [i, e] of entries.slice(0, centralCount).entries()) {
       const nb = strToU8(e.name)
       const rec = [0x50, 0x4B, 1, 2, ...u16(20), ...u16(20), ...u16(0), ...u16(e.method), ...u16(0), ...u16(0), ...u32(0), ...u32(e.csize ?? e.data.length), ...u32(e.usize), ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offsets[i]!), ...nb]
       emit(rec)
       cdSize += rec.length
     }
-    emit([0x50, 0x4B, 5, 6, ...u16(0), ...u16(0), ...u16(entries.length), ...u16(entries.length), ...u32(cdSize), ...u32(cdStart), ...u16(0)])
+    emit([0x50, 0x4B, 5, 6, ...u16(0), ...u16(0), ...u16(centralCount), ...u16(centralCount), ...u32(cdSize), ...u32(cdStart), ...u16(0)])
     const out = new Uint8Array(at)
     let o = 0
     for (const c of chunks) {
@@ -252,9 +252,9 @@ describe('board bundles', () => {
     expect(spy.inflated).toBeLessThan(1000)
   })
 
-  it('compressed sizes that add up past the zip itself are refused (C2)', () => {
+  it('an entry that declares more compressed bytes than the zip holds is 422 truncated (C2)', () => {
     const zip = buildZip([{ name: 'manifest.json', method: 8, data: new Uint8Array(10), usize: 10, csize: 1_000_000 }])
-    expect(decodeBundle(zip)).toEqual({ ok: false, status: 422, error: 'entries overlap' })
+    expect(decodeBundle(zip)).toEqual({ ok: false, status: 422, error: 'truncated bundle' })
   })
 
   it('declared sizes that add up past the unzipped cap are 413 (I2)', () => {
@@ -267,7 +267,7 @@ describe('board bundles', () => {
     const rv = json(rev(1, b))
     const one = deflateSync(rv)
     const zip = buildZip([
-      ...Object.entries(good()).map(([name, d]) => ({ name, method: 8 as const, data: deflateSync(d), usize: d.length })),
+      ...Object.entries(good(1)).map(([name, d]) => ({ name, method: 8 as const, data: deflateSync(d), usize: d.length })),
       { name: 'revisions/000001.json', method: 8, data: one, usize: rv.length },
       { name: 'revisions/000001.json', method: 8, data: one, usize: rv.length }
     ])
@@ -277,7 +277,7 @@ describe('board bundles', () => {
 
   it('revision and manifest fields are each checked (M-b)', () => {
     const b = board()
-    const bad = (name: string, o: object) => decodeBundle(zipSync({ ...good(), [name]: json({ ...rev(1, b), ...o }) }))
+    const bad = (name: string, o: object) => decodeBundle(zipSync({ ...good(1), [name]: json({ ...rev(1, b), ...o }) }))
     for (const o of [{ author: 1 }, { how: null }, { summary: 5 }, { target: 1.5 }, { target: 0 }, { n: 1.5 }]) {
       expect(bad('revisions/000001.json', o)).toMatchObject({ ok: false, status: 422 })
     }
@@ -287,10 +287,12 @@ describe('board bundles', () => {
   })
 
   it('exactly MAX_BUNDLE_REVISIONS revisions pass the entry count (M-b)', () => {
-    const files: Record<string, Uint8Array> = { ...good() }
+    const files: Record<string, Uint8Array> = { ...good(MAX_BUNDLE_REVISIONS) }
     const empty = new Uint8Array(0)
     for (let i = 1; i <= MAX_BUNDLE_REVISIONS; i++) files[`revisions/${String(i).padStart(6, '0')}.json`] = empty
+    const t0 = performance.now()
     const res = decodeBundle(zipSync(files, { level: 0 }))
+    expect(performance.now() - t0).toBeLessThan(1000)
     expect(res).toMatchObject({ ok: false, status: 422 })
   })
 
@@ -299,7 +301,7 @@ describe('board bundles', () => {
     const future = { ...b, format: 'wirebender/2' }
     expect(decodeBundle(zipSync({ ...good(), 'board.wirebender.json': json(future) })))
       .toEqual({ ok: false, status: 422, error: 'unsupported bundle format wirebender/2' })
-    const withRev = zipSync({ ...good(), 'revisions/000001.json': json({ ...rev(1, b), board: future }) })
+    const withRev = zipSync({ ...good(1), 'revisions/000001.json': json({ ...rev(1, b), board: future }) })
     expect(decodeBundle(withRev)).toEqual({ ok: false, status: 422, error: 'unsupported bundle format wirebender/2' })
   })
 
@@ -311,7 +313,7 @@ describe('board bundles', () => {
 
   it('revisions come back sorted by n whatever the zip order (I2)', () => {
     const b = board()
-    const res = decodeBundle(zipSync({ ...good(), 'revisions/000010.json': json(rev(10, b)), 'revisions/000002.json': json(rev(2, b)), 'revisions/000001.json': json(rev(1, b)) }))
+    const res = decodeBundle(zipSync({ ...good(3), 'revisions/000010.json': json(rev(10, b)), 'revisions/000002.json': json(rev(2, b)), 'revisions/000001.json': json(rev(1, b)) }))
     expect(res.ok && res.bundle.revisions.map(r => r.n)).toEqual([1, 2, 10])
   })
 
@@ -324,7 +326,7 @@ describe('board bundles', () => {
   })
 
   it('a revision file name that does not match its n is 422 naming it (S2)', () => {
-    const res = decodeBundle(zipSync({ ...good(), 'revisions/000002.json': json(rev(3, board())) }))
+    const res = decodeBundle(zipSync({ ...good(1), 'revisions/000002.json': json(rev(3, board())) }))
     expect(res).toMatchObject({ ok: false, status: 422 })
     if (!res.ok) expect(res.error.startsWith('revisions/000002.json:')).toBe(true)
   })
@@ -332,7 +334,7 @@ describe('board bundles', () => {
   it('a duplicate n is 422 naming the entry (S2)', () => {
     // Two central entries with distinct names cannot share an n under the strict layout, so the name check catches it.
     const b = board()
-    const res = decodeBundle(zipSync({ ...good(), 'revisions/000001.json': json(rev(1, b)), 'revisions/000002.json': json(rev(1, b)) }))
+    const res = decodeBundle(zipSync({ ...good(2), 'revisions/000001.json': json(rev(1, b)), 'revisions/000002.json': json(rev(1, b)) }))
     expect(res).toMatchObject({ ok: false, status: 422 })
     if (!res.ok) expect(res.error.startsWith('revisions/000002.json:')).toBe(true)
   })
@@ -340,8 +342,8 @@ describe('board bundles', () => {
   it('a non-finite createdAt, a bad target, or a missing manifest name is 422 (minors)', () => {
     const b = board()
     const raw = (o: object) => strToU8(JSON.stringify({ ...rev(1, b), ...o }).replace('"createdAt":1001', '"createdAt":1e400'))
-    expect(decodeBundle(zipSync({ ...good(), 'revisions/000001.json': raw({}) }))).toMatchObject({ ok: false, status: 422 })
-    expect(decodeBundle(zipSync({ ...good(), 'revisions/000001.json': json({ ...rev(1, b), target: -2.5 }) }))).toMatchObject({ ok: false, status: 422 })
+    expect(decodeBundle(zipSync({ ...good(1), 'revisions/000001.json': raw({}) }))).toMatchObject({ ok: false, status: 422 })
+    expect(decodeBundle(zipSync({ ...good(1), 'revisions/000001.json': json({ ...rev(1, b), target: -2.5 }) }))).toMatchObject({ ok: false, status: 422 })
     expect(decodeBundle(zipSync({ ...good(), 'manifest.json': json({ format: BUNDLE_FORMAT, exportedAt: 1 }) }))).toMatchObject({ ok: false, status: 422 })
   })
 
@@ -359,5 +361,75 @@ describe('board bundles', () => {
     const b = board()
     const files = unzipSync(encodeBundle({ name: 'x', exportedAt: 1, board: b, revisions: [] }))
     expect(strFromU8(files['board.wirebender.json']!)).toBe(`${JSON.stringify(b, null, 2)}\n`)
+  })
+
+  const full = () => {
+    const b = board()
+    return encodeBundle({ name: 'x', exportedAt: 1, board: b, revisions: [rev(1, b), rev(2, b), rev(3, b)] })
+  }
+  const localStart = (zip: Uint8Array, name: string) => {
+    const at = strFromU8(zip, true).indexOf(name)
+    return at - 30
+  }
+
+  it('many directory entries are refused fast (C3)', () => {
+    const dirs = Array.from({ length: 150_000 }, (_, i) => ({ name: `d${i}/`, method: 0 as const, data: new Uint8Array(0), usize: 0 }))
+    const t0 = performance.now()
+    const res = decodeBundle(buildZip(dirs))
+    expect(performance.now() - t0).toBeLessThan(1000)
+    expect(res).toMatchObject({ ok: false, status: 422 })
+    if (!res.ok) expect(res.error).toBe('d0/: not part of a bundle')
+  })
+
+  it('the revisions/ directory entry is allowed (C3)', () => {
+    const b = board()
+    const entries = [
+      { name: 'revisions/', method: 0 as const, data: new Uint8Array(0), usize: 0 },
+      ...Object.entries(good(1)).map(([name, d]) => ({ name, method: 8 as const, data: deflateSync(d), usize: d.length })),
+      { name: 'revisions/000001.json', method: 8 as const, data: deflateSync(json(rev(1, b))), usize: json(rev(1, b)).length }
+    ]
+    expect(decodeBundle(buildZip(entries))).toMatchObject({ ok: true })
+  })
+
+  it('a zip cut at an entry boundary is 422, not a short history (I4)', () => {
+    const zip = full()
+    const res = decodeBundle(zip.subarray(0, localStart(zip, 'revisions/000003.json')))
+    expect(res).toMatchObject({ ok: false, status: 422 })
+  })
+
+  it('a zip with no end record is 422 (I4)', () => {
+    const zip = full()
+    expect(decodeBundle(zip.subarray(0, zip.length - 22))).toMatchObject({ ok: false, status: 422 })
+  })
+
+  it('a cut inside an entry is 422 "truncated bundle" (I4, M-e)', () => {
+    const zip = full()
+    const res = decodeBundle(zip.subarray(0, localStart(zip, 'revisions/000003.json') + 60))
+    expect(res).toEqual({ ok: false, status: 422, error: 'truncated bundle' })
+  })
+
+  it('a central directory that lists fewer entries than the local headers is 422 (I4)', () => {
+    const b = board()
+    const rv = json(rev(1, b))
+    const entries = [
+      ...Object.entries(good(1)).map(([name, d]) => ({ name, method: 8 as const, data: deflateSync(d), usize: d.length })),
+      { name: 'revisions/000001.json', method: 8 as const, data: deflateSync(rv), usize: rv.length }
+    ]
+    expect(decodeBundle(buildZip(entries))).toMatchObject({ ok: true })
+    expect(decodeBundle(buildZip(entries, false, 2))).toEqual({ ok: false, status: 422, error: 'central directory does not match the entries' })
+  })
+
+  it('a manifest revisions count that differs from the files is 422 (M7)', () => {
+    const b = board()
+    const res = decodeBundle(zipSync({ ...good(3), 'revisions/000001.json': json(rev(1, b)) }))
+    expect(res).toEqual({ ok: false, status: 422, error: 'manifest.json: revisions does not match the bundle' })
+  })
+
+  it('a corrupt deflate stream in a revision is 422 naming it (M-d)', () => {
+    const entries = [
+      ...Object.entries(good(1)).map(([name, d]) => ({ name, method: 8 as const, data: deflateSync(d), usize: d.length })),
+      { name: 'revisions/000001.json', method: 8 as const, data: new Uint8Array(20).fill(0xFF), usize: 500 }
+    ]
+    expect(decodeBundle(buildZip(entries))).toEqual({ ok: false, status: 422, error: 'revisions/000001.json: could not be unzipped' })
   })
 })

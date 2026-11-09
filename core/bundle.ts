@@ -1,4 +1,4 @@
-import { Unzip, UnzipInflate, UnzipPassThrough, zipSync, strToU8, strFromU8 } from 'fflate'
+import { Unzip, UnzipInflate, UnzipPassThrough, unzipSync, zipSync, strToU8, strFromU8 } from 'fflate'
 import { parseBoard, type BoardFile } from './schema'
 
 export const BUNDLE_FORMAT = 'wirebender-bundle/1'
@@ -80,31 +80,34 @@ const SLICE = 16 * 1024
  * declared size, so its CPU cost is not bounded by any header. Here the zip goes in 16 KB slices, every output byte is
  * counted as it arrives, and the first entry or total over a cap stops the work, so a slice's expansion is the most
  * that is ever wasted. Entries are read from their local headers in order, so overlapping central entries are not replayed.
+ * Every local header is counted first (fflate's reader is quadratic in them), and afterwards the central directory is
+ * read without inflating anything and must list exactly the streamed entries, so a cut zip is never a short history.
  */
 function inflateAll(zip: Uint8Array, maxBoardBytes: number, maxUnzipped: number): Map<string, Uint8Array> {
   const files = new Map<string, Uint8Array>()
   const seen = new Set<string>()
   let refusal: Refused | null = null
   let total = 0
-  let compressed = 0
+  let headers = 0
+  let revisionFiles = 0
   const refuse = (status: 413 | 422, msg: string) => {
     refusal ??= new Refused(status, msg)
   }
 
   const unzip = new Unzip((file) => {
     if (refusal) return
+    if (++headers > MAX_BUNDLE_REVISIONS + 3) return refuse(413, 'bundle has too many entries')
     const name = shown(file.name)
-    if (file.name.endsWith('/')) return
-    if (file.name !== 'manifest.json' && file.name !== BOARD_ENTRY && !REVISION_PATH.test(file.name)) return refuse(422, `${name}: not part of a bundle`)
+    const isDir = file.name === 'revisions/'
+    if (file.name !== 'manifest.json' && file.name !== BOARD_ENTRY && !isDir && !REVISION_PATH.test(file.name)) return refuse(422, `${name}: not part of a bundle`)
     if (seen.has(file.name)) return refuse(422, `${name}: duplicate entry`)
     seen.add(file.name)
-    if (seen.size > MAX_BUNDLE_REVISIONS + 2) return refuse(413, 'bundle has too many revisions')
+    if (isDir) return
+    if (REVISION_PATH.test(file.name) && ++revisionFiles > MAX_BUNDLE_REVISIONS) return refuse(413, 'bundle has too many revisions')
     if (file.compression !== 0 && file.compression !== 8) return refuse(422, `${name}: unsupported compression`)
     // The sizes are unknown (undefined) for an entry that uses a data descriptor. The counting below covers that case.
     if (file.size !== undefined && file.originalSize !== undefined) {
       if (file.compression === 0 && file.size !== file.originalSize) return refuse(422, `${name}: sizes do not match`)
-      compressed += file.size
-      if (compressed > zip.length) return refuse(422, 'entries overlap')
       if (Math.max(file.size, file.originalSize) > maxBoardBytes) return refuse(413, `${name} is too large`)
     }
     const chunks: Uint8Array[] = []
@@ -142,10 +145,26 @@ function inflateAll(zip: Uint8Array, maxBoardBytes: number, maxUnzipped: number)
       unzip.push(zip.subarray(at, at + SLICE), at + SLICE >= zip.length)
     }
   } catch {
-    throw refusal ?? new Refused(422, 'not a zip file')
+    // fflate throws when the zip ends inside an entry.
+    throw refusal ?? new Refused(422, 'truncated bundle')
   }
   if (refusal) throw refusal
   if (seen.size === 0) throw new Refused(422, 'not a zip file')
+
+  // The central directory, read without inflating (the filter refuses every entry). A missing end record throws.
+  const central: string[] = []
+  try {
+    unzipSync(zip, {
+      filter: (f) => {
+        if (central.length <= MAX_BUNDLE_REVISIONS + 3 && !f.name.endsWith('/')) central.push(f.name)
+        return false
+      }
+    })
+  } catch {
+    throw new Refused(422, 'truncated bundle')
+  }
+  const local = [...seen].filter(n => !n.endsWith('/')).sort()
+  if (central.sort().join('\n') !== local.join('\n')) throw new Refused(422, 'central directory does not match the entries')
   return files
 }
 
@@ -186,6 +205,7 @@ export function decodeBundle(zip: Uint8Array, opts: { maxBoardBytes?: number, ma
     }
     // The file name equals n, so n is unique; sort so the order does not depend on the zip.
     revisions.sort((a, b) => a.n - b.n)
+    if (m.revisions !== revisions.length) throw new Refused(422, 'manifest.json: revisions does not match the bundle')
 
     return { ok: true, bundle: { name: m.name, exportedAt: m.exportedAt, board, revisions } }
   } catch (e) {
