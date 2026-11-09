@@ -8,8 +8,18 @@ const read = (rel: string) => readFileSync(fileURLToPath(new URL(`../../docs/for
 
 describe('format docs', () => {
   it('the committed JSON Schema matches the generated one', () => {
-    const generated = `${JSON.stringify({ title: 'WireBender board, wirebender/1', ...z.toJSONSchema(boardFileSchema) }, null, 2)}\n`
+    const generated = `${JSON.stringify({ title: 'WireBender board, wirebender/1', ...z.toJSONSchema(boardFileSchema, { io: 'input' }) }, null, 2)}\n`
     expect(read('wirebender-1.schema.json'), 'docs/format/wirebender-1.schema.json is out of date: run `pnpm schema`').toBe(generated)
+  })
+
+  it('revision and bench are optional, in the reader and in the schema', () => {
+    const { revision: _r, bench: _b, ...rest } = JSON.parse(read('examples/minimal.wirebender.json')) as Record<string, unknown>
+    const res = parseBoard(rest)
+    expect(res.ok, res.ok ? '' : res.errors.join('\n')).toBe(true)
+    const schema = JSON.parse(read('wirebender-1.schema.json')) as { required: string[], properties: { bench: { required?: string[] } } }
+    expect(schema.required).not.toContain('revision')
+    expect(schema.required).not.toContain('bench')
+    expect(schema.properties.bench.required ?? []).toEqual([])
   })
 
   it.each(['minimal.wirebender.json', 'channel-board-2.wirebender.json'])('example board %s passes parseBoard', (name) => {

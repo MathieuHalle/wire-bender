@@ -13,7 +13,7 @@
     "test": "vitest run",
     "db:generate": "drizzle-kit generate",
     "schema": "tsx --tsconfig tsconfig.cli.json cli/schema.ts",
-    "check":"tsx --tsconfig tsconfig.cli.json cli/wirebender.ts check",
+    "check": "tsx --tsconfig tsconfig.cli.json cli/wirebender.ts check",
     "wirebender": "tsx --tsconfig tsconfig.cli.json cli/wirebender.ts"
   },
   "dependencies": {

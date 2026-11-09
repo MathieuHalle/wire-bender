@@ -450,20 +450,11 @@
           ]
         }
       },
-      "required": [
-        "endLeadMm",
-        "bendAllowanceMm",
-        "spareMm",
-        "flyingSlackMm",
-        "roundToMm",
-        "paper"
-      ],
       "additionalProperties": false
     }
   },
   "required": [
     "format",
-    "revision",
     "name",
     "board",
     "netClasses",
@@ -473,8 +464,7 @@
     "trails",
     "wires",
     "legFolds",
-    "solderBridges",
-    "bench"
+    "solderBridges"
   ],
   "additionalProperties": false
 }

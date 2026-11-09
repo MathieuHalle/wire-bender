@@ -11,7 +11,7 @@ Files are UTF-8 JSON, usually written with 2-space indent and a trailing newline
 
 Every object is strict: a key this page does not list is an error. Do not add your own keys. If you need to keep extra data, keep it outside the board file.
 
-Two things are optional when you write a file: `revision` (default `0`) and `bench` (and every key inside it, which get the defaults below). Every other key listed as required must be there. The generated schema describes what the reader hands back after defaults, so it lists `revision` and `bench` as required. A file without them is still valid.
+Two things are optional when you write a file: `revision` (default `0`) and `bench` (and every key inside it, which get the defaults below). Every other key listed as required must be there. The JSON Schema describes what a reader accepts (zod's input mode), so it does not list `revision` or `bench` as required.
 
 ## Units and coordinates
 
@@ -56,14 +56,14 @@ A side is `"top"` or `"bottom"`. Parts sit on the top. Solder pads are on the bo
 
 ### `netClasses` and `nets`
 
-`netClasses` maps a class name to `{ "color"?: string }`. `nets` maps a net name to `{ "class"?: string, "color"?: string }`. The `class` names a key of `netClasses` and puts the net in that class. Colors are CSS color strings such as `"#d62839"`.
+`netClasses` maps a class name to `{ "color"?: string }`. `nets` maps a net name to `{ "class"?: string, "color"?: string }`. The `class` should name a key of `netClasses`; it puts the net in that class. Readers do not check that it does. Colors are CSS color strings such as `"#d62839"`.
 
 A part pin names a net by its name. If the net is not in `nets`, a reader adds it with `{}`, so you do not have to list every net.
 
 ### `rules`
 
-- `keepAway` is an array of `{ "a": string, "b": string, "holes": integer }`. `a` and `b` are net class names. The checker warns when a net of class `a` and a different net of class `b` come within `holes` holes of each other (in rows or columns, on one side). `holes` is 1 or more.
-- `adjacency` is an array of `{ "classes": [string, string], "level": "supply" | "mcu" }`. When nets of the two classes sit in neighbouring holes, the checker reports a caution at that level. It means how bad a short would be: `supply` for a supply line against ground or another supply, `mcu` for a short that could harm a microcontroller pin. Class order does not matter. Neighbouring holes with no rule are harmless.
+- `keepAway` is an array of `{ "a": string, "b": string, "holes": integer }`. `a` and `b` are net class names. The checker warns when a net of class `a` and a different net of class `b` come within `holes` holes of each other on one side, measured as the larger of the row and column distance (a square, so diagonals count). `holes` is 1 or more.
+- `adjacency` is an array of `{ "classes": [string, string], "level": "supply" | "mcu" }`. When nets of the two classes sit in holes next to each other along a row or column (diagonals do not count), the checker reports a caution at that level. It means how bad a short would be: `supply` for a supply line against ground or another supply, `mcu` for a short that could harm a microcontroller pin. Class order does not matter. Neighbouring holes with no rule are harmless.
 
 ### `parts`
 
@@ -75,15 +75,15 @@ Each part is an object:
 | `footprint` | string, not empty | The footprint id. It must be one of the built-in ones (below). |
 | `at` | hole | The hole of pin 1 (for a two-lead part, lead `a`). |
 | `to` | hole, optional | Two-lead parts only: the hole of lead `b`. If left out, the part's minimum span is used, along the row. |
-| `rotation` | `0`, `90`, `180` or `270` | Degrees. |
-| `flip` | boolean, optional | Mirror the part. |
+| `rotation` | `0`, `90`, `180` or `270` | Degrees. Required, but only used by footprints with more than two leads; a two-lead part is placed by `at` and `to`. |
+| `flip` | boolean, optional | Mirror the part. Like `rotation`, ignored for two-lead parts. |
 | `standing` | boolean, optional | Two-lead parts only: stands upright instead of lying down. |
 | `value` | string, optional | The value, such as `10k`. |
 | `label` | string, optional | A free note. |
 | `pins` | object | Maps a pin name to a net name, or to `null` for no net. |
 | `roles` | object, optional | Maps a pin name to `"in"`, `"out"`, `"pwr"`, `"oc"` or `"passive"`. It overrides the footprint's default role. A pin with no role is `passive`. |
 
-Built-in footprint ids, with their pin names: `relay-g5v2` (`1`, `16`, `4`, `13`, `6`, `11`, `8`, `9`), `to220-gds` (`G`, `D`, `S`), `dip8` (pin names are in `core/footprints.ts`), `terminal-2p-508` (`1`, `2`), `header-1x5` (same), `polyfuse-radial` (`a`, `b`), `axial` (`a`, `b`) and `cap-disc` (`a`, `b`). Two-lead footprints (`polyfuse-radial`, `axial`, `cap-disc`) have a limit on how far apart `at` and `to` may be. The reader refuses a footprint id it does not know.
+Built-in footprint ids, with their pin names: `relay-g5v2` (`1`, `16`, `4`, `13`, `6`, `11`, `8`, `9`), `to220-gds` (`G`, `D`, `S`), `dip8` (`1` to `8`), `terminal-2p-508` (`1`, `2`), `header-1x5` (`1` to `5`), `polyfuse-radial` (`a`, `b`), `axial` (`a`, `b`) and `cap-disc` (`a`, `b`). Two-lead footprints (`polyfuse-radial`, `axial`, `cap-disc`) have an intended span between `at` and `to` (2, 3 to 6, and 1 to 2 holes). Readers need not enforce it. The reader refuses a footprint id it does not know.
 
 ### `trails`
 
@@ -132,7 +132,7 @@ The JSON Schema covers the shape: keys, types, enums, and number ranges. A reade
 - **No top pads on a one-sided board.** A `one-sided` board may have no top trail, and no joint on a top wire.
 - **Pins and nets.** A net named by a pin and missing from `nets` is added as `{}`.
 - **Integer ranges.** The schema shows the safe-integer bounds (plus and minus 9007199254740991) for integers. Stay well inside them.
-- **Defaults.** `revision` and `bench` (and each `bench` key) may be left out and get their defaults.
+- **Defaults.** `revision` and `bench` (and each `bench` key) may be left out and get their defaults. The schema shows this: they are not in its `required` lists.
 
 Any other value is rejected with a list of messages, each naming the path (such as `wires[2].points[1]`). Advisory only: a board that passes these rules can still be wired wrong. Check the board with a meter before powering it.
 
@@ -159,11 +159,11 @@ Each revision file is:
 
 | Key | Type | Meaning |
 | --- | --- | --- |
-| `n` | integer, 1 or more | The revision number. It must equal the number in the file name. |
+| `n` | integer, 1 to 999999 | The revision number. It must equal the number in the file name. |
 | `createdAt` | number | When it was made, in milliseconds since the epoch. |
 | `author` | string | The author's display name. It is a name only, never an account id or a token id. |
 | `how` | string | How it was made, such as `api`. |
-| `target` | integer or `null` | For an undo or a restore, the revision it went back to, else `null`. |
+| `target` | integer, 1 or more, or `null` | For an undo or a restore, the revision it went back to, else `null`. |
 | `summary` | string | A short description of the change. |
 | `board` | board | The board at that revision, a `wirebender/1` file. |
 
