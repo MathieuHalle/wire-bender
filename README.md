@@ -106,12 +106,30 @@ Boards opened by someone else's link are listed under **Shared with me**. A sign
 Everything is stored in `WIREBENDER_DATA` (default `./.data`, which git ignores):
 
 - `wirebender.sqlite`: all boards, their revision history, the accounts and the paired devices.
-- `backups/`: the server writes `pre-migration-<time>.sqlite` here before it changes the database layout.
+- `backups/`: `pre-migration-<time>.sqlite` is written here before the server changes the database layout (a migration that fails is rolled back and the server refuses to start). `daily-<time>.sqlite` is an online snapshot taken at start and then once a day while the server runs, checked with `PRAGMA integrity_check` before older ones are pruned. The newest 14 daily snapshots are kept; `pre-migration-*` files are never pruned.
 - `session-secret`: public mode only, made once when no `NUXT_APP_SECRET` or `NUXT_SESSION_PASSWORD` is set. Anyone who has it can forge a session as any account: keep it private, including in your backups.
 
 Revisions are never edited. They are deleted only with their board: when the trash is purged (30 days after the board was trashed, or with a purged account), or by **Delete for good**. To back up, stop the server and copy the whole data folder. To restore, put the folder back. Use `WIREBENDER_DATA=/some/folder pnpm dev` to keep experiments apart from your real boards.
 
 One server per data folder: the server holds `<data>/wirebender.lock` while it runs, and a second server on the same folder refuses to start, naming the folder. So `PORT=3002 pnpm dev` without its own `WIREBENDER_DATA` will not start while another server uses `./.data`; give each server its own folder. A lock left by a server that crashed (its process is gone) is taken over.
+
+### Backups
+
+Daily snapshots are in `<WIREBENDER_DATA>/backups/`, 14 kept. They live on the same disk as the database, so copy them off the machine:
+
+```sh
+rsync -a --include='daily-*.sqlite' --exclude='*' you@server:/path/to/data/backups/ ./wirebender-backups/
+docker cp wirebender:/data/backups ./wirebender-backups
+```
+
+(Use your own data folder and container name.) The snapshots hold the accounts too, so keep the copies private.
+
+To restore, stop the server, then copy a snapshot over the database and delete the old `-wal` and `-shm` files beside it:
+
+```sh
+cp backups/daily-2026-11-09T03-00-00.000Z.sqlite wirebender.sqlite
+rm -f wirebender.sqlite-wal wirebender.sqlite-shm
+```
 
 ### Moving a board between servers (with history)
 
