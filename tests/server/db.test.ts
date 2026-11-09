@@ -109,6 +109,19 @@ describe('openDb', () => {
     db.$client.close()
   })
 
+  it('a leftover lock with our own pid:thread, not held by us, is taken over (a container restart: node is pid 1 again)', () => {
+    const data = path.join(dir, 'data')
+    mkdirSync(data, { recursive: true })
+    const lock = path.join(data, 'wirebender.lock')
+    writeFileSync(lock, `${process.pid}:${threadId}\n`)
+    const db = openDb(data)
+    expect(readFileSync(lock, 'utf8')).toBe(`${process.pid}:${threadId}\n`)
+    expect(() => openDb(data)).toThrow(/another WireBender server/)
+    expect(() => openDb(`${data}/./`)).toThrow(/another WireBender server/)
+    db.$client.close()
+    expect(existsSync(lock)).toBe(false)
+  })
+
   it('another live process holding the lock is refused; another thread of this one (a dev reload) takes over', () => {
     const data = path.join(dir, 'data')
     mkdirSync(data, { recursive: true })
