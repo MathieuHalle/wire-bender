@@ -78,7 +78,7 @@ const pick = (r: RevisionRow) => (selected.value = selected.value?.n === r.n ? n
               :label="howLabel(r)"
             />
           </span>
-          <span class="block truncate text-xs text-muted">{{ r.author }}</span>
+          <span class="block truncate text-xs text-muted">{{ r.author }}<template v-if="r.imported"> (imported)</template></span>
           <span class="block text-xs">{{ r.summary }}</span>
         </button>
       </li>

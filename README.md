@@ -113,6 +113,14 @@ Revisions are never edited. They are deleted only with their board: when the tra
 
 One server per data folder: the server holds `<data>/wirebender.lock` while it runs, and a second server on the same folder refuses to start, naming the folder. So `PORT=3002 pnpm dev` without its own `WIREBENDER_DATA` will not start while another server uses `./.data`; give each server its own folder. A lock left by a server that crashed (its process is gone) is taken over.
 
+### Moving a board between servers (with history)
+
+On the board list, a board's menu has **Board file** (the current board only) and **Board with history** (a `.wirebender.zip` holding every revision). On the other server, **Import** accepts either file; a zip creates a new board with its history. Revisions that came from a zip show `(imported)` after the author in the History tab: the author is a name only, and Undo works across them. From a script: `GET /api/boards/:id/bundle` and `POST /api/boards/import-bundle` (raw zip body, `Content-Type: application/zip`), or the CLI below.
+
+### Download everything
+
+The Account page has **Download all my boards**: one zip with a bundle per board (not the trashed ones). It is rate limited (6 a minute; the app shows a message when you hit it). The admin page has **Download every board**, a server-wide zip that includes trashed boards.
+
 ## Pair a device
 
 Requests from this computer (`localhost`) are trusted. Any other device must pair once:
@@ -204,9 +212,11 @@ Besides `check` and `export`, the CLI can talk to a running server:
 ```sh
 pnpm wirebender import board.wirebender.json [--url http://localhost:3000] [--token wb_...]
 pnpm wirebender pull <board> -o board.wirebender.json [--force] [--url ...] [--token ...]
+pnpm wirebender import board.wirebender.zip      # a board with its history
+pnpm wirebender pull <board> --bundle [-o board.wirebender.zip] [--force]
 ```
 
-`--url` defaults to `$WIREBENDER_SERVER`, then `http://localhost:3000`; `--token` to `$WIREBENDER_TOKEN`. `import` checks the file, creates a board and prints its address. `pull` saves a board (an id or share link id) to a file; it will not replace an existing file without `--force`. Exit codes: `0` done, `1` the server refused (its message is printed), `2` bad usage, a bad board file, or an existing output file.
+`--url` defaults to `$WIREBENDER_SERVER`, then `http://localhost:3000`; `--token` to `$WIREBENDER_TOKEN`. `import` checks the file, creates a board and prints its address. `pull` saves a board (an id or share link id) to a file; it will not replace an existing file without `--force`. A file ending `.zip` is a board bundle: `import` checks it locally (a bad one exits `2` without calling the server) and prints `imported <name> (<n> revisions) → <url>/b/<id>`. `pull --bundle` saves the board with its full history; `-o` defaults to `<board>.wirebender.zip`, and `--force` works as before. Exit codes: `0` done, `1` the server refused (its message is printed), `2` bad usage, a bad board file, or an existing output file.
 
 ## MCP server for Claude Code
 

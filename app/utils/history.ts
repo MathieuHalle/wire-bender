@@ -9,6 +9,8 @@ export interface RevisionRow {
   how: 'create' | 'import' | 'edit' | 'api' | 'undo' | 'redo' | 'restore' | 'recovered'
   target: number | null
   summary: string
+  /** Restored from a bundle: the author is a name only. */
+  imported?: boolean
 }
 
 /** The badge text for a revision's `how`, with the revision it points at (undo, redo, restore). */

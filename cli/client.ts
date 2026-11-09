@@ -45,6 +45,32 @@ export async function apiCall(cfg: ApiConfig, method: string, path: string, body
   return { status: res.status, json }
 }
 
+/** Like `apiCall`, but the body and the answer are raw bytes (a board bundle zip). */
+export async function apiBytes(cfg: ApiConfig, method: string, path: string, body?: Uint8Array): Promise<{ status: number, bytes: Uint8Array, json: unknown }> {
+  const headers: Record<string, string> = { accept: body === undefined ? 'application/zip, application/json' : 'application/json' }
+  if (body !== undefined) headers['content-type'] = 'application/zip'
+  if (cfg.token) headers.authorization = `Bearer ${cfg.token}`
+  let res: Response
+  try {
+    res = await fetch(`${cfg.url}${path}`, { method, headers, body: body as BodyInit | undefined })
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e)
+    return { status: 0, bytes: new Uint8Array(), json: { error: `Cannot reach ${cfg.url}: ${reason}`.replaceAll(cfg.token ?? '\0', '***') } }
+  }
+  const bytes = new Uint8Array(await res.arrayBuffer())
+  let json: unknown = null
+  // A successful download is the zip itself; every other answer is JSON.
+  if (bytes.length > 0 && !(res.ok && method === 'GET')) {
+    const text = new TextDecoder().decode(bytes)
+    try {
+      json = JSON.parse(text)
+    } catch {
+      json = res.ok ? null : { error: text }
+    }
+  }
+  return { status: res.status, bytes, json }
+}
+
 /** The server's refusal as lines to print, verbatim: `{ error }` or `{ errors: [...] }`. */
 export function errorLines(status: number, json: unknown): string[] {
   const j = (json ?? {}) as { error?: unknown, errors?: unknown, statusMessage?: unknown, message?: unknown }
