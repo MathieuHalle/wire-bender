@@ -19,26 +19,25 @@ const downloadHeaders = (filename: string): Record<string, string> => ({
   'content-disposition': `attachment; filename="${filename}"`
 })
 
-const today = () => new Date().toISOString().slice(0, 10)
+const today = (now: number) => new Date(now).toISOString().slice(0, 10)
 
-/** The bundle of board `id`: its current board and every revision, oldest first. */
-function bundleOf(db: Db, id: string): Uint8Array | null {
+/** The bundle of board `id` and its name: its current board and every revision, oldest first. */
+function bundleOf(db: Db, id: string): { name: string, zip: Uint8Array } | null {
   const stored = getBoard(db, id)
   if (!stored) return null
   const rows = db.select().from(revisions).where(eq(revisions.boardId, id)).orderBy(asc(revisions.n)).all()
   const list: BundleRevision[] = rows.map(r => ({
     n: r.n, createdAt: r.createdAt, author: r.author, how: r.how, target: r.target, summary: r.summary, board: JSON.parse(r.board) as BoardFile
   }))
-  return encodeBundle({ name: stored.name, exportedAt: Date.now(), board: stored.board, revisions: list })
+  return { name: stored.name, zip: encodeBundle({ name: stored.name, exportedAt: Date.now(), board: stored.board, revisions: list }) }
 }
 
 /** `GET /api/boards/:key/bundle`: the board with its whole history as `<name>.wirebender.zip`. Needs view. */
 export function exportBundle(db: Db, req: BoardRequest): ApiResult {
   return withAccess(db, req, 'view', (a) => {
-    const zip = bundleOf(db, a.boardId)
-    const stored = getBoard(db, a.boardId)
-    if (!zip || !stored) return { status: 404, body: { error: 'not found' } }
-    return { status: 200, body: zip, headers: downloadHeaders(`${fileStem(stored.name)}.wirebender.zip`) }
+    const b = bundleOf(db, a.boardId)
+    if (!b) return { status: 404, body: { error: 'not found' } }
+    return { status: 200, body: b.zip, headers: downloadHeaders(`${fileStem(b.name)}.wirebender.zip`) }
   })
 }
 
@@ -81,15 +80,21 @@ export function importBundle(db: Db, bytes: Uint8Array, who: Who): ApiResult {
   return { status: 201, body: { id, name: bundle.board.name, head, revisions: count } }
 }
 
-/** An entry name from a board or account name: no path separators or control characters. */
+/**
+ * An entry name from a board or account name: path separators, control characters and the characters Windows
+ * refuses become `_`, and an empty name or one of only dots (`.`, `..`) becomes `untitled`.
+ */
 // eslint-disable-next-line no-control-regex
-const entryStem = (name: string) => name.replace(/[/\\\u0000-\u001f\u007f]/g, '-').trim() || 'board'
+const entryStem = (name: string) => name.replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, '_').trim().replace(/^\.*$/, 'untitled')
 
-/** `name`, or `name (2)`, `name (3)` ... for the next one with a name already in `used`. */
+/**
+ * `name`, or `name (2)`, `name (3)` ... for the next one whose lower-cased form is already in `used` (a zip
+ * extracted on macOS or Windows would merge names that differ only by case).
+ */
 function unique(used: Set<string>, name: string, suffix = ''): string {
   let candidate = `${name}${suffix}`
-  for (let i = 2; used.has(candidate); i++) candidate = `${name} (${i})${suffix}`
-  used.add(candidate)
+  for (let i = 2; used.has(candidate.toLowerCase()); i++) candidate = `${name} (${i})${suffix}`
+  used.add(candidate.toLowerCase())
   return candidate
 }
 
@@ -100,8 +105,8 @@ export function exportAll(db: Db, ownerId: string): Uint8Array {
   const used = new Set<string>()
   const entries: Record<string, Uint8Array> = {}
   for (const b of listBoards(db, ownerId, 'mine')) {
-    const zip = bundleOf(db, b.id)
-    if (zip) entries[unique(used, entryStem(b.name), BUNDLE_SUFFIX)] = zip
+    const made = bundleOf(db, b.id)
+    if (made) entries[unique(used, entryStem(b.name), BUNDLE_SUFFIX)] = made.zip
   }
   return zipSync(entries, { level: 0 })
 }
@@ -120,20 +125,60 @@ export function exportServer(db: Db): Uint8Array {
     dirs.set(b.ownerId, dir)
     const names = used.get(dir) ?? new Set<string>()
     used.set(dir, names)
-    const zip = bundleOf(db, b.id)
-    if (zip) entries[`${dir}/${unique(names, entryStem(b.name), BUNDLE_SUFFIX)}`] = zip
+    const made = bundleOf(db, b.id)
+    if (made) entries[`${dir}/${unique(names, entryStem(b.name), BUNDLE_SUFFIX)}`] = made.zip
   }
   return zipSync(entries, { level: 0 })
 }
 
-/** `GET /api/me/export`: `wirebender-boards-<date>.zip` with all of the caller's boards. */
-export function exportAllResult(db: Db, who: Who): ApiResult {
-  if (who.kind === 'anonymous') return { status: 401, body: { error: 'Sign in first.' } }
-  return { status: 200, body: exportAll(db, who.userId), headers: downloadHeaders(`wirebender-boards-${today()}.zip`) }
+// Exports are synchronous work on the event loop, so each user may run one at a time and a few a minute.
+
+export const EXPORTS_PER_MINUTE = 6
+export const TOO_MANY_EXPORTS = 'Too many exports. Wait a minute and try again.'
+const EXPORT_WINDOW_MS = 60_000
+const exporting = new Set<string>()
+const exportsBy = new Map<string, number[]>()
+
+/** Tests only: forget the export counters. */
+export function resetExportRate(): void {
+  exporting.clear()
+  exportsBy.clear()
 }
 
-/** `GET /api/admin/export`: the whole server for an admin; 403 for anyone else (tokens are refused earlier). */
-export function exportServerResult(db: Db, who: Who): ApiResult {
-  if (who.kind !== 'user' || !who.isAdmin) return { status: 403, body: { error: 'Admins only.' } }
-  return { status: 200, body: exportServer(db), headers: downloadHeaders(`wirebender-server-${today()}.zip`) }
+/** Start an export for `userId`: the 429 to answer with if one is running or the minute's cap is used, else null (call `endExport` after). */
+export function beginExport(userId: string, now = Date.now()): ApiResult | null {
+  const recent = (exportsBy.get(userId) ?? []).filter(t => now - t < EXPORT_WINDOW_MS)
+  if (exporting.has(userId) || recent.length >= EXPORTS_PER_MINUTE) {
+    exportsBy.set(userId, recent)
+    return { status: 429, body: { error: TOO_MANY_EXPORTS } }
+  }
+  exportsBy.set(userId, [...recent, now])
+  exporting.add(userId)
+  return null
+}
+
+export function endExport(userId: string): void {
+  exporting.delete(userId)
+}
+
+function throttled(userId: string, now: number, make: () => Uint8Array, filename: string): ApiResult {
+  const refused = beginExport(userId, now)
+  if (refused) return refused
+  try {
+    return { status: 200, body: make(), headers: downloadHeaders(filename) }
+  } finally {
+    endExport(userId)
+  }
+}
+
+/** `GET /api/me/export`: `wirebender-boards-<date>.zip` with all of the caller's boards (the date is UTC). */
+export function exportAllResult(db: Db, who: Who, now = Date.now()): ApiResult {
+  if (who.kind === 'anonymous') return { status: 401, body: { error: 'Sign in first.' } }
+  return throttled(who.userId, now, () => exportAll(db, who.userId), `wirebender-boards-${today(now)}.zip`)
+}
+
+/** `GET /api/admin/export`: the whole server for an admin; 404 for anyone else, like the other admin routes (tokens are refused earlier). */
+export function exportServerResult(db: Db, who: Who, now = Date.now()): ApiResult {
+  if (who.kind !== 'user' || !who.isAdmin) return { status: 404, body: { error: 'not found' } }
+  return throttled(who.userId, now, () => exportServer(db), `wirebender-server-${today(now)}.zip`)
 }

@@ -10,9 +10,10 @@ import type { BoardFile } from '../../core/schema'
 import { openDb, type Db } from '../../server/db'
 import { boards, revisions, users } from '../../server/db/schema'
 import { signIn } from '../../server/utils/accounts'
-import { exportAll, exportBundle, exportServer, exportServerResult, importBundle } from '../../server/utils/bundles'
+import { beginExport, endExport, exportAll, exportAllResult, exportBundle, exportServer, exportServerResult, importBundle, resetExportRate, EXPORTS_PER_MINUTE } from '../../server/utils/bundles'
 import { tokenRefusal } from '../../server/utils/access'
 import { commitRevision, createBoard, listBoards, listRevisions } from '../../server/utils/boards'
+import { CREATES_PER_MINUTE, resetCreateRate, withCreateLimit } from '../../server/utils/lifecycle'
 import { openRoom } from '../../server/utils/rooms'
 import type { Who } from '../../server/utils/who'
 
@@ -22,6 +23,8 @@ const MIGRATIONS = path.resolve(__dirname, '../../server/db/migrations')
 let dir: string
 let db: Db
 beforeEach(() => {
+  resetCreateRate()
+  resetExportRate()
   dir = mkdtempSync(path.join(os.tmpdir(), 'wirebender-bundles-'))
   db = openDb(dir)
 })
@@ -148,6 +151,39 @@ describe('bundle export and import', () => {
     expect(JSON.parse(strFromU8(files(bytesOf(viaLink))['manifest.json']!)).format).toBe(BUNDLE_FORMAT)
     expect(exportBundle(db, { key: id, who: ann }).status).toBe(200)
   })
+
+  it('a view link can export; a private board\'s link cannot', () => {
+    const ann = account('Ann')
+    const bob = account('Bob')
+    const { id } = createBoard(db, named(fixture, 'Shared'), 'create', 'Ann', ann.userId, ann.userId)
+    const row = db.select().from(boards).where(eq(boards.id, id)).get()!
+    db.update(boards).set({ visibility: 'view' }).where(eq(boards.id, id)).run()
+    expect(exportBundle(db, { key: row.linkId, who: bob }).status).toBe(200)
+    expect(exportBundle(db, { key: row.linkId, who: { kind: 'anonymous' } }).status).toBe(200)
+    db.update(boards).set({ visibility: 'private' }).where(eq(boards.id, id)).run()
+    expect(exportBundle(db, { key: row.linkId, who: bob }).status).toBe(404)
+  })
+
+  it('the download filename is header-safe', () => {
+    const { id } = createBoard(db, named(fixture, 'a"b\r\nc/d é'), 'create', 'Local')
+    const header = exportBundle(db, { key: id, who: local }).headers!['content-disposition']!
+    expect(header).toBe('attachment; filename="a-b--c-d--.wirebender.zip"')
+  })
+
+  it('a failure while importing leaves no board and no revisions', () => {
+    db.$client.exec('CREATE TRIGGER boom BEFORE INSERT ON revisions WHEN NEW.how = \'import\' AND NEW.imported = 0 BEGIN SELECT RAISE(ABORT, \'boom\'); END')
+    const zip = encodeBundle({ name: 'G', exportedAt: 1, board: fixture, revisions: [{ n: 1, createdAt: 1, author: 'A', how: 'edit', target: null, summary: 's', board: fixture }] })
+    expect(() => importBundle(db, zip, local)).toThrow('boom')
+    expect(db.select().from(boards).all()).toHaveLength(0)
+    expect(db.select().from(revisions).all()).toHaveLength(0)
+  })
+
+  it('imports count toward the create rate', () => {
+    const ann = account('Ann')
+    const zip = encodeBundle({ name: 'G', exportedAt: 1, board: fixture, revisions: [] })
+    for (let i = 0; i < CREATES_PER_MINUTE; i++) expect(withCreateLimit(db, ann, () => importBundle(db, zip, ann), 1000).status).toBe(201)
+    expect(withCreateLimit(db, ann, () => importBundle(db, zip, ann), 1000).status).toBe(429)
+  })
 })
 
 describe('download-all and admin export', () => {
@@ -161,17 +197,65 @@ describe('download-all and admin export', () => {
     expect(listBoards(db, 'local', 'mine')).toHaveLength(4)
   })
 
-  it('admin export holds every account\'s boards; a non-admin gets 403', () => {
+  it('numbers duplicate names case-insensitively and replaces characters Windows refuses', () => {
+    for (const name of ['Amp', 'amp', 'a/b\\c:d*e?f"g<h>i|j']) createBoard(db, named(fixture, name), 'create', 'Local')
+    expect(Object.keys(files(exportAll(db, 'local'))).sort()).toEqual(['Amp.wirebender.zip', 'a_b_c_d_e_f_g_h_i_j.wirebender.zip', 'amp (2).wirebender.zip'])
+  })
+
+  it('a download-all with no boards is an empty zip, and anonymous gets 401', () => {
+    expect(Object.keys(files(exportAll(db, 'local')))).toEqual([])
+    expect(exportAllResult(db, { kind: 'anonymous' }).status).toBe(401)
+    expect(exportAllResult(db, local).headers?.['content-disposition']).toMatch(/^attachment; filename="wirebender-boards-\d{4}-\d{2}-\d{2}\.zip"$/)
+  })
+
+  it('download-all allows one export at a time and six a minute per user', () => {
+    expect(exportAllResult(db, local, 1000).status).toBe(200)
+    expect(beginExport('local', 1000)).toBeNull()
+    expect(exportAllResult(db, local, 1000).status).toBe(429)
+    endExport('local')
+    expect(exportAllResult(db, local, 1000).status).toBe(200)
+    for (let i = 3; i < EXPORTS_PER_MINUTE; i++) expect(exportAllResult(db, local, 1000 + i).status).toBe(200)
+    expect(exportAllResult(db, local, 2000).status).toBe(429)
+    expect(exportAllResult(db, local, 1000 + 61_000).status).toBe(200)
+  })
+
+  it('the admin export is throttled the same way', () => {
+    const admin = account('Root', true)
+    for (let i = 0; i < EXPORTS_PER_MINUTE; i++) expect(exportServerResult(db, admin, 1000).status).toBe(200)
+    expect(exportServerResult(db, admin, 1000).status).toBe(429)
+  })
+
+  it('names that are empty or only dots, and slashes, cannot make an entry climb out', () => {
+    const admin = account('Root', true)
+    const dots = account('..')
+    const blank = account('.')
+    createBoard(db, named(fixture, '../x'), 'create', 'Root', dots.userId, dots.userId)
+    createBoard(db, named(fixture, '..'), 'create', 'Root', blank.userId, blank.userId)
+    createBoard(db, named(fixture, 'ok'), 'create', 'Root', admin.userId, admin.userId)
+    const names = Object.keys(files(exportServer(db)))
+    expect(names).toHaveLength(3)
+    for (const n of names) {
+      expect(n.split('/').every(seg => seg !== '' && !/^\.+$/.test(seg)), n).toBe(true)
+      expect(n.startsWith('/')).toBe(false)
+      expect(n.split('/')).toHaveLength(2)
+    }
+  })
+
+  it('admin export holds every account\'s boards; a non-admin gets 404', () => {
     const admin = account('Root', true)
     const bob = account('Bob')
     createBoard(db, named(fixture, 'A'), 'create', 'Root', admin.userId, admin.userId)
     createBoard(db, named(fixture, 'B'), 'create', 'Bob', bob.userId, bob.userId)
     createBoard(db, named(fixture, 'B'), 'create', 'Bob', bob.userId, bob.userId)
     expect(Object.keys(files(exportServer(db))).sort()).toEqual(['Bob/B (2).wirebender.zip', 'Bob/B.wirebender.zip', 'Root/A.wirebender.zip'])
+    // Folders that differ only by case are numbered too.
+    const bob2 = account('bob')
+    createBoard(db, named(fixture, 'C'), 'create', 'bob', bob2.userId, bob2.userId)
+    expect(Object.keys(files(exportServer(db)))).toContain('bob (2)/C.wirebender.zip')
     const ok = exportServerResult(db, admin)
     expect(ok.status).toBe(200)
     expect(ok.headers?.['content-disposition']).toMatch(/^attachment; filename="wirebender-server-\d{4}-\d{2}-\d{2}\.zip"$/)
-    for (const who of [bob, local, { kind: 'anonymous' } as Who]) expect(exportServerResult(db, who).status).toBe(403)
+    for (const who of [bob, local, { kind: 'anonymous' } as Who]) expect(exportServerResult(db, who).status).toBe(404)
   })
 
   it('a token can export and import a bundle', () => {
