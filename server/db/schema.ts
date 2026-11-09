@@ -44,7 +44,9 @@ export const revisions = sqliteTable('revisions', {
   board: text('board').notNull(),
   authorId: text('author_id'),
   /** The API token a revision was made with, if any. */
-  tokenId: text('token_id')
+  tokenId: text('token_id'),
+  /** 1 for a revision that came in with an imported bundle (its author is only a name). */
+  imported: integer('imported').notNull().default(0)
 }, t => [
   primaryKey({ columns: [t.boardId, t.n] }),
   index('revisions_board_idx').on(t.boardId)

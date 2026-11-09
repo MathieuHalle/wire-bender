@@ -71,7 +71,7 @@ export function withCreateLimit(db: Db, who: Who, make: () => ApiResult, now = D
   const refused = createRefusal(db, who, now)
   if (refused) return refused
   const r = make()
-  if (r.status === 200 && who.kind === 'user') {
+  if ((r.status === 200 || r.status === 201) && who.kind === 'user') {
     if (createsBy.size > SWEEP_AT) for (const id of [...createsBy.keys()]) recentCreates(id, now)
     createsBy.set(who.userId, [...recentCreates(who.userId, now), now])
   }

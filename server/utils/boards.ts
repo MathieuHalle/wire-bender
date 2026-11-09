@@ -24,7 +24,7 @@ export interface BoardInfo {
 
 /** A board in "Shared with me": reached by its link only, so it carries the link id, never the board id. */
 export interface SharedInfo { key: string, name: string, owner: string, role: 'view' | 'edit', lastOpened: number }
-export interface RevisionInfo { n: number, createdAt: number, author: string, how: RevisionHow, target: number | null, summary: string }
+export interface RevisionInfo { n: number, createdAt: number, author: string, how: RevisionHow, target: number | null, summary: string, imported: boolean }
 
 function withRevision(board: BoardFile, revision: number): BoardFile {
   return { ...board, revision }
@@ -129,8 +129,8 @@ export function listShared(db: Db, userId: string): SharedInfo[] {
  */
 export function listRevisions(db: Db, id: string): RevisionInfo[] {
   const list = db.select({
-    n: revisions.n, createdAt: revisions.createdAt, author: revisions.author, how: revisions.how, target: revisions.target, summary: revisions.summary
-  }).from(revisions).where(eq(revisions.boardId, id)).orderBy(desc(revisions.n)).all()
+    n: revisions.n, createdAt: revisions.createdAt, author: revisions.author, how: revisions.how, target: revisions.target, summary: revisions.summary, imported: revisions.imported
+  }).from(revisions).where(eq(revisions.boardId, id)).orderBy(desc(revisions.n)).all().map(r => ({ ...r, imported: r.imported === 1 }))
   const authorOf = new Map(list.map(r => [r.n, r.author]))
   return list.map(r => withUndoSummary(r, r.target === null ? undefined : authorOf.get(r.target)))
 }
@@ -150,7 +150,7 @@ function authorOfRevision(db: Db, id: string, n: number | null): string | undefi
 export function getRevision(db: Db, id: string, n: number): (RevisionInfo & { board: BoardFile }) | null {
   const row = db.select().from(revisions).where(and(eq(revisions.boardId, id), eq(revisions.n, n))).get()
   if (!row) return null
-  const info = withUndoSummary({ n: row.n, createdAt: row.createdAt, author: row.author, how: row.how, target: row.target, summary: row.summary }, authorOfRevision(db, id, row.target))
+  const info = withUndoSummary({ n: row.n, createdAt: row.createdAt, author: row.author, how: row.how, target: row.target, summary: row.summary, imported: row.imported === 1 }, authorOfRevision(db, id, row.target))
   return { ...info, board: withRevision(JSON.parse(row.board) as BoardFile, row.n) }
 }
 
