@@ -64,9 +64,9 @@ pnpm dev:public --dotenv ~/wirebender.env
 
 1. `NUXT_APP_SECRET`
 2. `NUXT_SESSION_PASSWORD`
-3. the file `<data>/session-secret`, which the server creates once (random, readable only by you)
+3. the file `<data>/session-secret`, which `pnpm dev:public` creates once (random, readable only by you)
 
-`pnpm dev:public` sets it for you: before the server starts, it copies the first of these into `NUXT_APP_SECRET`, which is what nuxt-auth-utils seals sessions with. (`pnpm dev` is local mode, which has no sessions and needs no secret.) A production build in public mode must have `NUXT_APP_SECRET` set before it starts; nothing copies it there. If only `NUXT_SESSION_PASSWORD` or the file is set, the server refuses to start and names the fix, `NUXT_APP_SECRET="$NUXT_SESSION_PASSWORD"` or `NUXT_APP_SECRET=$(cat <data>/session-secret)`; start the server with that variable set.
+`pnpm dev:public` sets it for you: before the server starts, it copies the first of these into `NUXT_APP_SECRET`, which is what nuxt-auth-utils seals sessions with. (`pnpm dev` is local mode, which has no sessions and needs no secret.) A production build in public mode must have `NUXT_APP_SECRET` set before it starts; nothing copies it there. If only `NUXT_SESSION_PASSWORD` or the file is set, the server refuses to start and names the fix, `NUXT_APP_SECRET="$NUXT_SESSION_PASSWORD"` or `NUXT_APP_SECRET=$(cat <data>/session-secret)`; start the server with that variable set. With none of the three, a production build writes no file: it refuses to start and says to set `NUXT_APP_SECRET` to the output of `openssl rand -hex 32`.
 
 Whenever `NUXT_SESSION_PASSWORD` is set, nuxt-auth-utils logs that it "is not used anymore" and to set `NUXT_APP_SECRET` instead. Under `pnpm dev:public` this is harmless, because WireBender has copied it into `NUXT_APP_SECRET`. In a production build, set `NUXT_APP_SECRET` as the start-up message says.
 
@@ -107,7 +107,7 @@ Everything is stored in `WIREBENDER_DATA` (default `./.data`, which git ignores)
 
 - `wirebender.sqlite`: all boards, their revision history, the accounts and the paired devices.
 - `backups/`: `pre-migration-<time>.sqlite` is written here before the server changes the database layout (a migration that fails is rolled back and the server refuses to start). `daily-<time>.sqlite` is an online snapshot taken at start and then once a day while the server runs, checked with `PRAGMA integrity_check` before older ones are pruned. The newest 14 daily snapshots are kept; `pre-migration-*` files are never pruned.
-- `session-secret`: public mode only, made once when no `NUXT_APP_SECRET` or `NUXT_SESSION_PASSWORD` is set. Anyone who has it can forge a session as any account: keep it private, including in your backups.
+- `session-secret`: public mode only, made once by `pnpm dev:public` when no `NUXT_APP_SECRET` or `NUXT_SESSION_PASSWORD` is set. Anyone who has it can forge a session as any account: keep it private, including in your backups.
 
 Revisions are never edited. They are deleted only with their board: when the trash is purged (30 days after the board was trashed, or with a purged account), or by **Delete for good**. To back up, stop the server and copy the whole data folder. To restore, put the folder back. Use `WIREBENDER_DATA=/some/folder pnpm dev` to keep experiments apart from your real boards.
 

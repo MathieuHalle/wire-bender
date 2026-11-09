@@ -10,7 +10,8 @@ import { checkMode, publicBase, startupSecretProblem } from '../utils/mode'
 // Sessions (nuxt-auth-utils 0.6) are sealed with a key derived from Nuxt's `appSecret`,
 // which Nitro reads from NUXT_APP_SECRET when it loads and then freezes. In public mode the
 // session secret (NUXT_APP_SECRET, NUXT_SESSION_PASSWORD, or `<data>/session-secret`, made
-// once) must be that value: the server does not start otherwise, and says what to set.
+// once by `nuxt dev`, never here) must be that value: the server does not start otherwise,
+// and says what to set.
 // `nuxt dev` sets it (modules/session-secret.ts). Local mode reads no session: no secret.
 export default defineNitroPlugin((nitroApp) => {
   try {
