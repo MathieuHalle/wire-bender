@@ -99,12 +99,43 @@ describe('backups', () => {
     expect(names()).toEqual([])
   })
 
+  it('never prunes the snapshot just written, even when its name sorts oldest', async () => {
+    const backups = path.join(dir, 'backups')
+    mkdirSync(backups)
+    for (let i = 1; i <= 14; i++) writeFileSync(path.join(backups, `daily-2026-10-${String(i).padStart(2, '0')}T00-00-00.000Z.sqlite`), 'old')
+    const r = await runBackup(db, dir, { now: Date.parse('2026-01-01T00:00:00.000Z') })
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(existsSync(r.file)).toBe(true)
+    expect(names().filter(n => n.startsWith('daily-'))).toHaveLength(14)
+  })
+
+  it('a hand-made daily-notes.sqlite survives pruning', async () => {
+    const backups = path.join(dir, 'backups')
+    mkdirSync(backups)
+    writeFileSync(path.join(backups, 'daily-notes.sqlite'), 'mine')
+    for (let i = 1; i <= 16; i++) writeFileSync(path.join(backups, `daily-2026-10-${String(i).padStart(2, '0')}T00-00-00.000Z.sqlite`), 'old')
+    await runBackup(db, dir, { now: Date.parse('2026-11-09T00:00:00.000Z') })
+    expect(names()).toContain('daily-notes.sqlite')
+    expect(names().filter(n => /^daily-\d{4}/.test(n))).toHaveLength(14)
+  })
+
+  it('backupDue is true at exactly 24 h', () => {
+    const now = Date.parse('2026-11-09T12:00:00.000Z')
+    const backups = path.join(dir, 'backups')
+    mkdirSync(backups)
+    const f = path.join(backups, 'daily-2026-11-08T12-00-00.000Z.sqlite')
+    writeFileSync(f, 'a')
+    utimesSync(f, new Date(now - BACKUP_EVERY_MS), new Date(now - BACKUP_EVERY_MS))
+    expect(backupDue(dir, now)).toBe(true)
+  })
+
   it('backupDue is false within 24 h of the last daily snapshot', () => {
     const now = Date.parse('2026-11-09T12:00:00.000Z')
     expect(backupDue(dir, now)).toBe(true)
     const backups = path.join(dir, 'backups')
     mkdirSync(backups)
-    const f = path.join(backups, 'daily-x.sqlite')
+    const f = path.join(backups, 'daily-2026-11-09T00-00-00.000Z.sqlite')
     writeFileSync(f, 'a')
     utimesSync(f, new Date(now - 23 * 3600_000), new Date(now - 23 * 3600_000))
     expect(backupDue(dir, now)).toBe(false)

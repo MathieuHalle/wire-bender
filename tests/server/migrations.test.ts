@@ -17,6 +17,8 @@ describe('migrations', () => {
     cpSync(path.resolve('server/db/migrations'), migrations, { recursive: true })
     const data = path.join(root, 'data')
     const db = openDb(data, migrations)
+    db.$client.exec(`INSERT INTO users (id, name, created_at) VALUES ('u1', 'ann', 1)`)
+    const rows = db.$client.prepare('SELECT id, name FROM users ORDER BY id').all()
     const before = db.$client.prepare('SELECT name FROM sqlite_master ORDER BY name').all()
     db.$client.close()
 
@@ -32,6 +34,8 @@ describe('migrations', () => {
 
     const raw = new Database(path.join(data, 'wirebender.sqlite'), { readonly: true })
     expect(raw.prepare('SELECT name FROM sqlite_master ORDER BY name').all()).toEqual(before)
+    expect(raw.prepare('SELECT id, name FROM users ORDER BY id').all()).toEqual(rows)
+    expect(rows).toContainEqual({ id: 'u1', name: 'ann' })
     raw.close()
     expect(readdirSync(path.join(data, 'backups')).some(n => n.startsWith('pre-migration-'))).toBe(true)
   })

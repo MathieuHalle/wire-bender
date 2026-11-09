@@ -22,9 +22,12 @@ function integrityCheck(file: string): string {
   }
 }
 
+// Exactly the names runBackup writes (an ISO time with ':' replaced by '-').
+const DAILY = /^daily-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(\.\d{3})?Z\.sqlite$/
+
 function dailyFiles(dataDir: string): string[] {
   try {
-    return readdirSync(path.join(dataDir, 'backups')).filter(n => n.startsWith('daily-') && n.endsWith('.sqlite')).sort()
+    return readdirSync(path.join(dataDir, 'backups')).filter(n => DAILY.test(n)).sort()
   } catch {
     return []
   }
@@ -51,7 +54,10 @@ export async function runBackup(sqlite: Database.Database, dataDir: string, opti
     }
     const verdict = (options.check ?? integrityCheck)(file)
     if (verdict !== 'ok') throw new Error(`integrity_check failed: ${verdict}`)
-    for (const old of dailyFiles(dataDir).slice(0, -BACKUP_KEEP)) rmSync(path.join(backups, old), { force: true })
+    // Newest 14 by name (a fixed-width time), and never the file just written, even if the
+    // clock stepped back and its name sorts oldest.
+    const keep = [...dailyFiles(dataDir).filter(n => n !== path.basename(file)).slice(-(BACKUP_KEEP - 1)), path.basename(file)]
+    for (const old of dailyFiles(dataDir)) if (!keep.includes(old)) rmSync(path.join(backups, old), { force: true })
     return { ok: true, file }
   } catch (e) {
     try {
