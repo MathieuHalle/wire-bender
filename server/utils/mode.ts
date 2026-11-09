@@ -74,6 +74,7 @@ function fromEnv(env: Env, name: 'NUXT_APP_SECRET' | 'NUXT_SESSION_PASSWORD'): s
   const given = env[name]
   if (!given) return undefined
   if (given.length < MIN_SECRET) throw new Error(`${name} must be at least ${MIN_SECRET} characters`)
+  if (given.startsWith('replace-me')) throw new Error(`${name} is still the placeholder from .env.example: set it to the output of openssl rand -hex 32`)
   return given
 }
 

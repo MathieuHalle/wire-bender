@@ -1,7 +1,8 @@
 # WireBender self-host image: a Nitro build of the app, in public mode.
 FROM node:24-slim AS build
 WORKDIR /src
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+# corepack reads the pnpm version from package.json (packageManager).
+RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
 # Scripts are skipped here: the postinstall (`nuxt prepare`) needs the sources, and `pnpm build` runs it anyway.
 RUN pnpm install --frozen-lockfile --ignore-scripts

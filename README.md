@@ -119,16 +119,25 @@ Daily snapshots are in `<WIREBENDER_DATA>/backups/`, 14 kept. They live on the s
 
 ```sh
 rsync -a --include='daily-*.sqlite' --exclude='*' you@server:/path/to/data/backups/ ./wirebender-backups/
-docker cp wirebender:/data/backups ./wirebender-backups
+docker compose cp wirebender:/data/backups ./wirebender-backups
 ```
 
-(Use your own data folder and container name.) The snapshots hold the accounts too, so keep the copies private.
+(Use your own data folder. The `docker compose` line runs in the folder with `compose.yaml`.) The snapshots hold the accounts too, so keep the copies private.
 
 To restore, stop the server, then copy a snapshot over the database and delete the old `-wal` and `-shm` files beside it:
 
 ```sh
 cp backups/daily-2026-11-09T03-00-00.000Z.sqlite wirebender.sqlite
 rm -f wirebender.sqlite-wal wirebender.sqlite-shm
+```
+
+With Docker (named volume `wirebender-data`), restore a snapshot like this: stop the server, put the file in the volume, start it:
+
+```sh
+docker compose stop wirebender
+docker compose run --rm --no-deps -v "$PWD/wirebender-backups:/restore:ro" --entrypoint sh wirebender -c \
+  'cp /restore/daily-2026-11-09T03-00-00.000Z.sqlite /data/wirebender.sqlite && rm -f /data/wirebender.sqlite-wal /data/wirebender.sqlite-shm'
+docker compose up -d
 ```
 
 ### Moving a board between servers (with history)
@@ -147,7 +156,7 @@ The image runs the server in public mode. You need Docker with Compose, and a si
 cp .env.example .env
 ```
 
-Edit `.env`: set `WIREBENDER_URL` to the address people will use (e.g. `https://wire.example.org`), set `NUXT_APP_SECRET` to the output of `openssl rand -hex 32`, and fill in the GitHub or Google pair; delete the lines of a provider you do not use. `.env` is ignored by the repo; never commit it. Then:
+Edit `.env`: set `WIREBENDER_URL` to the address people will use (e.g. `https://wire.example.org`), set `NUXT_APP_SECRET` to the output of `openssl rand -hex 32`, and fill in the GitHub pair, and uncomment the Google pair only if you use Google. With no sign-in pair or no secret, the server refuses to start and says why in its log. `.env` is ignored by the repo; never commit it. Then:
 
 ```sh
 docker compose up -d
@@ -161,7 +170,9 @@ The server listens on port 3000 (`ports` in `compose.yaml` maps it to the host).
 
 Then open `WIREBENDER_URL`, sign in and enter the setup code at `/setup` (see First admin).
 
-The data (the database, the backups and the session secret file) is in the named volume `wirebender-data`, mounted at `/data`, so it survives `docker compose down` and upgrades. `docker compose down -v` deletes it. The daily snapshots are in `/data/backups`: see Backups above for copying them off the machine and restoring one.
+The data (the database and the backups) is in the named volume `wirebender-data` (Compose prefixes it with the project name, by default the folder name), mounted at `/data`, so it survives `docker compose down` and upgrades. `docker compose down -v` deletes it. The session secret is in `.env`, not in the volume: back up `.env` too, or every session ends. The daily snapshots are in `/data/backups`: see Backups above for copying them off the machine and restoring one into the volume.
+
+The container runs as uid 1000. To use a host folder instead of the named volume (`./data:/data`), make it writable by that user first: `mkdir data && sudo chown 1000:1000 data`.
 
 `GET /api/health` answers `{ "ok": true, "mode": "public" }` without signing in, and 503 when the database does not respond; the image's healthcheck uses it.
 
@@ -183,7 +194,7 @@ wire.example.org {
 }
 ```
 
-`WIREBENDER_URL` must be `https://wire.example.org`, the address people type. Live editing uses WebSockets, and `reverse_proxy` passes them through with no extra setting. To keep the container off the network except through Caddy, publish it on loopback only: `"127.0.0.1:3000:3000"` in `compose.yaml`.
+`WIREBENDER_URL` must be `https://wire.example.org`, the address people type. Live editing uses WebSockets, and `reverse_proxy` passes them through with no extra setting. With Caddy, change the port mapping in `compose.yaml` to `"127.0.0.1:3000:3000"`, so only Caddy can reach the container. Docker's published ports bypass the host firewall (ufw, firewalld): with `3000:3000`, plain http on port 3000 is open to the internet next to Caddy.
 
 ## Pair a device
 

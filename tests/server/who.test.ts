@@ -195,6 +195,8 @@ describe('sessionSecret', () => {
       expect(() => statSync(path.join(other, 'session-secret'))).toThrow()
       expect(resolveSessionSecret(other, {})).toMatchObject({ from: 'file', file: path.join(other, 'session-secret') })
       expect(() => resolveSessionSecret(other, { NUXT_APP_SECRET: 'short' })).toThrow(/NUXT_APP_SECRET/)
+      expect(() => resolveSessionSecret(other, { NUXT_APP_SECRET: `replace-me-${'0'.repeat(40)}` })).toThrow(/placeholder.*openssl rand -hex 32/)
+      expect(() => resolveSessionSecret(other, { NUXT_SESSION_PASSWORD: `replace-me-${'0'.repeat(40)}` })).toThrow(/NUXT_SESSION_PASSWORD is still the placeholder/)
     } finally {
       rmSync(other, { recursive: true, force: true })
     }

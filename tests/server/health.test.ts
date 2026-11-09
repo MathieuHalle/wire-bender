@@ -3,7 +3,7 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { gate, publicGate } from '../../server/utils/access'
 
-interface FakeEvent { status?: number }
+interface FakeEvent { method: string, status?: number }
 
 let broken = false
 vi.mock('../../server/db', () => ({
@@ -30,7 +30,7 @@ const KEYS = ['WIREBENDER_MODE', 'WIREBENDER_URL', 'NUXT_OAUTH_GITHUB_CLIENT_ID'
 const saved = Object.fromEntries(KEYS.map(k => [k, process.env[k]]))
 
 beforeAll(async () => {
-  health = (await import('../../server/api/health.get')).default as unknown as typeof health
+  health = (await import('../../server/api/health')).default as unknown as typeof health
 })
 afterEach(() => {
   broken = false
@@ -49,7 +49,7 @@ describe('GET /api/health', () => {
     process.env.WIREBENDER_URL = 'https://wire.example.org'
     process.env.NUXT_OAUTH_GITHUB_CLIENT_ID = 'test-client-id'
     process.env.NUXT_OAUTH_GITHUB_CLIENT_SECRET = 'test-client-secret'
-    const event: FakeEvent = {}
+    const event: FakeEvent = { method: 'GET' }
     expect(health(event)).toEqual({ ok: true, mode: 'public' })
     expect(event.status).toBeUndefined()
     expect(publicGate('GET', '/api/health', false)).toBe('pass')
@@ -58,15 +58,25 @@ describe('GET /api/health', () => {
 
   it('is 200 {ok:true, mode} in local mode, for an unpaired device too', () => {
     process.env.WIREBENDER_MODE = 'local'
-    const event: FakeEvent = {}
+    const event: FakeEvent = { method: 'GET' }
     expect(health(event)).toEqual({ ok: true, mode: 'local' })
     expect(gate('GET', '/api/health', false)).toBe('pass')
+  })
+
+  it('answers HEAD like GET and refuses other methods with 405', () => {
+    process.env.WIREBENDER_MODE = 'local'
+    const head: FakeEvent = { method: 'HEAD' }
+    expect(health(head)).toEqual({ ok: true, mode: 'local' })
+    expect(head.status).toBeUndefined()
+    const post: FakeEvent = { method: 'POST' }
+    health(post)
+    expect(post.status).toBe(405)
   })
 
   it('is 503 {ok:false} when SELECT 1 fails', () => {
     process.env.WIREBENDER_MODE = 'local'
     broken = true
-    const event: FakeEvent = {}
+    const event: FakeEvent = { method: 'GET' }
     expect(health(event)).toEqual({ ok: false })
     expect(event.status).toBe(503)
   })
