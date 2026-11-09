@@ -152,16 +152,20 @@ function inflateAll(zip: Uint8Array, maxBoardBytes: number, maxUnzipped: number)
   if (seen.size === 0) throw new Refused(422, 'not a zip file')
 
   // The central directory, read without inflating (the filter refuses every entry). A missing end record throws.
+  // fflate loops for as many entries as the end record claims (a zip64 one can claim billions), so the walk stops as
+  // soon as it passes the number of streamed entries (`seen` includes the `revisions/` directory entry).
   const central: string[] = []
+  let count = 0
   try {
     unzipSync(zip, {
       filter: (f) => {
-        if (central.length <= MAX_BUNDLE_REVISIONS + 3 && !f.name.endsWith('/')) central.push(f.name)
+        if (++count > seen.size) throw new Refused(422, 'central directory does not match the entries')
+        if (!f.name.endsWith('/')) central.push(f.name)
         return false
       }
     })
-  } catch {
-    throw new Refused(422, 'truncated bundle')
+  } catch (e) {
+    throw e instanceof Refused ? e : new Refused(422, 'truncated bundle')
   }
   const local = [...seen].filter(n => !n.endsWith('/')).sort()
   if (central.sort().join('\n') !== local.join('\n')) throw new Refused(422, 'central directory does not match the entries')

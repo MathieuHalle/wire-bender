@@ -399,7 +399,42 @@ describe('board bundles', () => {
 
   it('a zip with no end record is 422 (I4)', () => {
     const zip = full()
-    expect(decodeBundle(zip.subarray(0, zip.length - 22))).toMatchObject({ ok: false, status: 422 })
+    expect(decodeBundle(zip.subarray(0, zip.length - 22))).toEqual({ ok: false, status: 422, error: 'truncated bundle' })
+  })
+
+  /** Put a zip64 end record and locator before the end record, claiming `count` central entries. */
+  function withZip64Count(zip: Uint8Array, count: number): Uint8Array {
+    const e = zip.length - 22
+    const view = new DataView(zip.buffer, zip.byteOffset, zip.byteLength)
+    expect(view.getUint32(e, true)).toBe(0x06054B50)
+    const cdOffset = view.getUint32(e + 16, true)
+    const out = new Uint8Array(zip.length + 76)
+    out.set(zip.subarray(0, e))
+    const o = new DataView(out.buffer)
+    // zip64 end of central directory record (56 bytes)
+    o.setUint32(e, 0x06064B50, true)
+    o.setUint32(e + 4, 44, true)
+    o.setUint16(e + 12, 45, true)
+    o.setUint16(e + 14, 45, true)
+    o.setUint32(e + 24, count, true)
+    o.setUint32(e + 32, count, true)
+    o.setUint32(e + 40, e - cdOffset, true)
+    o.setUint32(e + 48, cdOffset, true)
+    // zip64 end of central directory locator (20 bytes)
+    o.setUint32(e + 56, 0x07064B50, true)
+    o.setUint32(e + 64, e, true)
+    o.setUint32(e + 72, 1, true)
+    out.set(zip.subarray(e), e + 76)
+    return out
+  }
+
+  it('a zip64 end record that claims 100M entries is refused fast (C4)', () => {
+    const zip = full()
+    expect(decodeBundle(withZip64Count(zip, 5))).toMatchObject({ ok: true })
+    const t0 = performance.now()
+    const res = decodeBundle(withZip64Count(zip, 100_000_000))
+    expect(performance.now() - t0).toBeLessThan(100)
+    expect(res).toEqual({ ok: false, status: 422, error: 'central directory does not match the entries' })
   })
 
   it('a cut inside an entry is 422 "truncated bundle" (I4, M-e)', () => {
