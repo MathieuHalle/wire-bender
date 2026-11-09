@@ -179,6 +179,8 @@ export type Gate = 'pass' | 'deny' | 'redirect'
 /** Paths an unpaired device may load: the pairing page and the app's own assets. */
 const OPEN_PREFIXES = ['/_nuxt/', '/api/_nuxt_icon/']
 const OPEN_FILES = new Set(['/pair', '/icon.svg', '/favicon.ico'])
+/** The healthcheck (Docker, a load balancer): answers `{ ok }` and `mode` to anyone, local or public. */
+const HEALTH = '/api/health'
 
 /** What to do with a request: trusted passes; untrusted gets 401 from the API, /pair for pages. */
 export function gate(method: string, path: string, trusted: boolean): Gate {
@@ -188,6 +190,7 @@ export function gate(method: string, path: string, trusted: boolean): Gate {
   const plain = plainPath(pathname)
   if (plain && method === 'POST' && pathname === '/api/pair') return 'pass'
   const get = method === 'GET' || method === 'HEAD'
+  if (plain && get && pathname === HEALTH) return 'pass'
   if (plain && get && (OPEN_FILES.has(pathname) || OPEN_PREFIXES.some(p => pathname.startsWith(p)))) return 'pass'
   if (!plain || !get || pathname === '/api' || pathname.startsWith('/api/') || pathname.startsWith('/_')) return 'deny'
   return 'redirect'
@@ -260,7 +263,7 @@ export function tokenRefusal(path: string, method: string): boolean {
 
 /** What anonymous may read in public mode, besides pages: the board routes decide per board. */
 function anonymousRead(pathname: string): boolean {
-  return pathname === '/api/me' || pathname === '/api/_auth/session'
+  return pathname === '/api/me' || pathname === '/api/_auth/session' || pathname === HEALTH
     || pathname.startsWith('/api/boards/') || pathname.startsWith('/auth/')
     || OPEN_PREFIXES.some(p => pathname.startsWith(p))
     || !(pathname === '/api' || pathname.startsWith('/api/') || pathname.startsWith('/_'))

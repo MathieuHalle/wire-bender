@@ -139,6 +139,52 @@ On the board list, a board's menu has **Board file** (the current board only) an
 
 The Account page has **Download all my boards**: one zip with a bundle per board (not the trashed ones). It is rate limited (6 a minute; the app shows a message when you hit it). The admin page has **Download every board**, a server-wide zip that includes trashed boards.
 
+## Self-host with Docker
+
+The image runs the server in public mode. You need Docker with Compose, and a sign-in provider (see Public mode above).
+
+```sh
+cp .env.example .env
+```
+
+Edit `.env`: set `WIREBENDER_URL` to the address people will use (e.g. `https://wire.example.org`), set `NUXT_APP_SECRET` to the output of `openssl rand -hex 32`, and fill in the GitHub or Google pair; delete the lines of a provider you do not use. `.env` is ignored by the repo; never commit it. Then:
+
+```sh
+docker compose up -d
+docker compose logs wirebender    # the setup code for the first admin is printed here
+```
+
+The server listens on port 3000 (`ports` in `compose.yaml` maps it to the host). Register the OAuth app with these callback URLs, using your `WIREBENDER_URL`:
+
+- GitHub: `<WIREBENDER_URL>/auth/github`
+- Google: `<WIREBENDER_URL>/auth/google`
+
+Then open `WIREBENDER_URL`, sign in and enter the setup code at `/setup` (see First admin).
+
+The data (the database, the backups and the session secret file) is in the named volume `wirebender-data`, mounted at `/data`, so it survives `docker compose down` and upgrades. `docker compose down -v` deletes it. The daily snapshots are in `/data/backups`: see Backups above for copying them off the machine and restoring one.
+
+`GET /api/health` answers `{ "ok": true, "mode": "public" }` without signing in, and 503 when the database does not respond; the image's healthcheck uses it.
+
+**Upgrade:**
+
+```sh
+git pull && docker compose up -d --build
+```
+
+The server writes a `pre-migration-*` backup before it changes the database layout (see Data and backups).
+
+### HTTPS with Caddy
+
+Sign-in needs `https` in front of the server. With Caddy on the same machine, a `Caddyfile` of one site is enough; Caddy gets and renews the certificate:
+
+```
+wire.example.org {
+    reverse_proxy localhost:3000
+}
+```
+
+`WIREBENDER_URL` must be `https://wire.example.org`, the address people type. Live editing uses WebSockets, and `reverse_proxy` passes them through with no extra setting. To keep the container off the network except through Caddy, publish it on loopback only: `"127.0.0.1:3000:3000"` in `compose.yaml`.
+
 ## Pair a device
 
 Requests from this computer (`localhost`) are trusted. Any other device must pair once:
