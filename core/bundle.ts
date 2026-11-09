@@ -5,8 +5,15 @@ export const BUNDLE_FORMAT = 'wirebender-bundle/1'
 export const MAX_BUNDLE_BYTES = 50_000_000
 export const MAX_BUNDLE_UNZIPPED = 200_000_000
 export const MAX_BUNDLE_REVISIONS = 20_000
-/** Per-entry cap. The server passes its own `MAX_BOARD_BYTES` (also 2 000 000) as `maxBoardBytes`. */
+/** Per-board cap. The server passes its own `MAX_BOARD_BYTES` (also 2 000 000) as `maxBoardBytes`. */
 const DEFAULT_MAX_BOARD_BYTES = 2_000_000
+/**
+ * An entry's raw bytes may be up to this times `maxBoardBytes` (2.4 MB for the server). The board cap itself is on
+ * each parsed board's compact JSON, the measure the server's board cap uses; this bound only keeps the memory and
+ * inflate work per entry bounded. 1.2 leaves room for a revision's own fields beside a board at the cap, and lets a
+ * pretty-printed (older or hand-made) entry through while its board is under about 1.1 MB (0.95 MB before).
+ */
+const RAW_ENTRY_FACTOR = 1.2
 
 export interface BundleRevision {
   n: number
@@ -31,17 +38,17 @@ const BOARD_FORMAT = 'wirebender/1'
 const BOARD_ENTRY = 'board.wirebender.json'
 const revisionPath = (n: number) => `revisions/${String(n).padStart(6, '0')}.json`
 
-/** The same formatting as the board download route (`downloadBoard` in server/utils/api.ts). */
-const boardJson = (b: BoardFile) => `${JSON.stringify(b, null, 2)}\n`
+/** Compact JSON (I2): an entry then weighs about what its board does, so a board at the server's cap fits. */
+const compact = (v: unknown) => strToU8(JSON.stringify(v))
 
 export function encodeBundle(b: Bundle): Uint8Array {
   const files: Record<string, Uint8Array> = {
     'manifest.json': strToU8(JSON.stringify({ format: BUNDLE_FORMAT, name: b.name, exportedAt: b.exportedAt, revisions: b.revisions.length }, null, 2)),
-    [BOARD_ENTRY]: strToU8(boardJson(b.board))
+    [BOARD_ENTRY]: compact(b.board)
   }
   for (const r of b.revisions) {
     const { n, createdAt, author, how, target, summary, board } = r
-    files[revisionPath(n)] = strToU8(JSON.stringify({ n, createdAt, author, how, target, summary, board }, null, 2))
+    files[revisionPath(n)] = compact({ n, createdAt, author, how, target, summary, board })
   }
   return zipSync(files)
 }
@@ -66,10 +73,12 @@ function parseEntry(path: string, bytes: Uint8Array): unknown {
   }
 }
 
-function boardOf(path: string, value: unknown): BoardFile {
+/** The entry's board, parsed, and no larger in compact JSON than `maxBoardBytes` (413 naming the entry). */
+function boardOf(path: string, value: unknown, maxBoardBytes: number): BoardFile {
   if (isRecord(value) && typeof value.format === 'string' && value.format !== BOARD_FORMAT) throw new Refused(422, `unsupported bundle format ${String(value.format)}`)
   const res = parseBoard(value)
   if (!res.ok) throw new Refused(422, `${path}: ${res.errors[0] ?? 'not a valid board'}`)
+  if (compact(res.board).length > maxBoardBytes) throw new Refused(413, `${path} is too large`)
   return res.board
 }
 
@@ -83,7 +92,7 @@ const SLICE = 16 * 1024
  * Every local header is counted first (fflate's reader is quadratic in them), and afterwards the central directory is
  * read without inflating anything and must list exactly the streamed entries, so a cut zip is never a short history.
  */
-function inflateAll(zip: Uint8Array, maxBoardBytes: number, maxUnzipped: number): Map<string, Uint8Array> {
+function inflateAll(zip: Uint8Array, maxEntryBytes: number, maxUnzipped: number): Map<string, Uint8Array> {
   const files = new Map<string, Uint8Array>()
   const seen = new Set<string>()
   let refusal: Refused | null = null
@@ -108,7 +117,7 @@ function inflateAll(zip: Uint8Array, maxBoardBytes: number, maxUnzipped: number)
     // The sizes are unknown (undefined) for an entry that uses a data descriptor. The counting below covers that case.
     if (file.size !== undefined && file.originalSize !== undefined) {
       if (file.compression === 0 && file.size !== file.originalSize) return refuse(422, `${name}: sizes do not match`)
-      if (Math.max(file.size, file.originalSize) > maxBoardBytes) return refuse(413, `${name} is too large`)
+      if (Math.max(file.size, file.originalSize) > maxEntryBytes) return refuse(413, `${name} is too large`)
     }
     const chunks: Uint8Array[] = []
     let length = 0
@@ -117,7 +126,7 @@ function inflateAll(zip: Uint8Array, maxBoardBytes: number, maxUnzipped: number)
       if (err) return refuse(422, `${name}: could not be unzipped`)
       length += data.length
       total += data.length
-      if (length > maxBoardBytes) {
+      if (length > maxEntryBytes) {
         file.terminate()
         return refuse(413, `${name} is too large`)
       }
@@ -172,13 +181,16 @@ function inflateAll(zip: Uint8Array, maxBoardBytes: number, maxUnzipped: number)
   return files
 }
 
-/** The server passes its `MAX_BOARD_BYTES` as `maxBoardBytes`. `maxUnzipped` is for tests. */
+/**
+ * The server passes its `MAX_BOARD_BYTES` as `maxBoardBytes`: each board (the current one and every revision's), in
+ * compact JSON, may be that large. `maxUnzipped` is for tests. Pretty-printed entries decode too.
+ */
 export function decodeBundle(zip: Uint8Array, opts: { maxBoardBytes?: number, maxUnzipped?: number } = {}): DecodeResult {
   const maxBoardBytes = opts.maxBoardBytes ?? DEFAULT_MAX_BOARD_BYTES
   const maxUnzipped = opts.maxUnzipped ?? MAX_BUNDLE_UNZIPPED
   if (zip.length > MAX_BUNDLE_BYTES) return { ok: false, status: 413, error: 'bundle is too large' }
   try {
-    const files = inflateAll(zip, maxBoardBytes, maxUnzipped)
+    const files = inflateAll(zip, Math.floor(maxBoardBytes * RAW_ENTRY_FACTOR), maxUnzipped)
 
     const manifest = files.get('manifest.json')
     if (!manifest) throw new Refused(422, 'bundle has no manifest.json')
@@ -190,7 +202,7 @@ export function decodeBundle(zip: Uint8Array, opts: { maxBoardBytes?: number, ma
 
     const boardBytes = files.get(BOARD_ENTRY)
     if (!boardBytes) throw new Refused(422, `bundle has no ${BOARD_ENTRY}`)
-    const board = boardOf(BOARD_ENTRY, parseEntry(BOARD_ENTRY, boardBytes))
+    const board = boardOf(BOARD_ENTRY, parseEntry(BOARD_ENTRY, boardBytes), maxBoardBytes)
 
     const revisions: BundleRevision[] = []
     for (const [path, bytes] of files) {
@@ -205,7 +217,7 @@ export function decodeBundle(zip: Uint8Array, opts: { maxBoardBytes?: number, ma
       if (typeof r.how !== 'string') throw new Refused(422, `${path}: how must be a string`)
       if (r.target !== null && (typeof r.target !== 'number' || !Number.isInteger(r.target) || r.target < 1)) throw new Refused(422, `${path}: target must be a revision number or null`)
       if (typeof r.summary !== 'string') throw new Refused(422, `${path}: summary must be a string`)
-      revisions.push({ n: r.n, createdAt: r.createdAt, author: r.author, how: r.how, target: r.target, summary: r.summary, board: boardOf(path, r.board) })
+      revisions.push({ n: r.n, createdAt: r.createdAt, author: r.author, how: r.how, target: r.target, summary: r.summary, board: boardOf(path, r.board, maxBoardBytes) })
     }
     // The file name equals n, so n is unique; sort so the order does not depend on the zip.
     revisions.sort((a, b) => a.n - b.n)

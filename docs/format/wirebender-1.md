@@ -155,6 +155,8 @@ A bundle holds exactly these entries:
 | `revisions/<n>.json` | One file per revision. `<n>` is the revision number, padded with zeros to 6 digits: `revisions/000012.json`. |
 | `revisions/` | An optional directory entry. |
 
+WireBender writes each entry as compact JSON (no indentation). A reader accepts any JSON formatting, so a pretty-printed bundle, from an older version or made by hand, reads the same.
+
 Each revision file is:
 
 | Key | Type | Meaning |
@@ -162,8 +164,8 @@ Each revision file is:
 | `n` | integer, 1 to 999999 | The revision number. It must equal the number in the file name. |
 | `createdAt` | number | When it was made, in milliseconds since the epoch. |
 | `author` | string | The author's display name. It is a name only, never an account id or a token id. |
-| `how` | string | How it was made, such as `api`. |
-| `target` | integer, 1 or more, or `null` | For an undo or a restore, the revision it went back to, else `null`. |
+| `how` | string | How it was made: `create`, `import`, `fork`, `edit` (live editing), `api`, `undo`, `redo`, `restore` or `recovered`. |
+| `target` | integer, 1 or more, or `null` | For an `undo`, the revision that was undone: the board went back to the one before it. For a `redo`, the revision that was redone: the board is that revision's board again. For a `restore`, the revision restored: the board is that revision's board. Else `null`. |
 | `summary` | string | A short description of the change. |
 | `board` | board | The board at that revision, a `wirebender/1` file. |
 
@@ -183,9 +185,12 @@ The limits are:
 - 50 000 000 bytes for the zip;
 - 200 000 000 bytes unzipped, all entries together;
 - 20 000 revisions;
-- 2 000 000 bytes for each board entry (`board.wirebender.json` and each revision file).
+- 2 000 000 bytes for each board (the current board and each revision's), measured as the board in compact JSON after reading, the same measure as the server's board limit; so any board the server holds fits;
+- 2 400 000 bytes for each entry as stored in the zip, whatever its formatting. A pretty-printed entry takes about twice the bytes of its board, so a pretty-printed bundle reads only while its boards are under about 1 100 000 bytes.
 
 An import never keeps an account id or a token id from another server. Imported authors keep their names, marked "imported".
+
+An import makes a new board and renumbers the revisions 1 to N in order of `n` (gaps close up). Each `target` is changed to the new number of the revision it names. It becomes `null` when that revision is not in the bundle, or when it is not older than its own revision. A `how` the server does not know imports as `import`, and so does revision 1 unless it is `create`, `import` or `fork` (there is nothing before it to undo to). The import then adds one more revision, `how` `import`, by the person importing, which holds the bundle's current board.
 
 ## Rules for future versions
 

@@ -357,10 +357,52 @@ describe('board bundles', () => {
     }
   })
 
-  it('the board entry is byte-identical to the download route formatting (minor)', () => {
+  it('the board and revision entries are compact JSON, so a board near the cap fits in its entry (I2)', () => {
     const b = board()
-    const files = unzipSync(encodeBundle({ name: 'x', exportedAt: 1, board: b, revisions: [] }))
-    expect(strFromU8(files['board.wirebender.json']!)).toBe(`${JSON.stringify(b, null, 2)}\n`)
+    const files = unzipSync(encodeBundle({ name: 'x', exportedAt: 1, board: b, revisions: [rev(1, b)] }))
+    expect(strFromU8(files['board.wirebender.json']!)).toBe(JSON.stringify(b))
+    const { n, createdAt, author, how, target, summary } = rev(1, b)
+    expect(strFromU8(files['revisions/000001.json']!)).toBe(JSON.stringify({ n, createdAt, author, how, target, summary, board: b }))
+  })
+
+  // A pretty-printed bundle, as older code wrote and as people may write by hand.
+  const pretty = (b: BoardFile) => {
+    const p = (v: unknown) => strToU8(JSON.stringify(v, null, 2))
+    return zipSync({
+      'manifest.json': p({ format: BUNDLE_FORMAT, name: 'x', exportedAt: 1, revisions: 1 }),
+      'board.wirebender.json': strToU8(`${JSON.stringify(b, null, 2)}\n`),
+      'revisions/000001.json': p(rev(1, b))
+    })
+  }
+
+  it('a pretty-printed bundle still decodes (I2)', () => {
+    const b = board()
+    const res = decodeBundle(pretty(b))
+    expect(res.ok).toBe(true)
+    if (res.ok) expect(res.bundle.revisions[0]).toEqual(rev(1, b))
+  })
+
+  it('the board cap measures each board compact, like the server\'s board cap, not the entry bytes (I2)', () => {
+    const b = board()
+    const compact = strToU8(JSON.stringify(b)).length
+    const raw = strToU8(JSON.stringify(rev(1, b), null, 2)).length
+    // The pretty entries are over the cap in bytes; their boards are not.
+    const cap = Math.ceil(raw / 1.2)
+    expect(raw).toBeGreaterThan(cap)
+    expect(compact).toBeLessThan(cap)
+    expect(decodeBundle(pretty(b), { maxBoardBytes: cap }).ok).toBe(true)
+    // One byte under the board's compact size: refused, naming the entry.
+    const res = decodeBundle(encodeBundle({ name: 'x', exportedAt: 1, board: b, revisions: [] }), { maxBoardBytes: compact - 1 })
+    expect(res).toEqual({ ok: false, status: 413, error: 'board.wirebender.json is too large' })
+    expect(decodeBundle(encodeBundle({ name: 'x', exportedAt: 1, board: b, revisions: [] }), { maxBoardBytes: compact }).ok).toBe(true)
+  })
+
+  it('a revision whose board is over the cap is 413 naming the revision (I2)', () => {
+    const b = board()
+    const big: BoardFile = { ...b, nets: { ...b.nets, ...Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`X${i}`, { class: Object.values(b.nets)[0]!.class }])) } }
+    const cap = strToU8(JSON.stringify(big)).length - 1
+    const res = decodeBundle(encodeBundle({ name: 'x', exportedAt: 1, board: b, revisions: [rev(1, big)] }), { maxBoardBytes: cap })
+    expect(res).toEqual({ ok: false, status: 413, error: 'revisions/000001.json is too large' })
   })
 
   const full = () => {

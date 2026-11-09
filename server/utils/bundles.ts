@@ -53,14 +53,19 @@ export function exportBundle(db: Db, req: BoardRequest, address?: string, now = 
 }
 
 const isHow = (how: string): how is RevisionHow => (REVISION_HOW as readonly string[]).includes(how)
+const FIRST_HOW: readonly RevisionHow[] = ['create', 'import', 'fork']
+
+/** An imported revision's `how`: unknown ones are `import`, and so is a #1 that is not a start (undo has nothing before #1). */
+const howOf = (how: string, n: number): RevisionHow => !isHow(how) || (n === 1 && !FIRST_HOW.includes(how)) ? 'import' : how
 
 /**
  * `POST /api/boards/import-bundle`: a new board of `who`'s from a bundle. The revisions are renumbered 1..N in
- * bundle order, undo and redo targets follow (none left if the target is not in the bundle), their authors are
- * kept as names only and flagged `imported`; one more `import` revision by `who` makes the bundle's board current.
- * All or nothing.
+ * bundle order, undo, redo and restore targets follow (none left if the target is not in the bundle or is not older
+ * than its own revision), and #1 is `import` unless it is a `create`, `import` or `fork`. Their authors are kept as
+ * names only and flagged `imported`; one more `import` revision by `who` makes the bundle's board current.
+ * All or nothing. `who` is signed in: the route answers 401 to anonymous callers before reading the body.
  */
-export function importBundle(db: Db, bytes: Uint8Array, who: Who): ApiResult {
+export function importBundle(db: Db, bytes: Uint8Array, who: Exclude<Who, { kind: 'anonymous' }>): ApiResult {
   const decoded = decodeBundle(bytes, { maxBoardBytes: MAX_BOARD_BYTES })
   if (!decoded.ok) return { status: decoded.status, body: { error: decoded.error } }
   const { bundle } = decoded
@@ -69,16 +74,19 @@ export function importBundle(db: Db, bytes: Uint8Array, who: Who): ApiResult {
   const count = bundle.revisions.length
   const head = count + 1
   const renumbered = new Map(bundle.revisions.map((r, i) => [r.n, i + 1]))
-  const ownerId = who.kind === 'anonymous' ? 'local' : who.userId
-  const author = who.kind === 'anonymous' ? 'Local' : who.author
-  const tokenId = who.kind === 'anonymous' ? null : who.token?.id ?? null
+  const ownerId = who.userId
+  const author = who.author
+  const tokenId = who.token?.id ?? null
   const stored = (board: BoardFile, n: number) => JSON.stringify({ ...board, revision: n })
   db.transaction((tx) => {
     tx.insert(boards).values({ id, name: bundle.board.name, createdAt: now, updatedAt: now, current: stored(bundle.board, head), head, ownerId, linkId: randomUUID() }).run()
     bundle.revisions.forEach((r, i) => {
+      const n = i + 1
+      const target = r.target === null ? null : renumbered.get(r.target) ?? null
       tx.insert(revisions).values({
-        boardId: id, n: i + 1, createdAt: r.createdAt, author: r.author, how: isHow(r.how) ? r.how : 'import',
-        target: r.target === null ? null : renumbered.get(r.target) ?? null,
+        boardId: id, n, createdAt: r.createdAt, author: r.author, how: howOf(r.how, n),
+        // A target is always an older revision; any other (a hand-made bundle) would send undo looking for #0.
+        target: target !== null && target < n ? target : null,
         summary: r.summary, board: stored(r.board, i + 1), authorId: null, tokenId: null, imported: 1
       }).run()
     })

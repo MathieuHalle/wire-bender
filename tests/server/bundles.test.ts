@@ -6,13 +6,13 @@ import { unzipSync, strFromU8 } from 'fflate'
 import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { BUNDLE_FORMAT, MAX_BUNDLE_BYTES, encodeBundle, type Bundle } from '../../core/bundle'
-import type { BoardFile } from '../../core/schema'
+import { parseBoard, type BoardFile } from '../../core/schema'
 import { openDb, type Db } from '../../server/db'
 import { boards, revisions, users } from '../../server/db/schema'
 import { signIn } from '../../server/utils/accounts'
 import { beginExport, endExport, exportAll, exportAllResult, exportBundle, exportServer, exportServerResult, importBundle, resetExportRate, EXPORTS_PER_MINUTE, TOO_MANY_EXPORTS } from '../../server/utils/bundles'
 import { tokenRefusal } from '../../server/utils/access'
-import { commitRevision, createBoard, listBoards, listRevisions } from '../../server/utils/boards'
+import { MAX_BOARD_BYTES, commitRevision, createBoard, getBoard, listBoards, listRevisions } from '../../server/utils/boards'
 import { CREATES_PER_MINUTE, resetCreateRate, withCreateLimit } from '../../server/utils/lifecycle'
 import { openRoom } from '../../server/utils/rooms'
 import type { Who } from '../../server/utils/who'
@@ -100,6 +100,50 @@ describe('bundle export and import', () => {
     const bundle: Bundle = { name: 'X', exportedAt: 1, board: fixture, revisions: [{ n: 1, createdAt: 1, author: 'A', how: 'teleport', target: null, summary: 's', board: fixture }] }
     const id = (importBundle(db, encodeBundle(bundle), local).body as { id: string }).id
     expect(listRevisions(db, id).reverse()[0]!.how).toBe('import')
+  })
+
+  it('a board just under the server\'s board cap exports and re-imports (I2)', () => {
+    // Measured as the server measures it: the parsed board (defaults filled in), compact.
+    const parsed = parseBoard(fixture)
+    if (!parsed.ok) throw new Error('fixture')
+    const base0 = parsed.board
+    const cls = Object.values(base0.nets)[0]!.class
+    const nets = { ...base0.nets }
+    const size = () => Buffer.byteLength(JSON.stringify({ ...base0, name: 'Big', nets, revision: 9 }))
+    // Each added net is the same number of bytes, so the count that lands just under the cap is known.
+    const base = size()
+    nets.X0000000 = { class: cls }
+    const each = size() - base
+    const count = Math.floor((MAX_BOARD_BYTES - base) / each)
+    for (let i = 1; i < count; i++) nets[`X${String(i).padStart(7, '0')}`] = { class: cls }
+    const big: BoardFile = { ...base0, name: 'Big', nets }
+    expect(size()).toBeLessThanOrEqual(MAX_BOARD_BYTES)
+    expect(size()).toBeGreaterThan(MAX_BOARD_BYTES - each)
+    const { id } = createBoard(db, big, 'create', 'Ann')
+    commitRevision(db, id, { board: { ...big, nets: { ...nets } }, author: 'Bob', how: 'edit' })
+    const out = exportBundle(db, { key: id, who: local })
+    expect(out.status).toBe(200)
+    const res = importBundle(db, bytesOf(out), local)
+    expect(res).toMatchObject({ status: 201, body: { head: 3, revisions: 2 } })
+    const imported = getBoard(db, (res.body as { id: string }).id)!
+    expect(Object.keys(imported.board.nets)).toHaveLength(Object.keys(nets).length)
+  })
+
+  it('a hand-made bundle whose first revision is an edit: #1 imports as `import`, a forward target is dropped, undo works', () => {
+    const rev = (n: number, how: string, target: number | null, name: string) => ({ n, createdAt: n, author: 'A', how, target, summary: 's', board: named(fixture, name) })
+    const bundle: Bundle = { name: 'H', exportedAt: 1, board: named(fixture, 'Three'), revisions: [rev(1, 'edit', null, 'One'), rev(2, 'edit', 5, 'Two'), rev(3, 'undo', 3, 'Three')] }
+    const id = (importBundle(db, encodeBundle(bundle), local).body as { id: string }).id
+    const rows = db.select().from(revisions).where(eq(revisions.boardId, id)).orderBy(revisions.n).all()
+    expect(rows.map(r => [r.n, r.how, r.target])).toEqual([[1, 'import', null], [2, 'edit', null], [3, 'undo', null], [4, 'import', null]])
+    const room = openRoom(db, id)!
+    const undone = room.undo('Local')
+    expect(undone).toBe(5)
+    expect(getBoard(db, id)!.board.name).toBe('One')
+    // #2 was the only edit: nothing older to undo, and no "no revision 0".
+    expect(room.undo('Local')).toBeNull()
+    expect(room.redo('Local')).toBe(6)
+    expect(getBoard(db, id)!.board.name).toBe('Two')
+    room.dropIfEmpty()
   })
 
   it('undo and redo work on an imported board', () => {
