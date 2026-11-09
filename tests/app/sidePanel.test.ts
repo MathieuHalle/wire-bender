@@ -24,7 +24,7 @@ describe('side panel state', () => {
   it('defaults to open on Findings with every layer on', () => {
     expect(PANEL_KEY).toBe('wirebender:sidepanel')
     expect(defaultPanel()).toEqual({ open: true, tab: 'findings', layers: { components: true, wires: true, trails: true } })
-    expect(PANEL_TABS.map(t => t.id)).toEqual(['findings', 'edit', 'layers', 'history'])
+    expect(PANEL_TABS.map(t => t.id)).toEqual(['findings', 'edit', 'layers', 'history', 'board'])
   })
 
   it('round-trips through storage', () => {

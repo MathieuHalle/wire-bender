@@ -782,6 +782,15 @@ const sideTitle = (s: Side) => (s === 'top'
             :revision="revision"
           />
         </template>
+        <template #board>
+          <BoardInfoPanel
+            :board-id="id"
+            :board="live.board.value"
+            :meta="meta"
+            :revision="revision"
+            :active="panel.open && panel.tab === 'board'"
+          />
+        </template>
       </SidePanel>
     </div>
   </div>

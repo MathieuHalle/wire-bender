@@ -10,7 +10,8 @@ export const PANEL_TABS = [
   { id: 'findings', label: 'Findings', icon: 'i-lucide-list-checks' },
   { id: 'edit', label: 'Edit', icon: 'i-lucide-pencil-ruler' },
   { id: 'layers', label: 'Layers', icon: 'i-lucide-layers' },
-  { id: 'history', label: 'History', icon: 'i-lucide-history' }
+  { id: 'history', label: 'History', icon: 'i-lucide-history' },
+  { id: 'board', label: 'Board', icon: 'i-lucide-info' }
 ] as const
 
 export type PanelTab = (typeof PANEL_TABS)[number]['id']
