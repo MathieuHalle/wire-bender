@@ -5,6 +5,7 @@ useHead({ title: 'API · WireBender' })
 const ROUTES: [string, string][] = [
   ['GET /api/boards?list=mine|shared|trash', 'list your boards (`id`, `name`, `head`, `visibility`, `hasPassword`, ...; `mine` by default), those in the trash, or those shared with you (`key`, `name`, `owner`, `role`, `lastOpened`)'],
   ['POST /api/boards', '`{ "board": <board json> }` imports; `{ "name", "cols", "rows", "type" }` creates an empty board; answers `{ id }`'],
+  ['POST /api/boards/import-bundle', 'a bundle zip as the raw body (`Content-Type: application/zip`, up to 50 MB) becomes a new board with its history, `201 { id, name, head, revisions }` (signed in; counts toward the board limits and the create rate)'],
   ['GET /api/boards/:id', '`{ id, name, head, board, role, signInToEdit, owner: { name }, forkedFrom }`. `id` is the key you asked with; `role` is `owner`, `edit` or `view`; `signInToEdit` is true for a signed-out visitor on an edit link; `forkedFrom` is `{ key, name }` of the board this one was forked from, for its owner while they can still open that board by the link they forked it through, else `null`'],
   ['PUT /api/boards/:id', '`{ "board": <board json>, "baseRevision"?: n }`; `409` with `{ current }` if `baseRevision` is not the head. Only the owner\'s PUT can change the name; anyone else\'s keeps it'],
   ['PATCH /api/boards/:id', '`{ "name" }` renames (owner)'],
@@ -12,6 +13,7 @@ const ROUTES: [string, string][] = [
   ['GET /api/boards/:id/check', 'findings and counts, as in the findings panel'],
   ['GET /api/boards/:id/bench', 'bench sheet (HTML); `?flip=lr` (default) or `tb` turns the bottom overviews over left-right or top-bottom, anything else is 422'],
   ['GET /api/boards/:id/download', 'the board as a `.wirebender.json` file'],
+  ['GET /api/boards/:id/bundle', 'the board with its whole history as `<name>.wirebender.zip` (view; one at a time and 6 a minute with the other exports, per account or per address, then `429`)'],
   ['GET /api/boards/:id/thumbnail', 'an SVG of the top side, for the board lists'],
   ['GET /api/boards/:id/revisions', 'history'],
   ['GET /api/boards/:id/revisions/:n', 'the board as it was at revision `n`'],
@@ -29,14 +31,17 @@ const ROUTES: [string, string][] = [
   ['PATCH /api/me', '`{ "name" }` sets your display name (1 to 60 characters)'],
   ['DELETE /api/me', 'deletes your account, restorable for 30 days, and signs you out (public mode; `409` for the only admin)'],
   ['POST /api/me/restore', 'restores your deleted account after signing in again (public mode)'],
+  ['GET /api/me/export', '`wirebender-boards-<date>.zip`, a bundle per board of yours, not the trashed ones (signed in; one at a time and 6 a minute, then `429`)'],
   ['POST /api/setup', '`{ "code" }` the setup code from the log, `{ ok, admin }` (public mode, until an admin exists; see First admin)'],
   ['GET /api/admin/users', 'every account (`id`, `name`, `providers`, `boards`, `isPremium`, `isAdmin`, `suspendedAt`, `deletedAt`, ...) (admin)'],
   ['PATCH /api/admin/users/:id', '`{ "premium"?, "suspended"?, "admin"? }`, each `true` or `false`; any other key is `422` (admin)'],
+  ['GET /api/admin/export', '`wirebender-server-<date>.zip`, a bundle of every board of every account, trashed ones too, as `<owner>/<board>.wirebender.zip` (admin; not with a token)'],
   ['POST /api/pair/start', 'this computer only: a new pairing code, `{ code, expiresAt, url }` (local mode)'],
   ['POST /api/pair', '`{ "code", "name" }` pairs the calling device (the one call an unpaired device may make); sets its cookie (local mode)'],
   ['GET /api/devices', 'the paired devices (`id`, `name`, `createdAt`, `lastSeen`) (local mode)'],
   ['DELETE /api/devices/:id', 'unpairs a device (local mode)'],
-  ['GET /api/devices/me', 'the calling device: `{ name, paired }` (local mode)']
+  ['GET /api/devices/me', 'the calling device: `{ name, paired }` (local mode)'],
+  ['GET /api/health', '`{ ok: true, mode }` without signing in, or `503 { ok: false }` when the database does not respond; `HEAD` works too']
 ]
 
 // Backtick spans in the text become <code>.

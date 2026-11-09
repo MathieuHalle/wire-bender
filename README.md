@@ -119,7 +119,7 @@ Daily snapshots are in `<WIREBENDER_DATA>/backups/`, 14 kept. They live on the s
 
 ```sh
 rsync -a --include='daily-*.sqlite' --exclude='*' you@server:/path/to/data/backups/ ./wirebender-backups/
-docker compose cp wirebender:/data/backups ./wirebender-backups
+docker compose cp wirebender:/data/backups/. ./wirebender-backups
 ```
 
 (Use your own data folder. The `docker compose` line runs in the folder with `compose.yaml`.) The snapshots hold the accounts too, so keep the copies private.
@@ -146,7 +146,7 @@ On the board list, a board's menu has **Board file** (the current board only) an
 
 ### Download everything
 
-The Account page has **Download all my boards**: one zip with a bundle per board (not the trashed ones). It is rate limited (6 a minute; the app shows a message when you hit it). The admin page has **Download every board**, a server-wide zip that includes trashed boards.
+The Account page has **Download all my boards**: one zip with a bundle per board (not the trashed ones). It is rate limited (6 a minute; the app shows a message when you hit it). The admin page has **Download every board**, a server-wide zip that includes trashed boards. It is for moving boards, not a whole-server restore: each bundle imports as a new board owned by whoever imports it, and accounts, sharing and tokens are not in it. To restore a whole server, use a snapshot (see Backups).
 
 ## Self-host with Docker
 
@@ -214,6 +214,7 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | --- | --- |
 | `GET /api/boards?list=mine\|shared\|trash` | list your boards (`id`, `name`, `head`, `visibility`, `hasPassword`, ...; `mine` by default), those in the trash, or those shared with you (`key`, `name`, `owner`, `role`, `lastOpened`) |
 | `POST /api/boards` | `{ "board": <board json> }` imports; `{ "name", "cols", "rows", "type" }` creates an empty board; answers `{ id }` |
+| `POST /api/boards/import-bundle` | a bundle zip as the raw body (`Content-Type: application/zip`, up to 50 MB) becomes a new board with its history, `201 { id, name, head, revisions }` (signed in; counts toward the board limits and the create rate) |
 | `GET /api/boards/:id` | `{ id, name, head, board, role, signInToEdit, owner: { name }, forkedFrom }`. `id` is the key you asked with; `role` is `owner`, `edit` or `view`; `signInToEdit` is true for a signed-out visitor on an edit link; `forkedFrom` is `{ key, name }` of the board this one was forked from, for its owner while they can still open that board by the link they forked it through, else `null` |
 | `PUT /api/boards/:id` | `{ "board": <board json>, "baseRevision"?: n }`; `409` with `{ current }` if `baseRevision` is not the head. Only the owner's PUT can change the name; anyone else's keeps it |
 | `PATCH /api/boards/:id` | `{ "name" }` renames (owner) |
@@ -221,6 +222,7 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `GET /api/boards/:id/check` | findings and counts, as in the findings panel |
 | `GET /api/boards/:id/bench` | bench sheet (HTML); `?flip=lr` (default) or `tb` turns the bottom overviews over left-right or top-bottom, anything else is 422 |
 | `GET /api/boards/:id/download` | the board as a `.wirebender.json` file |
+| `GET /api/boards/:id/bundle` | the board with its whole history as `<name>.wirebender.zip` (view; one at a time and 6 a minute with the other exports, per account or per address, then `429`) |
 | `GET /api/boards/:id/thumbnail` | an SVG of the top side, for the board lists |
 | `GET /api/boards/:id/revisions` | history |
 | `GET /api/boards/:id/revisions/:n` | the board as it was at revision `n` |
@@ -238,9 +240,11 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `PATCH /api/me` | `{ "name" }` sets your display name (1 to 60 characters) |
 | `DELETE /api/me` | deletes your account, restorable for 30 days, and signs you out (public mode; `409` for the only admin) |
 | `POST /api/me/restore` | restores your deleted account after signing in again (public mode) |
+| `GET /api/me/export` | `wirebender-boards-<date>.zip`, a bundle per board of yours, not the trashed ones (signed in; one at a time and 6 a minute, then `429`) |
 | `POST /api/setup` | `{ "code" }` the setup code from the log, `{ ok, admin }` (public mode, until an admin exists; see First admin) |
 | `GET /api/admin/users` | every account (`id`, `name`, `providers`, `boards`, `isPremium`, `isAdmin`, `suspendedAt`, `deletedAt`, ...) (admin) |
 | `PATCH /api/admin/users/:id` | `{ "premium"?, "suspended"?, "admin"? }`, each `true` or `false`; any other key is `422` (admin) |
+| `GET /api/admin/export` | `wirebender-server-<date>.zip`, a bundle of every board of every account, trashed ones too, as `<owner>/<board>.wirebender.zip` (admin; not with a token) |
 | `POST /api/pair/start` | this computer only: a new pairing code, `{ code, expiresAt, url }` (local mode) |
 | `POST /api/pair` | `{ "code", "name" }` pairs the calling device (the one call an unpaired device may make); sets its cookie (local mode) |
 | `GET /api/devices` | the paired devices (`id`, `name`, `createdAt`, `lastSeen`) (local mode) |
@@ -249,6 +253,7 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `GET /api/tokens` | your tokens (`id`, `name`, `prefix`, `createdAt`, `lastUsedAt`), never the token itself |
 | `POST /api/tokens` | `{ "name" }` makes a token; answers `201 { id, name, prefix, token }`, the only time `token` is shown (up to 20 tokens) |
 | `DELETE /api/tokens/:id` | revokes one of your tokens, `204` |
+| `GET /api/health` | `{ ok: true, mode }` without signing in, or `503 { ok: false }` when the database does not respond; `HEAD` works too |
 
 Sign-in starts at `/auth/github` or `/auth/google`, and `/_ws/board/:id` is the live board's WebSocket (y-websocket protocol; a message over 4,000,000 bytes, a presence update over 8 KB, or a change that makes the board larger than 2,000,000 bytes is refused; only the owner's changes may rename the board). In public mode nuxt-auth-utils also answers `GET` and `DELETE /api/_auth/session` (sign out); any other `/api` path is `404`.
 
