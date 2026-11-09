@@ -9,10 +9,13 @@
 // its own state (e.g. the findings' expanded groups) survives a collapse.
 import { nextPanel, PANEL_TABS, type PanelTab } from '~/utils/sidePanel'
 
-defineProps<{
+const props = defineProps<{
   /** A count to show on a tab's icon (e.g. the errors on Findings); 0 shows none. */
   badges?: Partial<Record<PanelTab, number>>
+  /** Tabs left off the rail (e.g. Sharing for anyone but the owner). */
+  hidden?: readonly PanelTab[]
 }>()
+const tabs = computed(() => PANEL_TABS.filter(t => !props.hidden?.includes(t.id)))
 
 const open = defineModel<boolean>('open', { required: true })
 const tab = defineModel<PanelTab>('tab', { required: true })
@@ -38,7 +41,7 @@ const tipOf = (label: string, id: PanelTab) =>
       aria-label="Side panel tabs"
     >
       <UTooltip
-        v-for="t in PANEL_TABS"
+        v-for="t in tabs"
         :key="t.id"
         :text="tipOf(t.label, t.id)"
         :content="{ side: 'left' }"
@@ -67,7 +70,7 @@ const tipOf = (label: string, id: PanelTab) =>
       class="min-h-0 min-w-0 overflow-y-auto overscroll-contain p-2 lg:w-80"
     >
       <div
-        v-for="t in PANEL_TABS"
+        v-for="t in tabs"
         v-show="tab === t.id"
         :id="`side-panel-${t.id}`"
         :key="t.id"

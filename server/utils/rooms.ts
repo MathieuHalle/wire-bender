@@ -182,6 +182,11 @@ onTokensRevoked((ids) => {
   for (const room of rooms.values()) for (const id of ids) room.tokenGone(id)
 })
 
+/** The accounts on a board right now in person; empty when its room isn't open. */
+export function accountsHere(boardId: string): Set<string> {
+  return rooms.get(boardId)?.accountsHere() ?? new Set()
+}
+
 /** The live room for a board, opened (after `recover`) if none is open. `null` when there is no such board. */
 export function openRoom(db: Db, id: string): Room | null {
   const open = rooms.get(id)
@@ -348,6 +353,13 @@ export class Room {
   /** The account a joined peer's edits are by, or null. */
   peerAuthorId(peerId: string): string | null {
     return this.peers.get(peerId)?.authorId ?? null
+  }
+
+  /** The accounts on the board right now in person (not through a token). */
+  accountsHere(): Set<string> {
+    const ids = new Set<string>()
+    for (const p of this.peers.values()) if (p.authorId && !p.tokenId) ids.add(p.authorId)
+    return ids
   }
 
   /** The token a joined peer's socket was opened with, or null. */

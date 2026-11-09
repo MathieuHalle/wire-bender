@@ -740,11 +740,11 @@ describe('sharing routes', () => {
     const { id } = createBoard(useDb(), fixture, 'import', 'x', ada)
     const linkId = getBoardRow(useDb(), id)!.linkId
     const get = call('GET', id, asUser(ada, true))
-    expect(await sharingGet(get)).toEqual({ visibility: 'view', hasPassword: false, link: `https://wire.example.org/b/${linkId}`, canUsePremium: true })
+    expect(await sharingGet(get)).toEqual({ visibility: 'view', hasPassword: false, link: `https://wire.example.org/b/${linkId}`, canUsePremium: true, people: [] })
     const patch = call('PATCH', id, asUser(ada, true), { visibility: 'edit', password: 'secret' })
     const body = await sharingPatch(patch)
     expect(patch.status).toBe(200)
-    expect(body).toEqual({ visibility: 'edit', hasPassword: true, link: `https://wire.example.org/b/${linkId}`, canUsePremium: true })
+    expect(body).toEqual({ visibility: 'edit', hasPassword: true, link: `https://wire.example.org/b/${linkId}`, canUsePremium: true, people: [] })
     expect(getBoardRow(useDb(), id)!.passwordHash).toBe('h:secret')
   })
 

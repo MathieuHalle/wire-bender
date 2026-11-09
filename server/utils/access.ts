@@ -235,7 +235,7 @@ const TOKEN_DENIED: [string, RegExp][] = [
   ['DELETE', /^\/api\/me$/],
   ['POST', /^\/api\/me\/restore$/],
   ['DELETE', /^\/api\/boards\/[^/]+$/],
-  ['PATCH', /^\/api\/boards\/[^/]+\/sharing$/],
+  ['*', /^\/api\/boards\/[^/]+\/sharing$/],
   ['POST', /^\/api\/boards\/[^/]+\/sharing\/regenerate$/],
   ['*', /^\/api\/tokens(\/.*)?$/],
   ['*', /^\/api\/admin(\/.*)?$/],

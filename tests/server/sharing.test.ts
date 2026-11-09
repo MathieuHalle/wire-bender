@@ -5,7 +5,8 @@ import { eq } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { BoardFile } from '../../core/schema'
 import { openDb, type Db } from '../../server/db'
-import { boards, users } from '../../server/db/schema'
+import { boards, linkVisits, users } from '../../server/db/schema'
+import { tokenRefusal } from '../../server/utils/access'
 import { signIn } from '../../server/utils/accounts'
 import { access, resetUnlocks, unlockLink, withUnlocked } from '../../server/utils/boardAccess'
 import { createBoard, getBoardRow } from '../../server/utils/boards'
@@ -61,10 +62,48 @@ describe('GET sharing', () => {
     const ada = user('Ada')
     const b = board(ada.userId, { passwordHash: 'h:secret' })
     const r = getSharing(db, { key: b.id, who: ada }, BASE)
-    expect(r).toEqual({ status: 200, body: { visibility: 'view', hasPassword: true, link: `${BASE}/b/${b.linkId}`, canUsePremium: false } })
+    expect(r).toEqual({ status: 200, body: { visibility: 'view', hasPassword: true, link: `${BASE}/b/${b.linkId}`, canUsePremium: false, people: [] } })
     expect(JSON.stringify(r.body)).not.toContain('h:secret')
     expect(getSharing(db, { key: b.id, who: ada }, `${BASE}/`).body).toMatchObject({ link: `${BASE}/b/${b.linkId}` })
     expect(getSharing(db, { key: board(user('Pam', true).userId).id, who: { ...user('Pam', true) } }, BASE).body).toMatchObject({ canUsePremium: true })
+  })
+
+  it('lists the signed-in people who opened the link, newest first, marking an old link and who is here now', () => {
+    const ada = user('Ada')
+    const b = board(ada.userId)
+    const sam = user('Sam')
+    const jo = user('Jo')
+    const kim = user('Kim')
+    const gone = user('Gone')
+    db.insert(linkVisits).values([
+      { userId: sam.userId, boardId: b.id, linkId: b.linkId, lastOpened: 2000 },
+      { userId: jo.userId, boardId: b.id, linkId: 'old-link', lastOpened: 3000 },
+      { userId: kim.userId, boardId: b.id, linkId: b.linkId, lastOpened: 1000 },
+      { userId: gone.userId, boardId: b.id, linkId: b.linkId, lastOpened: 4000 },
+      { userId: sam.userId, boardId: 'another-board', linkId: 'x', lastOpened: 9000 }
+    ]).run()
+    db.update(users).set({ deletedAt: 1 }).where(eq(users.id, gone.userId)).run()
+    const link: PeerLink = { update: () => {}, awareness: () => {} }
+    const room = openRoom(db, b.id)!
+    room.join('kim-tab', 'Kim', link, { role: 'view', viaLink: true, authorId: kim.userId })
+    expect(getSharing(db, { key: b.id, who: ada }, BASE).body).toMatchObject({
+      people: [
+        { name: 'Jo', lastOpened: 3000, current: false, here: false },
+        { name: 'Sam', lastOpened: 2000, current: true, here: false },
+        { name: 'Kim', lastOpened: 1000, current: true, here: true }
+      ]
+    })
+    room.leave('kim-tab')
+  })
+
+  it('a suspended account is left out, and a token can\'t read sharing', () => {
+    const ada = user('Ada')
+    const b = board(ada.userId)
+    const sus = user('Sus')
+    db.insert(linkVisits).values({ userId: sus.userId, boardId: b.id, linkId: b.linkId, lastOpened: 1 }).run()
+    db.update(users).set({ suspendedAt: 1 }).where(eq(users.id, sus.userId)).run()
+    expect(getSharing(db, { key: b.id, who: ada }, BASE).body).toMatchObject({ people: [] })
+    expect(tokenRefusal(`/api/boards/${b.id}/sharing`, 'GET')).toBe(true)
   })
 
   it('local mode offers no sharing', () => {

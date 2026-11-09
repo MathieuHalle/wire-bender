@@ -82,7 +82,7 @@ The admin switch makes another account an admin, with the same powers as you. Th
 
 ## Sharing
 
-Every board has a share link, `<WIREBENDER_URL>/b/<link id>`. The owner chooses who it admits with **Share**:
+Every board has a share link, `<WIREBENDER_URL>/b/<link id>`. The owner chooses who it admits in the board's **Sharing** tab (the **Share** button opens it):
 
 - **View**: anyone with the link can look (both sides, 3D, findings, bench sheet, download).
 - **Edit**: signed-in visitors can edit live. A signed-out visitor can look, but must sign in to edit.
@@ -91,6 +91,8 @@ Every board has a share link, `<WIREBENDER_URL>/b/<link id>`. The owner chooses 
 An optional link password is asked once per session. Private and passwords need premium (`Premium is needed for private boards and link passwords.`). Losing premium keeps what is set; lowering visibility or removing a password is always allowed.
 
 Changing the settings disconnects everyone who joined by link; they reconnect and are checked again. **New link** gives the board a new link, and the old one stops working.
+
+The Sharing tab also lists the signed-in people who opened the link: what the link gives them now, and when they last opened it, or **here now**. People who only had a link replaced by **New link** show greyed out as **old link**. Visitors who aren't signed in leave no trace. A signed-in visitor sees a line on the board saying the owner can see that they opened it.
 
 Boards opened by someone else's link are listed under **Shared with me**. A signed-in visitor can **Fork** a shared board into their own account, and the owner can **Duplicate** a board.
 
@@ -280,7 +282,7 @@ A token lets a script or an AI client use the API as you. Make one on `/account`
 A token cannot (`403`, `Not allowed with a token.`):
 
 - manage tokens, or delete, restore or sign out of your account (`/api/me`);
-- delete a board for good, change its sharing, or make a new share link;
+- delete a board for good, read or change its sharing, or make a new share link;
 - use `/api/admin`, `POST /api/setup`, `/auth/*` or `/api/_auth/*`;
 - pair or manage devices (`/api/pair`, `/api/devices`);
 - unlock a password link.

@@ -179,6 +179,7 @@ describe('requests made with a token', () => {
       ['POST', '/api/me/restore'],
       ['DELETE', `/api/boards/${id}`],
       ['PATCH', `/api/boards/${id}/sharing`],
+      ['GET', `/api/boards/${id}/sharing`],
       ['POST', `/api/boards/${id}/sharing/regenerate`],
       ['GET', '/api/tokens'],
       ['POST', '/api/tokens'],
@@ -199,8 +200,8 @@ describe('requests made with a token', () => {
     for (const [method, url] of [['GET', '/auth/github'], ['GET', '/auth/google?code=1&state=2'], ['GET', '/api/_auth/session'], ['DELETE', '/api/_auth/session']] as const) {
       expect(await call(null, method, url, { headers: bearer(token) }), `${method} ${url}`).toMatchObject({ status: 403, body: { error: 'Not allowed with a token.' } })
     }
-    // Not on the list: reading sharing, fork, PUT, undo, redo, restore.
-    for (const [method, url] of [['GET', `/api/boards/${id}/sharing`], ['POST', `/api/boards/${id}/fork`], ['PUT', `/api/boards/${id}`], ['POST', `/api/boards/${id}/undo`], ['POST', `/api/boards/${id}/redo`], ['POST', `/api/boards/${id}/revisions/1/restore`], ['GET', '/api/me']] as const) {
+    // Not on the list: fork, PUT, undo, redo, restore.
+    for (const [method, url] of [['POST', `/api/boards/${id}/fork`], ['PUT', `/api/boards/${id}`], ['POST', `/api/boards/${id}/undo`], ['POST', `/api/boards/${id}/redo`], ['POST', `/api/boards/${id}/revisions/1/restore`], ['GET', '/api/me']] as const) {
       expect(await call(null, method, url, { headers: bearer(token) }), `${method} ${url}`).toMatchObject({ body: undefined })
     }
   })

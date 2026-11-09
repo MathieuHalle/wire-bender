@@ -10,12 +10,12 @@
 // Any change closes the board's link peers (kickLinkPeers), and a new password or link id
 // voids every session's unlock of the old one (ruling R5: unlockEntry).
 import { randomUUID } from 'node:crypto'
-import { eq } from 'drizzle-orm'
+import { and, desc, eq, isNull } from 'drizzle-orm'
 import type { Db } from '../db'
-import { BOARD_VISIBILITY, boards, type BoardVisibility } from '../db/schema'
+import { BOARD_VISIBILITY, boards, linkVisits, users, type BoardVisibility } from '../db/schema'
 import { invalid, notFound, ownerRefusal, parseBody, withOwner, type ApiResult, type BoardRequest } from './api'
 import { getBoardRow } from './boards'
-import { kickLinkPeers } from './rooms'
+import { accountsHere, kickLinkPeers } from './rooms'
 import type { Who } from './who'
 
 export const PREMIUM_NEEDED = 'Premium is needed for private boards and link passwords.'
@@ -24,7 +24,14 @@ export const MAX_PASSWORD = 100
 /** A sharing PATCH is a few fields: never read more than this. */
 export const MAX_SHARING_BODY = 4096
 
-export interface Sharing { visibility: BoardVisibility, hasPassword: boolean, link: string, canUsePremium: boolean }
+/**
+ * A signed-in person who opened the board through its link: `current` while their visit was
+ * through today's link (a regenerate leaves them on the old one), `here` while they are on
+ * the board live. Deleted and suspended accounts are left out.
+ */
+export interface SharingPerson { name: string, lastOpened: number, current: boolean, here: boolean }
+
+export interface Sharing { visibility: BoardVisibility, hasPassword: boolean, link: string, canUsePremium: boolean, people: SharingPerson[] }
 
 export interface SharingDeps {
   /** `WIREBENDER_URL`; null in local mode, where sharing is not offered. */
@@ -41,8 +48,19 @@ const linkOf = (base: string, linkId: string): string => `${base.replace(/\/+$/,
 function sharingOf(db: Db, boardId: string, who: Who, base: string): ApiResult {
   const row = getBoardRow(db, boardId)
   if (!row) return notFound()
-  const body: Sharing = { visibility: row.visibility, hasPassword: row.passwordHash !== null, link: linkOf(base, row.linkId), canUsePremium: canUsePremium(who) }
+  const body: Sharing = { visibility: row.visibility, hasPassword: row.passwordHash !== null, link: linkOf(base, row.linkId), canUsePremium: canUsePremium(who), people: peopleOf(db, boardId, row.linkId) }
   return { status: 200, body }
+}
+
+function peopleOf(db: Db, boardId: string, linkId: string): SharingPerson[] {
+  const here = accountsHere(boardId)
+  return db.select({ userId: linkVisits.userId, name: users.name, linkId: linkVisits.linkId, lastOpened: linkVisits.lastOpened })
+    .from(linkVisits)
+    .innerJoin(users, eq(users.id, linkVisits.userId))
+    .where(and(eq(linkVisits.boardId, boardId), isNull(users.deletedAt), isNull(users.suspendedAt)))
+    .orderBy(desc(linkVisits.lastOpened))
+    .all()
+    .map(v => ({ name: v.name, lastOpened: v.lastOpened, current: v.linkId === linkId, here: here.has(v.userId) }))
 }
 
 /** Before a sharing write's body is read: its refusal (not the owner, or no sharing here), or null. */

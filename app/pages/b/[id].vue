@@ -9,7 +9,7 @@ import { buildConnectivity } from '~core/connectivity'
 import { jointSide, LOCKED_TITLE, makeGeo, PAUSED_TITLE, pageKey, SIGN_IN_TITLE, sideBox, sideFrames, VIEW_TITLE, type View } from '~/utils/boardView'
 import { NO_ACCESS } from '~/composables/useLiveBoard'
 import { fallbackAlert } from '~/utils/board3dFallback'
-import { defaultPanel, loadPanel, savePanel, type PanelState } from '~/utils/sidePanel'
+import { defaultPanel, loadPanel, savePanel, type PanelState, type PanelTab } from '~/utils/sidePanel'
 import { ALL_LAYERS } from '~/utils/layers'
 import {
   boardItems, drawnBoard, editTarget, hiddenCount, isShown, itemLit, itemNets, itemsAtFinding, loadHidden, pruneHidden,
@@ -304,10 +304,18 @@ const pairing = ref(false)
 const devicesOpen = ref(false)
 const canPair = computed(() => me.value?.mode === 'local')
 
-/** "Share": the owner's, in public mode only (local mode offers none). */
-const shareOpen = ref(false)
+/** "Share": the owner's, in public mode only (local mode offers none). It opens the Sharing tab. */
 const canShare = computed(() => isPublic.value && role.value === 'owner')
-watch(id, () => (shareOpen.value = false))
+const hiddenTabs = computed<PanelTab[]>(() => (canShare.value ? [] : ['sharing']))
+function openSharing() {
+  panel.value.open = true
+  panel.value.tab = 'sharing'
+}
+// A stored Sharing tab on a board that has none (not the owner, local mode) falls back.
+// Waits for both reads (the account and the board's role), or a slow one would reset it.
+watch([canShare, () => panel.value.tab, meta, me], ([can, tab, m, who]) => {
+  if (!can && tab === 'sharing' && m && who) panel.value.tab = 'findings'
+})
 
 /** A link visitor's "Sign in to edit" (an edit link, signed out). */
 const signInOpen = ref(false)
@@ -442,7 +450,7 @@ const sideTitle = (s: Side) => (s === 'top'
           variant="ghost"
           icon="i-lucide-share-2"
           label="Share"
-          @click="shareOpen = true"
+          @click="openSharing"
         />
         <template v-if="canPair">
           <UButton
@@ -477,11 +485,6 @@ const sideTitle = (s: Side) => (s === 'top'
         <PairDialog v-model:open="pairing" />
         <DevicesDialog v-model:open="devicesOpen" />
       </template>
-      <ShareDialog
-        v-if="canShare"
-        v-model:open="shareOpen"
-        :board-id="id"
-      />
     </header>
 
     <UAlert
@@ -553,6 +556,7 @@ const sideTitle = (s: Side) => (s === 'top'
       variant="subtle"
       :icon="viewOnly ? 'i-lucide-eye' : 'i-lucide-pencil'"
       :title="`Viewing ${board?.name ?? meta.name} by ${meta.owner.name}.`"
+      :description="signedIn ? 'The owner can see that you opened this board.' : undefined"
     >
       <template
         v-if="signedIn || meta.signInToEdit"
@@ -740,6 +744,7 @@ const sideTitle = (s: Side) => (s === 'top'
         v-model:open="panel.open"
         v-model:tab="panel.tab"
         :badges="badges"
+        :hidden="hiddenTabs"
       >
         <template #findings>
           <FindingsPanel
@@ -789,6 +794,14 @@ const sideTitle = (s: Side) => (s === 'top'
             :meta="meta"
             :revision="revision"
             :active="panel.open && panel.tab === 'board'"
+          />
+        </template>
+        <template #sharing>
+          <SharingPanel
+            v-if="canShare"
+            :board-id="id"
+            :active="panel.open && panel.tab === 'sharing'"
+            :peer-count="peers.length"
           />
         </template>
       </SidePanel>
