@@ -35,7 +35,7 @@ export function dedupCones(prims: Prim[]): Prim[] {
   return out
 }
 
-function sceneBounds(slab: Scene3D['board'], prims: Prim[]): Scene3D['bounds'] {
+export function sceneBounds(slab: Scene3D['board'], prims: Prim[]): Scene3D['bounds'] {
   const [cx, cy, cz] = slab.center
   const min: V3 = [cx - slab.widthMm / 2, cy - slab.thicknessMm / 2, cz - slab.depthMm / 2]
   const max: V3 = [cx + slab.widthMm / 2, cy + slab.thicknessMm / 2, cz + slab.depthMm / 2]
@@ -66,6 +66,15 @@ function sceneBounds(slab: Scene3D['board'], prims: Prim[]): Scene3D['bounds'] {
       case 'cone':
         add(p.base, p.radius, 0, p.radius)
         add([p.base[0], p.base[1] + p.up * p.height, p.base[2]], 0)
+        break
+      case 'extrude':
+        for (const q of p.outline) {
+          add([q.x, p.y0, q.z], 0)
+          add([q.x, p.y1, q.z], 0)
+        }
+        break
+      case 'lathe':
+        for (const q of p.profile) add([p.axis.x, q.y, p.axis.z], q.r, 0, q.r)
         break
     }
   }

@@ -24,6 +24,8 @@ function ys(p: Prim): number[] {
     case 'cylinder': return [p.a[1], p.b[1]]
     case 'tube': return p.points.map(q => q[1])
     case 'cone': return [p.base[1], p.base[1] + p.up * p.height]
+    case 'extrude': return [p.y0, p.y1]
+    case 'lathe': return p.profile.map(q => q.y)
   }
 }
 /** The highest point of a prim, radius included. */
@@ -37,6 +39,8 @@ function topOf(p: Prim): number {
     }
     case 'tube': return Math.max(...p.points.map(q => q[1])) + p.radius
     case 'cone': return p.up === 1 ? p.base[1] + p.height : p.base[1]
+    case 'extrude': return p.y1
+    case 'lathe': return Math.max(...p.profile.map(q => q.y))
   }
 }
 const pointsOf = (p: Prim): V3[] => p.kind === 'cylinder' ? [p.a, p.b] : p.kind === 'tube' ? p.points : []

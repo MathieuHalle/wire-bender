@@ -386,3 +386,35 @@ describe('printed edge labels', () => {
     built.dispose()
   })
 })
+
+describe('extrude and lathe meshes', () => {
+  const tag: Tag = { kind: 'part', id: 'X1' }
+  const sceneOf = (prims: Scene3D['prims']): Scene3D => ({
+    board: { widthMm: 10, depthMm: 10, thicknessMm: 1.6, center: [5, -0.8, 5] }, holes: [], pads: { top: [], bottom: [] },
+    labels: [], prims, bounds: { min: [0, -2, 0], max: [10, 10, 10] }, skipped: []
+  })
+  const boxOf = (built: ReturnType<typeof buildMeshes>) => {
+    const m = primMeshes(built.group)[0]!
+    m.updateMatrixWorld(true)
+    return new THREE.Box3().setFromObject(m)
+  }
+  const near = (got: number[], want: number[]) => got.forEach((v, i) => expect(v).toBeCloseTo(want[i]!, 3))
+
+  it('an extrude stands on its outline from y0 to y1, either winding', () => {
+    const ccw = [{ x: 1, z: 2 }, { x: 4, z: 2 }, { x: 4, z: 6 }, { x: 1, z: 6 }]
+    for (const outline of [ccw, [...ccw].reverse()]) {
+      const built = buildMeshes(sceneOf([{ kind: 'extrude', outline, y0: 0.5, y1: 3, color: '#123456', tag }]))
+      const b = boxOf(built)
+      near([b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z], [1, 0.5, 2, 4, 3, 6])
+      expect(primMeshes(built.group)[0]!.userData.tag).toEqual(tag)
+      built.dispose()
+    }
+  })
+
+  it('a lathe is spun round its axis', () => {
+    const built = buildMeshes(sceneOf([{ kind: 'lathe', axis: { x: 5, z: 3 }, profile: [{ r: 0, y: 1 }, { r: 2, y: 1 }, { r: 2, y: 5 }, { r: 0, y: 6 }], color: '#aa0000', tag }]))
+    const b = boxOf(built)
+    near([b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z], [3, 1, 1, 7, 6, 5])
+    built.dispose()
+  })
+})

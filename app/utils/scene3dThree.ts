@@ -84,6 +84,20 @@ function tubeGeometry(points: V3[], radius: number): THREE.BufferGeometry {
   return merged
 }
 
+const LATHE_SEGMENTS = 32
+
+/**
+ * Vertical walls on an x/z outline from y0 to y1. The shape is drawn in (x, -z) and extruded
+ * along +z; turning it -90° about x stands it up (shape y -> -z, extrusion -> +y).
+ */
+export function extrudeGeometry(outline: XZ[], y0: number, y1: number): THREE.BufferGeometry {
+  const shape = new THREE.Shape(outline.map(q => new THREE.Vector2(q.x, -q.z)))
+  const g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(y1 - y0, 1e-3), bevelEnabled: false, curveSegments: 1 })
+  g.rotateX(-Math.PI / 2)
+  g.translate(0, y0, 0)
+  return g
+}
+
 function primMesh(p: Prim, material: (color: string, metal: boolean) => THREE.Material): THREE.Mesh {
   let mesh: THREE.Mesh
   switch (p.kind) {
@@ -109,6 +123,15 @@ function primMesh(p: Prim, material: (color: string, metal: boolean) => THREE.Ma
       mesh = new THREE.Mesh(new THREE.ConeGeometry(p.radius, p.height, SEGMENTS), material(p.color, !!p.metal))
       mesh.position.set(p.base[0], p.base[1] + (p.up * p.height) / 2, p.base[2])
       if (p.up < 0) mesh.rotation.x = Math.PI
+      break
+    }
+    case 'extrude':
+      mesh = new THREE.Mesh(extrudeGeometry(p.outline, p.y0, p.y1), material(p.color, !!p.metal))
+      break
+    case 'lathe': {
+      const pts = p.profile.map(q => new THREE.Vector2(Math.max(0, q.r), q.y))
+      mesh = new THREE.Mesh(new THREE.LatheGeometry(pts, LATHE_SEGMENTS), material(p.color, !!p.metal))
+      mesh.position.set(p.axis.x, 0, p.axis.z)
       break
     }
   }

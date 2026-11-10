@@ -40,6 +40,16 @@ export type Prim
     | ({ kind: 'tube', points: V3[], radius: number } & PrimLook)
   /** Solder: base disc at `base`, apex `height` along y * up. */
     | ({ kind: 'cone', base: V3, up: 1 | -1, radius: number, height: number } & PrimLook)
+  /**
+   * A closed outline in x/z (board mm, at least 3 points, either winding) with vertical walls
+   * from y0 up to y1: a D-shaped TO-92, a rounded relay case, an LED's flat rim.
+   */
+    | ({ kind: 'extrude', outline: XZ[], y0: number, y1: number } & PrimLook)
+  /**
+   * A profile spun round the vertical line through `axis`: points of radius r at height y,
+   * bottom to top (an LED dome, an electrolytic can, a trimmer screw).
+   */
+    | ({ kind: 'lathe', axis: XZ, profile: { r: number, y: number }[] } & PrimLook)
 
 export interface XZ { x: number, z: number }
 
