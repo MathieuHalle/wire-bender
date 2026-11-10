@@ -366,9 +366,10 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
           {{ tip.net }}
         </div>
       </div>
-      <!-- Top left, as on the 2D canvas: the camera presets, then the page's controls (the
-           2D / 3D switch). The preset the view is on is filled, like the 2D framings. -->
+      <!-- Top left, as on the 2D canvas: the page's controls (the 2D / 3D switch), then the
+           camera presets. The preset the view is on is filled, like the 2D framings. -->
       <div class="absolute top-2 left-2 flex items-center gap-3">
+        <slot name="controls" />
         <div
           class="flex gap-1"
           role="group"
@@ -386,7 +387,6 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
             @click="applyPreset(p.id)"
           />
         </div>
-        <slot name="controls" />
       </div>
     </div>
     <p class="border-t border-default px-4 py-1 text-xs text-muted">

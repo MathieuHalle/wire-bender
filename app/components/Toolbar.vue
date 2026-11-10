@@ -1,6 +1,6 @@
 <!-- eslint-disable vue/multi-word-component-names -- the plan names it Toolbar -->
 <script setup lang="ts">
-// The view switch, 2D or 3D, at the top left of the canvas in both views, after that view's framing
+// The view switch, 2D or 3D, at the top left of the canvas in both views, before that view's framing
 // buttons (2D) or camera presets (3D). Each view keeps its own other controls: zoom,
 // fit and mirror in 2D; the camera presets in 3D. The editing tools and undo/redo are in
 // the side panel's Edit tab.

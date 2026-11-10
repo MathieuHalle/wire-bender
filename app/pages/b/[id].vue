@@ -676,8 +676,12 @@ const sideTitle = (s: Side) => (s === 'top'
             @zoom="(p: number) => zoomPct = p"
           >
             <template #overlay>
-              <!-- The framings, then the 2D / 3D switch: the same place as in the 3D view. -->
+              <!-- The 2D / 3D switch, then the framings: the same place as in the 3D view. -->
               <div class="flex items-center gap-3">
+                <Toolbar
+                  :view="view"
+                  @mode="pickMode"
+                />
                 <div
                   class="flex gap-1"
                   role="group"
@@ -695,10 +699,6 @@ const sideTitle = (s: Side) => (s === 'top'
                     @click="pickView(v.id)"
                   />
                 </div>
-                <Toolbar
-                  :view="view"
-                  @mode="pickMode"
-                />
               </div>
             </template>
             <template #overlay-end>
