@@ -1,8 +1,9 @@
-import { bodyHeightMm, isDiodePart, DIP_SOCKET_LIFT_MM, DIP_SOCKET_RIM_MM, FOOTPRINT_PITCH_MM, TAB_PLATE_MM, tabPlateMm, type PlacedPart, type Rect } from '../footprints'
+import { bodyHeightMm, isDiodePart, CAP_ELEC_BASE_MM, DIP_SOCKET_LIFT_MM, DIP_SOCKET_RIM_MM, FOOTPRINT_PITCH_MM, TAB_PLATE_MM, tabPlateMm, type PlacedPart, type Rect } from '../footprints'
 import { holeMm } from '../holes'
 import {
   BOARD_BOTTOM_Y, COLORS, LEG_DIAMETER_MM, LEG_END_Y, LEG_FOLD_Y, SOLDER_BASE_DIAMETER_MM, SOLDER_HEIGHT_MM
 } from './dims'
+import { dOutline } from './shapes'
 import type { Prim, Tag, V3 } from './types'
 
 const LEG_R = LEG_DIAMETER_MM / 2
@@ -36,6 +37,36 @@ const STRIPE_MM = 0.8
 const STRIPE_PROUD_MM = 0.04
 /** The square entry on top of a female header's pin. */
 const SOCKET_ENTRY_MM = 1.0
+/** An LED stands this high on its legs; its rim is this tall and this much wider than the body. */
+const LED_LIFT_MM = 1
+const LED_RIM_H_MM = 1
+const LED_RIM_MM = 0.4
+/** The flat on an LED rim (the cathode side) cuts this deep into the rim's circle. */
+const LED_FLAT_MM = 0.5
+/** Half the angle the minus stripe covers round an electrolytic's can, radians. */
+const CAP_ELEC_STRIPE_RAD = 0.45
+const DOME_STEPS = 8
+
+/** A cylinder of radius r from y0, with a half-sphere dome reaching `top`. */
+function domeProfile(r: number, y0: number, top: number): { r: number, y: number }[] {
+  const shoulder = Math.max(y0, top - r)
+  const dome = Array.from({ length: DOME_STEPS + 1 }, (_, i) => {
+    const t = (Math.PI / 2) * (i / DOME_STEPS)
+    return { r: r * Math.cos(t), y: shoulder + (top - shoulder) * Math.sin(t) }
+  })
+  dome[DOME_STEPS] = { r: 0, y: top }
+  return [{ r: 0, y: y0 }, { r, y: y0 }, ...dome]
+}
+
+const LED_COLORS: [RegExp, string][] = [
+  [/green/i, COLORS.ledGreen], [/blue/i, COLORS.ledBlue], [/yellow|amber/i, COLORS.ledYellow],
+  [/white/i, COLORS.ledWhite], [/orange/i, COLORS.ledOrange], [/red/i, COLORS.ledRed]
+]
+/** An LED's colour from its value or label ("green", "LED blue 3mm"); red when neither says. */
+function ledColor(part: PlacedPart['part']): string {
+  const text = `${part.value ?? ''} ${part.label ?? ''}`
+  return LED_COLORS.find(([re]) => re.test(text))?.[1] ?? COLORS.ledRed
+}
 
 type Pin = PlacedPart['pins'][number]
 interface XZ { x: number, z: number }
@@ -334,6 +365,42 @@ export function partPrims(
         const d = Math.hypot(c.x - m.x, c.z - m.z)
         straight.set(pin.name, d < R ? cy - Math.sqrt(R * R - d * d) : cy)
       }
+      break
+    }
+    case 'led': {
+      // On 1 mm of leg: a rim with a flat on the cathode (b) side, then the body and its dome.
+      const { u, mid } = axis!
+      const Rf = fp.body.rect.w / 2
+      const Rb = Rf - LED_RIM_MM
+      const rimTop = LED_LIFT_MM + LED_RIM_H_MM
+      const color = ledColor(part)
+      out.push({ kind: 'extrude', outline: dOutline(mid, Rf, u, Rf - LED_FLAT_MM), y0: LED_LIFT_MM, y1: rimTop, color, tag: body })
+      out.push({ kind: 'lathe', axis: mid, profile: domeProfile(Rb, rimTop - 0.1, h), color, tag: body })
+      allStraight(LED_LIFT_MM)
+      break
+    }
+    case 'cap-elec': {
+      // A can on its rubber seal, the top rim rolled in, a light minus stripe on the b side.
+      const { u, mid } = axis!
+      const R = fp.body.rect.w / 2
+      const y0 = CAP_ELEC_BASE_MM
+      out.push({ kind: 'lathe', axis: mid, profile: [{ r: 0, y: 0 }, { r: R - 0.4, y: 0 }, { r: R - 0.4, y: y0 }, { r: 0, y: y0 }], color: COLORS.rubber, tag: body })
+      out.push({
+        kind: 'lathe', axis: mid, color: COLORS.capElec, tag: body,
+        profile: [{ r: 0, y: y0 }, { r: R, y: y0 }, { r: R, y: h - 0.6 }, { r: R - 0.25, y: h - 0.15 }, { r: R - 0.5, y: h }, { r: R - 0.7, y: h - 0.08 }, { r: 0, y: h - 0.08 }]
+      })
+      const a0 = Math.atan2(u.z, u.x)
+      const band = (r: number, from: number, to: number, steps = 10) =>
+        Array.from({ length: steps + 1 }, (_, i) => {
+          const t = from + (to - from) * (i / steps)
+          return { x: mid.x + r * Math.cos(t), z: mid.z + r * Math.sin(t) }
+        })
+      const w = CAP_ELEC_STRIPE_RAD
+      out.push({
+        kind: 'extrude', color: COLORS.capElecStripe, tag: body, y0: y0 + 0.6, y1: h - 0.9,
+        outline: [...band(R + STRIPE_PROUD_MM, a0 - w, a0 + w), ...band(R - 0.05, a0 + w, a0 - w)]
+      })
+      allStraight(0)
       break
     }
     case 'axial': {

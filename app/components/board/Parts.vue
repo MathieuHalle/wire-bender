@@ -73,6 +73,19 @@ const parts = computed(() => props.placed.map((p) => {
       const s = { x: centre.x + u.x * p.fp.body.rect.w * 0.3, y: centre.y + u.y * p.fp.body.rect.w * 0.3 }
       line({ x: s.x + n.x * half, y: s.y + n.y * half }, { x: s.x - n.x * half, y: s.y - n.y * half }, 0.7, '#3b3f42')
     }
+  } else if ((p.fp.mark === 'flat-b' || p.fp.mark === 'minus-b') && pinPts.length === 2) {
+    // A chord across the round body on the b side: the LED's flat rim (thin, dark), or the
+    // electrolytic's minus stripe (wide, light), drawn as far in as it reaches.
+    const [a, b] = pinPts as [Pt, Pt]
+    const len = Math.hypot(b.x - a.x, b.y - a.y) || 1
+    const u = { x: (b.x - a.x) / len, y: (b.y - a.y) / len }
+    const n = { x: -u.y, y: u.x }
+    const R = p.fp.body.rect.w / 2
+    const flat = p.fp.mark === 'flat-b'
+    const d = flat ? R - 0.35 : R * 0.62
+    const half = Math.sqrt(Math.max(0, R * R - d * d)) - 0.15
+    const s = { x: centre.x + u.x * d, y: centre.y + u.y * d }
+    line({ x: s.x + n.x * half, y: s.y + n.y * half }, { x: s.x - n.x * half, y: s.y - n.y * half }, flat ? 0.35 : R * 0.45, flat ? '#16201b' : '#d7dde3')
   }
 
   const body = g.rect(r)

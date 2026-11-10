@@ -92,10 +92,10 @@ Built-in footprint ids, with their pin names. `N` stands for a number in the ran
 - `dipN-wide`, `dipN-wide-socket` (N even, 24 to 40): the same with the sides 6 holes (0.6") apart.
 - `terminal-Np-508` (N 2 to 6): a screw terminal block, pins `1` to `N`, 2 holes (5.08 mm) apart.
 - `relay-g5v2` (`1`, `16`, `4`, `13`, `6`, `11`, `8`, `9`), `to220-gds` (`G`, `D`, `S`).
-- Two-lead parts, pins `a` and `b`: `polyfuse-radial`, `axial` and `cap-disc`.
+- Two-lead parts, pins `a` and `b`: `polyfuse-radial`, `axial`, `cap-disc`, `led-3mm` and `led-5mm` (`a` anode, `b` cathode), and the electrolytic capacitors `cap-elec-5x11`, `cap-elec-6.3x11`, `cap-elec-8x12`, `cap-elec-10x16` and `cap-elec-10x20` (diameter x height in mm; `a` plus, `b` minus).
 <!-- footprint-list:end -->
 
-Two-lead footprints have an intended span between `at` and `to`: 2 holes for `polyfuse-radial`, 3 to 6 for `axial`, and 1 to 2 for `cap-disc`. Readers need not enforce it. On a two-lead part with a polarity, `b` is the cathode or minus. The reader refuses a footprint id it does not know.
+Two-lead footprints have an intended span between `at` and `to`: 2 holes for `polyfuse-radial`, 3 to 6 for `axial`, 1 to 2 for `cap-disc`, 1 for the LEDs and the 5 and 6.3 mm electrolytics, and 2 for the 8 and 10 mm ones. Readers need not enforce it. On a two-lead part with a polarity, `b` is the cathode or minus. The reader refuses a footprint id it does not know.
 
 ### `trails`
 

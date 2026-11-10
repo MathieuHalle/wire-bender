@@ -165,7 +165,34 @@ const SINGLES: Footprint[] = [
   }
 ]
 
+/** A round LED: `flange` is the rim's diameter, mm. 1 mm off the board on its legs. */
+function ledFp(size: 3 | 5, flange: number, heightMm: number): Footprint {
+  return {
+    id: `led-${size}mm`, name: `LED ${size} mm`,
+    pins: [p('a', 0, 0), p('b', 1, 0)], twoLead: { minSpan: 1, maxSpan: 1 },
+    body: { rect: centredOrigin(flange, flange), heightMm, round: true, side: 'top' }, shape: 'led', mark: 'flat-b'
+  }
+}
+
+/** Radial electrolytic can sizes, diameter x height mm, and their lead span in holes. */
+export const CAP_ELEC_SIZES: { d: number, h: number, span: number }[] = [
+  { d: 5, h: 11, span: 1 }, { d: 6.3, h: 11, span: 1 }, { d: 8, h: 12, span: 2 }, { d: 10, h: 16, span: 2 }, { d: 10, h: 20, span: 2 }
+]
+/** The rubber seal an electrolytic stands on, mm. */
+export const CAP_ELEC_BASE_MM = 0.5
+
+function capElecFp({ d, h, span }: { d: number, h: number, span: number }): Footprint {
+  return {
+    id: `cap-elec-${d}x${h}`, name: `Electrolytic capacitor ${d} x ${h} mm`,
+    pins: [p('a', 0, 0), p('b', span, 0)], twoLead: { minSpan: span, maxSpan: span },
+    body: { rect: centredOrigin(d, d), heightMm: h + CAP_ELEC_BASE_MM, round: true, side: 'top' }, shape: 'cap-elec', mark: 'minus-b'
+  }
+}
+
 const FAMILIES: Footprint[] = [
+  ledFp(3, 3.8, 6.5),
+  ledFp(5, 5.8, 9.6),
+  ...CAP_ELEC_SIZES.map(capElecFp),
   ...([1, 2] as const).flatMap(rows => (['header', 'socket'] as const).flatMap(kind => range(1, HEADER_MAX).map(n => headerFp(kind, rows, n)))),
   ...range(DIP_PINS.min, DIP_PINS.max, 2).flatMap(n => [dipFp(n, false, false), dipFp(n, false, true)]),
   ...range(DIP_PINS.wideMin, DIP_PINS.max, 2).flatMap(n => [dipFp(n, true, false), dipFp(n, true, true)]),
