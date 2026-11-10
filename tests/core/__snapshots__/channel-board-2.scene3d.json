@@ -1,0 +1,10986 @@
+{
+ "prims": [
+  {
+   "kind": "box",
+   "center": [
+    7.62,
+    5,
+    1.27
+   ],
+   "size": [
+    10.16,
+    10,
+    7.6
+   ],
+   "color": "#2f8f4e",
+   "tag": {
+    "kind": "part",
+    "id": "JA",
+    "label": "JA string A (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    5.08,
+    9.6,
+    0
+   ],
+   "b": [
+    5.08,
+    10.02,
+    0
+   ],
+   "radius": 1.5,
+   "color": "#9aa0a6",
+   "metal": true,
+   "tag": {
+    "kind": "part",
+    "id": "JA",
+    "label": "JA string A (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    5.08,
+    9.969999999999999,
+    0
+   ],
+   "size": [
+    2.4,
+    0.1399999999999988,
+    0.5
+   ],
+   "color": "#2a2c2e",
+   "tag": {
+    "kind": "part",
+    "id": "JA",
+    "label": "JA string A (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    5.08,
+    2.9,
+    -2.3899999999999997
+   ],
+   "size": [
+    3.2,
+    3.3999999999999995,
+    0.32
+   ],
+   "color": "#16201b",
+   "tag": {
+    "kind": "part",
+    "id": "JA",
+    "label": "JA string A (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    10.16,
+    9.6,
+    0
+   ],
+   "b": [
+    10.16,
+    10.02,
+    0
+   ],
+   "radius": 1.5,
+   "color": "#9aa0a6",
+   "metal": true,
+   "tag": {
+    "kind": "part",
+    "id": "JA",
+    "label": "JA string A (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    10.16,
+    9.969999999999999,
+    0
+   ],
+   "size": [
+    2.4,
+    0.1399999999999988,
+    0.5
+   ],
+   "color": "#2a2c2e",
+   "tag": {
+    "kind": "part",
+    "id": "JA",
+    "label": "JA string A (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    10.16,
+    2.9,
+    -2.3899999999999997
+   ],
+   "size": [
+    3.2,
+    3.3999999999999995,
+    0.32
+   ],
+   "color": "#16201b",
+   "tag": {
+    "kind": "part",
+    "id": "JA",
+    "label": "JA string A (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    5.08,
+    0,
+    0
+   ],
+   "b": [
+    5.08,
+    -3.1,
+    0
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "JA.1",
+    "net": "W1A",
+    "nets": [
+     "W1A"
+    ],
+    "label": "JA pin 1"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    5.08,
+    -1.6,
+    0
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "JA.1",
+    "net": "W1A",
+    "nets": [
+     "W1A"
+    ],
+    "label": "JA pin 1 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    10.16,
+    0,
+    0
+   ],
+   "b": [
+    10.16,
+    -3.1,
+    0
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "JA.2",
+    "net": "W2A",
+    "nets": [
+     "W2A"
+    ],
+    "label": "JA pin 2"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    10.16,
+    -1.6,
+    0
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "JA.2",
+    "net": "W2A",
+    "nets": [
+     "W2A"
+    ],
+    "label": "JA pin 2 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    33.02,
+    5,
+    1.27
+   ],
+   "size": [
+    10.16,
+    10,
+    7.6
+   ],
+   "color": "#2f8f4e",
+   "tag": {
+    "kind": "part",
+    "id": "JB",
+    "label": "JB string B (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    9.6,
+    0
+   ],
+   "b": [
+    35.56,
+    10.02,
+    0
+   ],
+   "radius": 1.5,
+   "color": "#9aa0a6",
+   "metal": true,
+   "tag": {
+    "kind": "part",
+    "id": "JB",
+    "label": "JB string B (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    35.56,
+    9.969999999999999,
+    0
+   ],
+   "size": [
+    2.4,
+    0.1399999999999988,
+    0.5
+   ],
+   "color": "#2a2c2e",
+   "tag": {
+    "kind": "part",
+    "id": "JB",
+    "label": "JB string B (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    35.56,
+    2.9,
+    -2.3899999999999997
+   ],
+   "size": [
+    3.2,
+    3.3999999999999995,
+    0.32
+   ],
+   "color": "#16201b",
+   "tag": {
+    "kind": "part",
+    "id": "JB",
+    "label": "JB string B (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    30.48,
+    9.6,
+    0
+   ],
+   "b": [
+    30.48,
+    10.02,
+    0
+   ],
+   "radius": 1.5,
+   "color": "#9aa0a6",
+   "metal": true,
+   "tag": {
+    "kind": "part",
+    "id": "JB",
+    "label": "JB string B (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    30.48,
+    9.969999999999999,
+    0
+   ],
+   "size": [
+    2.4,
+    0.1399999999999988,
+    0.5
+   ],
+   "color": "#2a2c2e",
+   "tag": {
+    "kind": "part",
+    "id": "JB",
+    "label": "JB string B (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    30.48,
+    2.9,
+    -2.3899999999999997
+   ],
+   "size": [
+    3.2,
+    3.3999999999999995,
+    0.32
+   ],
+   "color": "#16201b",
+   "tag": {
+    "kind": "part",
+    "id": "JB",
+    "label": "JB string B (1=W1, 2=W2)"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    0,
+    0
+   ],
+   "b": [
+    35.56,
+    -3.1,
+    0
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "JB.1",
+    "net": "W1B",
+    "nets": [
+     "W1B"
+    ],
+    "label": "JB pin 1"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    0
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "JB.1",
+    "net": "W1B",
+    "nets": [
+     "W1B"
+    ],
+    "label": "JB pin 1 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    30.48,
+    0,
+    0
+   ],
+   "b": [
+    30.48,
+    -3.1,
+    0
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "JB.2",
+    "net": "W2B",
+    "nets": [
+     "W2B"
+    ],
+    "label": "JB pin 2"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    30.48,
+    -1.6,
+    0
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "JB.2",
+    "net": "W2B",
+    "nets": [
+     "W2B"
+    ],
+    "label": "JB pin 2 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    17.78,
+    5,
+    1.27
+   ],
+   "size": [
+    10.16,
+    10,
+    7.6
+   ],
+   "color": "#2f8f4e",
+   "tag": {
+    "kind": "part",
+    "id": "J3",
+    "label": "J3 power (1=GND, 2=V12)"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    15.24,
+    9.6,
+    0
+   ],
+   "b": [
+    15.24,
+    10.02,
+    0
+   ],
+   "radius": 1.5,
+   "color": "#9aa0a6",
+   "metal": true,
+   "tag": {
+    "kind": "part",
+    "id": "J3",
+    "label": "J3 power (1=GND, 2=V12)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    15.24,
+    9.969999999999999,
+    0
+   ],
+   "size": [
+    2.4,
+    0.1399999999999988,
+    0.5
+   ],
+   "color": "#2a2c2e",
+   "tag": {
+    "kind": "part",
+    "id": "J3",
+    "label": "J3 power (1=GND, 2=V12)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    15.24,
+    2.9,
+    -2.3899999999999997
+   ],
+   "size": [
+    3.2,
+    3.3999999999999995,
+    0.32
+   ],
+   "color": "#16201b",
+   "tag": {
+    "kind": "part",
+    "id": "J3",
+    "label": "J3 power (1=GND, 2=V12)"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    20.32,
+    9.6,
+    0
+   ],
+   "b": [
+    20.32,
+    10.02,
+    0
+   ],
+   "radius": 1.5,
+   "color": "#9aa0a6",
+   "metal": true,
+   "tag": {
+    "kind": "part",
+    "id": "J3",
+    "label": "J3 power (1=GND, 2=V12)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    20.32,
+    9.969999999999999,
+    0
+   ],
+   "size": [
+    2.4,
+    0.1399999999999988,
+    0.5
+   ],
+   "color": "#2a2c2e",
+   "tag": {
+    "kind": "part",
+    "id": "J3",
+    "label": "J3 power (1=GND, 2=V12)"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    20.32,
+    2.9,
+    -2.3899999999999997
+   ],
+   "size": [
+    3.2,
+    3.3999999999999995,
+    0.32
+   ],
+   "color": "#16201b",
+   "tag": {
+    "kind": "part",
+    "id": "J3",
+    "label": "J3 power (1=GND, 2=V12)"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    15.24,
+    0,
+    0
+   ],
+   "b": [
+    15.24,
+    -3.1,
+    0
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "J3.1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "J3 pin 1"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    15.24,
+    -1.6,
+    0
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "J3.1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "J3 pin 1 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    20.32,
+    0,
+    0
+   ],
+   "b": [
+    20.32,
+    -3.1,
+    0
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "J3.2",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "J3 pin 2"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    20.32,
+    -1.6,
+    0
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "J3.2",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "J3 pin 2 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    8.89,
+    5.75,
+    16.51
+   ],
+   "size": [
+    10.1,
+    11.5,
+    20.5
+   ],
+   "color": "#2f4f7a",
+   "tag": {
+    "kind": "part",
+    "id": "KA",
+    "label": "KA"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    5.04,
+    11.5,
+    7.460000000000001
+   ],
+   "b": [
+    5.04,
+    11.52,
+    7.460000000000001
+   ],
+   "radius": 0.6,
+   "color": "#e8e8e8",
+   "tag": {
+    "kind": "part",
+    "id": "KA",
+    "label": "KA"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    5.08,
+    0,
+    7.62
+   ],
+   "b": [
+    5.08,
+    -3.1,
+    7.62
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KA.1",
+    "net": "COIL_A",
+    "nets": [
+     "COIL_A"
+    ],
+    "label": "KA pin 1"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    5.08,
+    -1.6,
+    7.62
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KA.1",
+    "net": "COIL_A",
+    "nets": [
+     "COIL_A"
+    ],
+    "label": "KA pin 1 joint",
+    "owners": [
+     "part"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    12.7,
+    0,
+    7.62
+   ],
+   "b": [
+    12.7,
+    -3.1,
+    7.62
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KA.16",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "KA pin 16"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    12.7,
+    -1.6,
+    7.62
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KA.16",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "KA pin 16 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    5.08,
+    0,
+    15.24
+   ],
+   "b": [
+    5.08,
+    -3.1,
+    15.24
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KA.4",
+    "net": "W1A",
+    "nets": [
+     "W1A"
+    ],
+    "label": "KA pin 4"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    5.08,
+    -1.6,
+    15.24
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KA.4",
+    "net": "W1A",
+    "nets": [
+     "W1A"
+    ],
+    "label": "KA pin 4 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    12.7,
+    0,
+    15.24
+   ],
+   "b": [
+    12.7,
+    -3.1,
+    15.24
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KA.13",
+    "net": "W2A",
+    "nets": [
+     "W2A"
+    ],
+    "label": "KA pin 13"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    12.7,
+    -1.6,
+    15.24
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KA.13",
+    "net": "W2A",
+    "nets": [
+     "W2A"
+    ],
+    "label": "KA pin 13 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    5.08,
+    0,
+    20.32
+   ],
+   "b": [
+    5.08,
+    -3.1,
+    20.32
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KA.6",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "KA pin 6"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    5.08,
+    -1.6,
+    20.32
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KA.6",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "KA pin 6 joint",
+    "owners": [
+     "part"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    12.7,
+    0,
+    20.32
+   ],
+   "b": [
+    12.7,
+    -3.1,
+    20.32
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KA.11",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "KA pin 11"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    12.7,
+    -1.6,
+    20.32
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KA.11",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "KA pin 11 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    5.08,
+    0,
+    25.4
+   ],
+   "b": [
+    5.08,
+    -3.1,
+    25.4
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KA.8",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "KA pin 8"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    5.08,
+    -1.6,
+    25.4
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KA.8",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "KA pin 8 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    12.7,
+    0,
+    25.4
+   ],
+   "b": [
+    12.7,
+    -3.1,
+    25.4
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KA.9",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "KA pin 9"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    12.7,
+    -1.6,
+    25.4
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KA.9",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "KA pin 9 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    31.750000000000004,
+    5.75,
+    16.51
+   ],
+   "size": [
+    10.1,
+    11.5,
+    20.5
+   ],
+   "color": "#2f4f7a",
+   "tag": {
+    "kind": "part",
+    "id": "KB",
+    "label": "KB"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    27.900000000000002,
+    11.5,
+    7.460000000000001
+   ],
+   "b": [
+    27.900000000000002,
+    11.52,
+    7.460000000000001
+   ],
+   "radius": 0.6,
+   "color": "#e8e8e8",
+   "tag": {
+    "kind": "part",
+    "id": "KB",
+    "label": "KB"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    27.94,
+    0,
+    7.62
+   ],
+   "b": [
+    27.94,
+    -3.1,
+    7.62
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KB.1",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "KB pin 1"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    27.94,
+    -1.6,
+    7.62
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KB.1",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "KB pin 1 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    0,
+    7.62
+   ],
+   "b": [
+    35.56,
+    -3.1,
+    7.62
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KB.16",
+    "net": "COIL_B",
+    "nets": [
+     "COIL_B"
+    ],
+    "label": "KB pin 16"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    7.62
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KB.16",
+    "net": "COIL_B",
+    "nets": [
+     "COIL_B"
+    ],
+    "label": "KB pin 16 joint",
+    "owners": [
+     "part"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    27.94,
+    0,
+    15.24
+   ],
+   "b": [
+    27.94,
+    -3.1,
+    15.24
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KB.4",
+    "net": "W2B",
+    "nets": [
+     "W2B"
+    ],
+    "label": "KB pin 4"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    27.94,
+    -1.6,
+    15.24
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KB.4",
+    "net": "W2B",
+    "nets": [
+     "W2B"
+    ],
+    "label": "KB pin 4 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    0,
+    15.24
+   ],
+   "b": [
+    35.56,
+    -3.1,
+    15.24
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KB.13",
+    "net": "W1B",
+    "nets": [
+     "W1B"
+    ],
+    "label": "KB pin 13"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    15.24
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KB.13",
+    "net": "W1B",
+    "nets": [
+     "W1B"
+    ],
+    "label": "KB pin 13 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    27.94,
+    0,
+    20.32
+   ],
+   "b": [
+    27.94,
+    -3.1,
+    20.32
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KB.6",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "KB pin 6"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    27.94,
+    -1.6,
+    20.32
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KB.6",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "KB pin 6 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    0,
+    20.32
+   ],
+   "b": [
+    35.56,
+    -3.1,
+    20.32
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KB.11",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "KB pin 11"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    20.32
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KB.11",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "KB pin 11 joint",
+    "owners": [
+     "part"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    27.94,
+    0,
+    25.4
+   ],
+   "b": [
+    27.94,
+    -3.1,
+    25.4
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KB.8",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "KB pin 8"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    27.94,
+    -1.6,
+    25.4
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KB.8",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "KB pin 8 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    0,
+    25.4
+   ],
+   "b": [
+    35.56,
+    -3.1,
+    25.4
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "KB.9",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "KB pin 9"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    25.4
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "KB.9",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "KB pin 9 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    12.7,
+    4.75,
+    35.96
+   ],
+   "size": [
+    10,
+    9.5,
+    3.2
+   ],
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "QA",
+    "label": "QA"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    12.7,
+    7.75,
+    33.71
+   ],
+   "size": [
+    10,
+    15.5,
+    1.3
+   ],
+   "color": "#c0c4c8",
+   "tag": {
+    "kind": "part",
+    "id": "QA",
+    "label": "QA"
+   },
+   "metal": true
+  },
+  {
+   "kind": "cylinder",
+   "radius": 1.8,
+   "color": "#16150f",
+   "tag": {
+    "kind": "part",
+    "id": "QA",
+    "label": "QA"
+   },
+   "a": [
+    12.7,
+    12.5,
+    34.38
+   ],
+   "b": [
+    12.7,
+    12.5,
+    33.04
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    10.16,
+    0,
+    35.56
+   ],
+   "b": [
+    10.16,
+    -3.1,
+    35.56
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "QA.G",
+    "net": "GATE_A",
+    "nets": [
+     "GATE_A"
+    ],
+    "label": "QA pin G"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    10.16,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "QA.G",
+    "net": "GATE_A",
+    "nets": [
+     "GATE_A"
+    ],
+    "label": "QA pin G joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    12.7,
+    0,
+    35.56
+   ],
+   "b": [
+    12.7,
+    -3.1,
+    35.56
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "QA.D",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "QA pin D"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    12.7,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "QA.D",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "QA pin D joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    15.24,
+    0,
+    35.56
+   ],
+   "b": [
+    15.24,
+    -3.1,
+    35.56
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "QA.S",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "QA pin S"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    15.24,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "QA.S",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "QA pin S joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    27.94,
+    4.75,
+    35.160000000000004
+   ],
+   "size": [
+    10,
+    9.5,
+    3.2
+   ],
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "QB",
+    "label": "QB"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    27.94,
+    7.75,
+    37.410000000000004
+   ],
+   "size": [
+    10,
+    15.5,
+    1.3
+   ],
+   "color": "#c0c4c8",
+   "tag": {
+    "kind": "part",
+    "id": "QB",
+    "label": "QB"
+   },
+   "metal": true
+  },
+  {
+   "kind": "cylinder",
+   "radius": 1.8,
+   "color": "#16150f",
+   "tag": {
+    "kind": "part",
+    "id": "QB",
+    "label": "QB"
+   },
+   "a": [
+    27.94,
+    12.5,
+    36.74
+   ],
+   "b": [
+    27.94,
+    12.5,
+    38.080000000000005
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    30.48,
+    0,
+    35.56
+   ],
+   "b": [
+    30.48,
+    -3.1,
+    35.56
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "QB.G",
+    "net": "GATE_B",
+    "nets": [
+     "GATE_B"
+    ],
+    "label": "QB pin G"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    30.48,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "QB.G",
+    "net": "GATE_B",
+    "nets": [
+     "GATE_B"
+    ],
+    "label": "QB pin G joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    27.94,
+    0,
+    35.56
+   ],
+   "b": [
+    27.94,
+    -3.1,
+    35.56
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "QB.D",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "QB pin D"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    27.94,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "QB.D",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "QB pin D joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    25.4,
+    0,
+    35.56
+   ],
+   "b": [
+    25.4,
+    -3.1,
+    35.56
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "QB.S",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "QB pin S"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    25.4,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "QB.S",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "QB pin S joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    21.590000000000003,
+    2.5,
+    52.07
+   ],
+   "size": [
+    9.8,
+    4,
+    6.35
+   ],
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "U1",
+    "label": "U1 TC4426"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    17.090000000000003,
+    4.51,
+    52.07
+   ],
+   "size": [
+    0.8,
+    0.019999999999999574,
+    1.6
+   ],
+   "color": "#4a4e52",
+   "tag": {
+    "kind": "part",
+    "id": "U1",
+    "label": "U1 TC4426"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    17.89,
+    4.5,
+    54.045
+   ],
+   "b": [
+    17.89,
+    4.52,
+    54.045
+   ],
+   "radius": 0.45,
+   "color": "#4a4e52",
+   "tag": {
+    "kind": "part",
+    "id": "U1",
+    "label": "U1 TC4426"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    17.78,
+    1.5,
+    55.475
+   ],
+   "size": [
+    0.5,
+    0.25,
+    1.0600000000000023
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.1",
+    "net": null,
+    "nets": [],
+    "label": "U1 pin 1"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    17.78,
+    0.8125,
+    55.88
+   ],
+   "size": [
+    0.5,
+    1.625,
+    0.25
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.1",
+    "net": null,
+    "nets": [],
+    "label": "U1 pin 1"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    20.32,
+    1.5,
+    55.475
+   ],
+   "size": [
+    0.5,
+    0.25,
+    1.0600000000000023
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.2",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "U1 pin 2"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    20.32,
+    0.8125,
+    55.88
+   ],
+   "size": [
+    0.5,
+    1.625,
+    0.25
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.2",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "U1 pin 2"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    22.86,
+    1.5,
+    55.475
+   ],
+   "size": [
+    0.5,
+    0.25,
+    1.0600000000000023
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.3",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "U1 pin 3"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    22.86,
+    0.8125,
+    55.88
+   ],
+   "size": [
+    0.5,
+    1.625,
+    0.25
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.3",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "U1 pin 3"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    25.4,
+    1.5,
+    55.475
+   ],
+   "size": [
+    0.5,
+    0.25,
+    1.0600000000000023
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.4",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "U1 pin 4"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    25.4,
+    0.8125,
+    55.88
+   ],
+   "size": [
+    0.5,
+    1.625,
+    0.25
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.4",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "U1 pin 4"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    25.4,
+    1.5,
+    48.665
+   ],
+   "size": [
+    0.5,
+    0.25,
+    1.0600000000000023
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.5",
+    "net": "DRV_B",
+    "nets": [
+     "DRV_B"
+    ],
+    "label": "U1 pin 5"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    25.4,
+    0.8125,
+    48.26
+   ],
+   "size": [
+    0.5,
+    1.625,
+    0.25
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.5",
+    "net": "DRV_B",
+    "nets": [
+     "DRV_B"
+    ],
+    "label": "U1 pin 5"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    22.86,
+    1.5,
+    48.665
+   ],
+   "size": [
+    0.5,
+    0.25,
+    1.0600000000000023
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.6",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "U1 pin 6"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    22.86,
+    0.8125,
+    48.26
+   ],
+   "size": [
+    0.5,
+    1.625,
+    0.25
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.6",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "U1 pin 6"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    20.32,
+    1.5,
+    48.665
+   ],
+   "size": [
+    0.5,
+    0.25,
+    1.0600000000000023
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.7",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "U1 pin 7"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    20.32,
+    0.8125,
+    48.26
+   ],
+   "size": [
+    0.5,
+    1.625,
+    0.25
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.7",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "U1 pin 7"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    17.78,
+    1.5,
+    48.665
+   ],
+   "size": [
+    0.5,
+    0.25,
+    1.0600000000000023
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.8",
+    "net": null,
+    "nets": [],
+    "label": "U1 pin 8"
+   },
+   "metal": true
+  },
+  {
+   "kind": "box",
+   "center": [
+    17.78,
+    0.8125,
+    48.26
+   ],
+   "size": [
+    0.5,
+    1.625,
+    0.25
+   ],
+   "color": "#c3c7cb",
+   "tag": {
+    "kind": "leg",
+    "id": "U1.8",
+    "net": null,
+    "nets": [],
+    "label": "U1 pin 8"
+   },
+   "metal": true
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    17.78,
+    0,
+    55.88
+   ],
+   "b": [
+    17.78,
+    -3.1,
+    55.88
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "U1.1",
+    "net": null,
+    "nets": [],
+    "label": "U1 pin 1"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    17.78,
+    -1.6,
+    55.88
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "U1.1",
+    "net": null,
+    "nets": [],
+    "label": "U1 pin 1 joint",
+    "owners": [
+     "part"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    20.32,
+    0,
+    55.88
+   ],
+   "b": [
+    20.32,
+    -3.1,
+    55.88
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "U1.2",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "U1 pin 2"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    20.32,
+    -1.6,
+    55.88
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "U1.2",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "U1 pin 2 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    22.86,
+    0,
+    55.88
+   ],
+   "b": [
+    22.86,
+    -3.1,
+    55.88
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "U1.3",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "U1 pin 3"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    22.86,
+    -1.6,
+    55.88
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "U1.3",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "U1 pin 3 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    25.4,
+    0,
+    55.88
+   ],
+   "b": [
+    25.4,
+    -3.1,
+    55.88
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "U1.4",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "U1 pin 4"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    25.4,
+    -1.6,
+    55.88
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "U1.4",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "U1 pin 4 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    25.4,
+    0,
+    48.26
+   ],
+   "b": [
+    25.4,
+    -3.1,
+    48.26
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "U1.5",
+    "net": "DRV_B",
+    "nets": [
+     "DRV_B"
+    ],
+    "label": "U1 pin 5"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    25.4,
+    -1.6,
+    48.26
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "U1.5",
+    "net": "DRV_B",
+    "nets": [
+     "DRV_B"
+    ],
+    "label": "U1 pin 5 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    22.86,
+    0,
+    48.26
+   ],
+   "b": [
+    22.86,
+    -3.1,
+    48.26
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "U1.6",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "U1 pin 6"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    22.86,
+    -1.6,
+    48.26
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "U1.6",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "U1 pin 6 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    20.32,
+    0,
+    48.26
+   ],
+   "b": [
+    20.32,
+    -3.1,
+    48.26
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "U1.7",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "U1 pin 7"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    20.32,
+    -1.6,
+    48.26
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "U1.7",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "U1 pin 7 joint",
+    "owners": [
+     "part"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    17.78,
+    0,
+    48.26
+   ],
+   "b": [
+    17.78,
+    -3.1,
+    48.26
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "U1.8",
+    "net": null,
+    "nets": [],
+    "label": "U1 pin 8"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    17.78,
+    -1.6,
+    48.26
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "U1.8",
+    "net": null,
+    "nets": [],
+    "label": "U1 pin 8 joint",
+    "owners": [
+     "part"
+    ]
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    38.1,
+    1.1,
+    55.88
+   ],
+   "size": [
+    12.7,
+    2.2,
+    2.5
+   ],
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "JH",
+    "label": "JH cable"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    38.099999999999994,
+    2.35,
+    55.88
+   ],
+   "size": [
+    12.1,
+    0.2999999999999998,
+    1.9
+   ],
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "JH",
+    "label": "JH cable"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    43.18,
+    5.5,
+    55.88
+   ],
+   "size": [
+    0.64,
+    6,
+    0.64
+   ],
+   "color": "#d4af37",
+   "metal": true,
+   "tag": {
+    "kind": "part",
+    "id": "JH",
+    "label": "JH cable"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    43.18,
+    0,
+    55.88
+   ],
+   "b": [
+    43.18,
+    -3.1,
+    55.88
+   ],
+   "radius": 0.32,
+   "color": "#d4af37",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "JH.1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "JH pin 1"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    40.64,
+    5.5,
+    55.88
+   ],
+   "size": [
+    0.64,
+    6,
+    0.64
+   ],
+   "color": "#d4af37",
+   "metal": true,
+   "tag": {
+    "kind": "part",
+    "id": "JH",
+    "label": "JH cable"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    0,
+    55.88
+   ],
+   "b": [
+    40.64,
+    -3.1,
+    55.88
+   ],
+   "radius": 0.32,
+   "color": "#d4af37",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "JH.2",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "JH pin 2"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    38.1,
+    5.5,
+    55.88
+   ],
+   "size": [
+    0.64,
+    6,
+    0.64
+   ],
+   "color": "#d4af37",
+   "metal": true,
+   "tag": {
+    "kind": "part",
+    "id": "JH",
+    "label": "JH cable"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    0,
+    55.88
+   ],
+   "b": [
+    38.1,
+    -3.1,
+    55.88
+   ],
+   "radius": 0.32,
+   "color": "#d4af37",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "JH.3",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "JH pin 3"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    35.56,
+    5.5,
+    55.88
+   ],
+   "size": [
+    0.64,
+    6,
+    0.64
+   ],
+   "color": "#d4af37",
+   "metal": true,
+   "tag": {
+    "kind": "part",
+    "id": "JH",
+    "label": "JH cable"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    0,
+    55.88
+   ],
+   "b": [
+    35.56,
+    -3.1,
+    55.88
+   ],
+   "radius": 0.32,
+   "color": "#d4af37",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "JH.4",
+    "net": "COIL_B",
+    "nets": [
+     "COIL_B"
+    ],
+    "label": "JH pin 4"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    33.02,
+    5.5,
+    55.88
+   ],
+   "size": [
+    0.64,
+    6,
+    0.64
+   ],
+   "color": "#d4af37",
+   "metal": true,
+   "tag": {
+    "kind": "part",
+    "id": "JH",
+    "label": "JH cable"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    33.02,
+    0,
+    55.88
+   ],
+   "b": [
+    33.02,
+    -3.1,
+    55.88
+   ],
+   "radius": 0.32,
+   "color": "#d4af37",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "JH.5",
+    "net": "COIL_A",
+    "nets": [
+     "COIL_A"
+    ],
+    "label": "JH pin 5"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    43.65,
+    2.51,
+    55.88
+   ],
+   "size": [
+    0.2,
+    0.020000000000000018,
+    0.4
+   ],
+   "color": "#e8e8e8",
+   "tag": {
+    "kind": "part",
+    "id": "JH",
+    "label": "JH cable"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    43.85,
+    2.51,
+    55.88
+   ],
+   "size": [
+    0.2,
+    0.020000000000000018,
+    0.9
+   ],
+   "color": "#e8e8e8",
+   "tag": {
+    "kind": "part",
+    "id": "JH",
+    "label": "JH cable"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    44.05,
+    2.51,
+    55.88
+   ],
+   "size": [
+    0.2,
+    0.020000000000000018,
+    1.4
+   ],
+   "color": "#e8e8e8",
+   "tag": {
+    "kind": "part",
+    "id": "JH",
+    "label": "JH cable"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    43.18,
+    -1.6,
+    55.88
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "JH.1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "JH pin 1 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    40.64,
+    -1.6,
+    55.88
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "JH.2",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "JH pin 2 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    38.1,
+    -1.6,
+    55.88
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "JH.3",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "JH pin 3 joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    55.88
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "JH.4",
+    "net": "COIL_B",
+    "nets": [
+     "COIL_B"
+    ],
+    "label": "JH pin 4 joint",
+    "owners": [
+     "part"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    33.02,
+    -1.6,
+    55.88
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "JH.5",
+    "net": "COIL_A",
+    "nets": [
+     "COIL_A"
+    ],
+    "label": "JH pin 5 joint",
+    "owners": [
+     "part"
+    ]
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    17.78,
+    7.5,
+    12.7
+   ],
+   "size": [
+    7,
+    11,
+    3
+   ],
+   "color": "#e3c23a",
+   "tag": {
+    "kind": "part",
+    "id": "FA",
+    "label": "FA 1.1A"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    20.32,
+    2,
+    12.7
+   ],
+   "b": [
+    20.32,
+    -3.1,
+    12.7
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "FA.a",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "FA pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    20.32,
+    -1.6,
+    12.7
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "FA.a",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "FA pin a joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    15.24,
+    2,
+    12.7
+   ],
+   "b": [
+    15.24,
+    -3.1,
+    12.7
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "FA.b",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "FA pin b"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    15.24,
+    -1.6,
+    12.7
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "FA.b",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "FA pin b joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    22.86,
+    7.5,
+    17.78
+   ],
+   "size": [
+    7,
+    11,
+    3
+   ],
+   "color": "#e3c23a",
+   "tag": {
+    "kind": "part",
+    "id": "FB",
+    "label": "FB 1.1A"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    20.32,
+    2,
+    17.78
+   ],
+   "b": [
+    20.32,
+    -3.1,
+    17.78
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "FB.a",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "FB pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    20.32,
+    -1.6,
+    17.78
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "FB.a",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "FB pin a joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    25.4,
+    2,
+    17.78
+   ],
+   "b": [
+    25.4,
+    -3.1,
+    17.78
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "FB.b",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "FB pin b"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    25.4,
+    -1.6,
+    17.78
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "FB.b",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "FB pin b joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    10.16,
+    1.25,
+    40.03
+   ],
+   "b": [
+    10.16,
+    1.25,
+    46.33
+   ],
+   "radius": 1.25,
+   "color": "#d9c7a0",
+   "tag": {
+    "kind": "part",
+    "id": "RGA",
+    "label": "RGA 10R"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "RGA.a",
+    "net": "GATE_A",
+    "nets": [
+     "GATE_A"
+    ],
+    "label": "RGA pin a"
+   },
+   "points": [
+    [
+     10.16,
+     1.25,
+     40.03
+    ],
+    [
+     10.16,
+     1.25,
+     38.1
+    ],
+    [
+     10.16,
+     -3.1,
+     38.1
+    ]
+   ]
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "RGA.b",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "RGA pin b"
+   },
+   "points": [
+    [
+     10.16,
+     1.25,
+     46.33
+    ],
+    [
+     10.16,
+     1.25,
+     48.26
+    ],
+    [
+     10.16,
+     -3.1,
+     48.26
+    ]
+   ]
+  },
+  {
+   "kind": "cone",
+   "base": [
+    10.16,
+    -1.6,
+    38.1
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "RGA.a",
+    "net": "GATE_A",
+    "nets": [
+     "GATE_A"
+    ],
+    "label": "RGA pin a joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    10.16,
+    -1.6,
+    48.26
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "RGA.b",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "RGA pin b joint",
+    "owners": [
+     "part"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    30.48,
+    1.25,
+    40.03
+   ],
+   "b": [
+    30.48,
+    1.25,
+    46.33
+   ],
+   "radius": 1.25,
+   "color": "#d9c7a0",
+   "tag": {
+    "kind": "part",
+    "id": "RGB",
+    "label": "RGB 10R"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "RGB.a",
+    "net": "GATE_B",
+    "nets": [
+     "GATE_B"
+    ],
+    "label": "RGB pin a"
+   },
+   "points": [
+    [
+     30.48,
+     1.25,
+     40.03
+    ],
+    [
+     30.48,
+     1.25,
+     38.1
+    ],
+    [
+     30.48,
+     -3.1,
+     38.1
+    ]
+   ]
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "RGB.b",
+    "net": "DRV_B",
+    "nets": [
+     "DRV_B"
+    ],
+    "label": "RGB pin b"
+   },
+   "points": [
+    [
+     30.48,
+     1.25,
+     46.33
+    ],
+    [
+     30.48,
+     1.25,
+     48.26
+    ],
+    [
+     30.48,
+     -3.1,
+     48.26
+    ]
+   ]
+  },
+  {
+   "kind": "cone",
+   "base": [
+    30.48,
+    -1.6,
+    38.1
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "RGB.a",
+    "net": "GATE_B",
+    "nets": [
+     "GATE_B"
+    ],
+    "label": "RGB pin a joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    30.48,
+    -1.6,
+    48.26
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "RGB.b",
+    "net": "DRV_B",
+    "nets": [
+     "DRV_B"
+    ],
+    "label": "RGB pin b joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "radius": 2.5,
+   "color": "#d9822b",
+   "tag": {
+    "kind": "part",
+    "id": "C1",
+    "label": "C1 100n"
+   },
+   "a": [
+    21.61,
+    5.5,
+    44.45
+   ],
+   "b": [
+    24.11,
+    5.5,
+    44.45
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    22.86,
+    3.3466073279589694,
+    45.72
+   ],
+   "b": [
+    22.86,
+    -3.1,
+    45.72
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "C1.a",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "C1 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    22.86,
+    -1.6,
+    45.72
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "C1.a",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "C1 pin a joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    22.86,
+    3.3466073279589734,
+    43.18
+   ],
+   "b": [
+    22.86,
+    -3.1,
+    43.18
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "C1.b",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "C1 pin b"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    22.86,
+    -1.6,
+    43.18
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "C1.b",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "C1 pin b joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    0,
+    53.34
+   ],
+   "b": [
+    40.64,
+    7,
+    53.34
+   ],
+   "radius": 1.25,
+   "color": "#d9c7a0",
+   "tag": {
+    "kind": "part",
+    "id": "RPA",
+    "label": "RPA 10k"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "RPA.b",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "RPA pin b"
+   },
+   "points": [
+    [
+     40.64,
+     7,
+     53.34
+    ],
+    [
+     40.73667299371067,
+     7.486007959103664,
+     53.34
+    ],
+    [
+     41.01197438789308,
+     7.898025612106915,
+     53.34
+    ],
+    [
+     41.42399204089634,
+     8.173327006289334,
+     53.34
+    ],
+    [
+     41.91,
+     8.27,
+     53.34
+    ],
+    [
+     42.39600795910366,
+     8.173327006289334,
+     53.34
+    ],
+    [
+     42.80802561210692,
+     7.898025612106915,
+     53.34
+    ],
+    [
+     43.08332700628934,
+     7.486007959103664,
+     53.34
+    ],
+    [
+     43.18,
+     7,
+     53.34
+    ],
+    [
+     43.18,
+     -3.1,
+     53.34
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    0,
+    53.34
+   ],
+   "b": [
+    40.64,
+    -3.1,
+    53.34
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "RPA.a",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "RPA pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    40.64,
+    -1.6,
+    53.34
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "RPA.a",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "RPA pin a joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    43.18,
+    -1.6,
+    53.34
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "RPA.b",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "RPA pin b joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    25.4,
+    0,
+    58.42
+   ],
+   "b": [
+    25.4,
+    7,
+    58.42
+   ],
+   "radius": 1.25,
+   "color": "#d9c7a0",
+   "tag": {
+    "kind": "part",
+    "id": "RPB",
+    "label": "RPB 10k"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "RPB.b",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "RPB pin b"
+   },
+   "points": [
+    [
+     25.4,
+     7,
+     58.42
+    ],
+    [
+     25.303327006289333,
+     7.486007959103664,
+     58.42
+    ],
+    [
+     25.028025612106916,
+     7.898025612106915,
+     58.42
+    ],
+    [
+     24.616007959103662,
+     8.173327006289334,
+     58.42
+    ],
+    [
+     24.13,
+     8.27,
+     58.42
+    ],
+    [
+     23.643992040896336,
+     8.173327006289334,
+     58.42
+    ],
+    [
+     23.231974387893082,
+     7.898025612106915,
+     58.42
+    ],
+    [
+     22.956672993710665,
+     7.486007959103664,
+     58.42
+    ],
+    [
+     22.86,
+     7,
+     58.42
+    ],
+    [
+     22.86,
+     -3.1,
+     58.42
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    25.4,
+    0,
+    58.42
+   ],
+   "b": [
+    25.4,
+    -3.1,
+    58.42
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "RPB.a",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "RPB pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    25.4,
+    -1.6,
+    58.42
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "RPB.a",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "RPB pin a joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    22.86,
+    -1.6,
+    58.42
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "RPB.b",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "RPB pin b joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    2.54,
+    0,
+    27.94
+   ],
+   "b": [
+    2.54,
+    7,
+    27.94
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DA1",
+    "label": "DA1 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    2.54,
+    5.8,
+    27.94
+   ],
+   "b": [
+    2.54,
+    6.6,
+    27.94
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DA1",
+    "label": "DA1 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA1.b",
+    "net": "LIFT_A1",
+    "nets": [
+     "LIFT_A1"
+    ],
+    "label": "DA1 pin b"
+   },
+   "points": [
+    [
+     2.54,
+     7,
+     27.94
+    ],
+    [
+     2.4433270062893344,
+     7.486007959103664,
+     27.94
+    ],
+    [
+     2.1680256121069155,
+     7.898025612106915,
+     27.94
+    ],
+    [
+     1.756007959103664,
+     8.173327006289334,
+     27.94
+    ],
+    [
+     1.27,
+     8.27,
+     27.94
+    ],
+    [
+     0.7839920408963359,
+     8.173327006289334,
+     27.94
+    ],
+    [
+     0.37197438789308457,
+     7.898025612106915,
+     27.94
+    ],
+    [
+     0.09667299371066562,
+     7.486007959103664,
+     27.94
+    ],
+    [
+     0,
+     7,
+     27.94
+    ],
+    [
+     0,
+     -1.9000000000000001,
+     27.94
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    2.54,
+    0,
+    27.94
+   ],
+   "b": [
+    2.54,
+    -3.1,
+    27.94
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA1.a",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "DA1 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    2.54,
+    -1.6,
+    27.94
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA1.a",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "DA1 pin a joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    0,
+    -1.6,
+    27.94
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA1.b",
+    "net": "LIFT_A1",
+    "nets": [
+     "LIFT_A1"
+    ],
+    "label": "DA1 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    0,
+    0,
+    30.48
+   ],
+   "b": [
+    0,
+    7,
+    30.48
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DA2",
+    "label": "DA2 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    0,
+    5.8,
+    30.48
+   ],
+   "b": [
+    0,
+    6.6,
+    30.48
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DA2",
+    "label": "DA2 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA2.b",
+    "net": "LIFT_A2",
+    "nets": [
+     "LIFT_A2"
+    ],
+    "label": "DA2 pin b"
+   },
+   "points": [
+    [
+     0,
+     7,
+     30.48
+    ],
+    [
+     0,
+     7.486007959103664,
+     30.576672993710666
+    ],
+    [
+     0,
+     7.898025612106915,
+     30.851974387893087
+    ],
+    [
+     0,
+     8.173327006289334,
+     31.263992040896337
+    ],
+    [
+     0,
+     8.27,
+     31.75
+    ],
+    [
+     0,
+     8.173327006289334,
+     32.23600795910367
+    ],
+    [
+     0,
+     7.898025612106915,
+     32.64802561210691
+    ],
+    [
+     0,
+     7.486007959103664,
+     32.923327006289334
+    ],
+    [
+     0,
+     7,
+     33.02
+    ],
+    [
+     0,
+     1,
+     33.02
+    ],
+    [
+     0,
+     1,
+     33.02
+    ],
+    [
+     0,
+     -1.9000000000000001,
+     33.02
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    0,
+    0,
+    30.48
+   ],
+   "b": [
+    0,
+    -3.1,
+    30.48
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA2.a",
+    "net": "LIFT_A1",
+    "nets": [
+     "LIFT_A1"
+    ],
+    "label": "DA2 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    0,
+    -1.6,
+    30.48
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA2.a",
+    "net": "LIFT_A1",
+    "nets": [
+     "LIFT_A1"
+    ],
+    "label": "DA2 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    0,
+    -1.6,
+    33.02
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA2.b",
+    "net": "LIFT_A2",
+    "nets": [
+     "LIFT_A2"
+    ],
+    "label": "DA2 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    0,
+    0,
+    35.56
+   ],
+   "b": [
+    0,
+    7,
+    35.56
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DA3",
+    "label": "DA3 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    0,
+    5.8,
+    35.56
+   ],
+   "b": [
+    0,
+    6.6,
+    35.56
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DA3",
+    "label": "DA3 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA3.b",
+    "net": "LIFT_A3",
+    "nets": [
+     "LIFT_A3"
+    ],
+    "label": "DA3 pin b"
+   },
+   "points": [
+    [
+     0,
+     7,
+     35.56
+    ],
+    [
+     0,
+     7.486007959103664,
+     35.65667299371067
+    ],
+    [
+     0,
+     7.898025612106915,
+     35.931974387893085
+    ],
+    [
+     0,
+     8.173327006289334,
+     36.34399204089634
+    ],
+    [
+     0,
+     8.27,
+     36.83
+    ],
+    [
+     0,
+     8.173327006289334,
+     37.316007959103665
+    ],
+    [
+     0,
+     7.898025612106915,
+     37.72802561210692
+    ],
+    [
+     0,
+     7.486007959103664,
+     38.00332700628934
+    ],
+    [
+     0,
+     7,
+     38.1
+    ],
+    [
+     0,
+     -1.9000000000000001,
+     38.1
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    0,
+    0,
+    35.56
+   ],
+   "b": [
+    0,
+    -3.1,
+    35.56
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA3.a",
+    "net": "LIFT_A2",
+    "nets": [
+     "LIFT_A2"
+    ],
+    "label": "DA3 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    0,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA3.a",
+    "net": "LIFT_A2",
+    "nets": [
+     "LIFT_A2"
+    ],
+    "label": "DA3 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    0,
+    -1.6,
+    38.1
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA3.b",
+    "net": "LIFT_A3",
+    "nets": [
+     "LIFT_A3"
+    ],
+    "label": "DA3 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    0,
+    0,
+    40.64
+   ],
+   "b": [
+    0,
+    7,
+    40.64
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DA4",
+    "label": "DA4 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    0,
+    5.8,
+    40.64
+   ],
+   "b": [
+    0,
+    6.6,
+    40.64
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DA4",
+    "label": "DA4 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA4.b",
+    "net": "LIFT_A4",
+    "nets": [
+     "LIFT_A4"
+    ],
+    "label": "DA4 pin b"
+   },
+   "points": [
+    [
+     0,
+     7,
+     40.64
+    ],
+    [
+     0.09667299371066584,
+     7.486007959103664,
+     40.64
+    ],
+    [
+     0.3719743878930847,
+     7.898025612106915,
+     40.64
+    ],
+    [
+     0.7839920408963361,
+     8.173327006289334,
+     40.64
+    ],
+    [
+     1.27,
+     8.27,
+     40.64
+    ],
+    [
+     1.7560079591036641,
+     8.173327006289334,
+     40.64
+    ],
+    [
+     2.1680256121069155,
+     7.898025612106915,
+     40.64
+    ],
+    [
+     2.4433270062893344,
+     7.486007959103664,
+     40.64
+    ],
+    [
+     2.54,
+     7,
+     40.64
+    ],
+    [
+     2.54,
+     -1.9000000000000001,
+     40.64
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    0,
+    0,
+    40.64
+   ],
+   "b": [
+    0,
+    -3.1,
+    40.64
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA4.a",
+    "net": "LIFT_A3",
+    "nets": [
+     "LIFT_A3"
+    ],
+    "label": "DA4 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    0,
+    -1.6,
+    40.64
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA4.a",
+    "net": "LIFT_A3",
+    "nets": [
+     "LIFT_A3"
+    ],
+    "label": "DA4 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    2.54,
+    -1.6,
+    40.64
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA4.b",
+    "net": "LIFT_A4",
+    "nets": [
+     "LIFT_A4"
+    ],
+    "label": "DA4 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    2.54,
+    0,
+    38.1
+   ],
+   "b": [
+    2.54,
+    7,
+    38.1
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DA5",
+    "label": "DA5 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    2.54,
+    5.8,
+    38.1
+   ],
+   "b": [
+    2.54,
+    6.6,
+    38.1
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DA5",
+    "label": "DA5 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA5.b",
+    "net": "LIFT_A5",
+    "nets": [
+     "LIFT_A5"
+    ],
+    "label": "DA5 pin b"
+   },
+   "points": [
+    [
+     2.54,
+     7,
+     38.1
+    ],
+    [
+     2.54,
+     7.486007959103664,
+     38.00332700628933
+    ],
+    [
+     2.54,
+     7.898025612106915,
+     37.72802561210692
+    ],
+    [
+     2.54,
+     8.173327006289334,
+     37.316007959103665
+    ],
+    [
+     2.54,
+     8.27,
+     36.83
+    ],
+    [
+     2.54,
+     8.173327006289334,
+     36.34399204089634
+    ],
+    [
+     2.54,
+     7.898025612106915,
+     35.931974387893085
+    ],
+    [
+     2.54,
+     7.486007959103664,
+     35.65667299371067
+    ],
+    [
+     2.54,
+     7,
+     35.56
+    ],
+    [
+     2.54,
+     -1.9000000000000001,
+     35.56
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    2.54,
+    0,
+    38.1
+   ],
+   "b": [
+    2.54,
+    -3.1,
+    38.1
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA5.a",
+    "net": "LIFT_A4",
+    "nets": [
+     "LIFT_A4"
+    ],
+    "label": "DA5 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    2.54,
+    -1.6,
+    38.1
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA5.a",
+    "net": "LIFT_A4",
+    "nets": [
+     "LIFT_A4"
+    ],
+    "label": "DA5 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    2.54,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA5.b",
+    "net": "LIFT_A5",
+    "nets": [
+     "LIFT_A5"
+    ],
+    "label": "DA5 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    2.54,
+    0,
+    33.02
+   ],
+   "b": [
+    2.54,
+    7,
+    33.02
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DA6",
+    "label": "DA6 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    2.54,
+    5.8,
+    33.02
+   ],
+   "b": [
+    2.54,
+    6.6,
+    33.02
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DA6",
+    "label": "DA6 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA6.b",
+    "net": "LIFT_A6",
+    "nets": [
+     "LIFT_A6"
+    ],
+    "label": "DA6 pin b"
+   },
+   "points": [
+    [
+     2.54,
+     7,
+     33.02
+    ],
+    [
+     2.6366729937106657,
+     7.486007959103664,
+     33.02
+    ],
+    [
+     2.9119743878930846,
+     7.898025612106915,
+     33.02
+    ],
+    [
+     3.323992040896336,
+     8.173327006289334,
+     33.02
+    ],
+    [
+     3.81,
+     8.27,
+     33.02
+    ],
+    [
+     4.296007959103664,
+     8.173327006289334,
+     33.02
+    ],
+    [
+     4.7080256121069155,
+     7.898025612106915,
+     33.02
+    ],
+    [
+     4.9833270062893344,
+     7.486007959103664,
+     33.02
+    ],
+    [
+     5.08,
+     7,
+     33.02
+    ],
+    [
+     5.08,
+     -1.9000000000000001,
+     33.02
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    2.54,
+    0,
+    33.02
+   ],
+   "b": [
+    2.54,
+    -3.1,
+    33.02
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA6.a",
+    "net": "LIFT_A5",
+    "nets": [
+     "LIFT_A5"
+    ],
+    "label": "DA6 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    2.54,
+    -1.6,
+    33.02
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA6.a",
+    "net": "LIFT_A5",
+    "nets": [
+     "LIFT_A5"
+    ],
+    "label": "DA6 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    5.08,
+    -1.6,
+    33.02
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA6.b",
+    "net": "LIFT_A6",
+    "nets": [
+     "LIFT_A6"
+    ],
+    "label": "DA6 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    5.08,
+    0,
+    35.56
+   ],
+   "b": [
+    5.08,
+    7,
+    35.56
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DA7",
+    "label": "DA7 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    5.08,
+    5.8,
+    35.56
+   ],
+   "b": [
+    5.08,
+    6.6,
+    35.56
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DA7",
+    "label": "DA7 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA7.b",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "DA7 pin b"
+   },
+   "points": [
+    [
+     5.08,
+     7,
+     35.56
+    ],
+    [
+     5.08,
+     7.486007959103664,
+     35.65667299371067
+    ],
+    [
+     5.08,
+     7.898025612106915,
+     35.931974387893085
+    ],
+    [
+     5.08,
+     8.173327006289334,
+     36.34399204089634
+    ],
+    [
+     5.08,
+     8.27,
+     36.83
+    ],
+    [
+     5.08,
+     8.173327006289334,
+     37.316007959103665
+    ],
+    [
+     5.08,
+     7.898025612106915,
+     37.72802561210692
+    ],
+    [
+     5.08,
+     7.486007959103664,
+     38.00332700628934
+    ],
+    [
+     5.08,
+     7,
+     38.1
+    ],
+    [
+     5.08,
+     -3.1,
+     38.1
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    5.08,
+    0,
+    35.56
+   ],
+   "b": [
+    5.08,
+    -3.1,
+    35.56
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DA7.a",
+    "net": "LIFT_A6",
+    "nets": [
+     "LIFT_A6"
+    ],
+    "label": "DA7 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    5.08,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA7.a",
+    "net": "LIFT_A6",
+    "nets": [
+     "LIFT_A6"
+    ],
+    "label": "DA7 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    5.08,
+    -1.6,
+    38.1
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DA7.b",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "DA7 pin b joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    0,
+    27.94
+   ],
+   "b": [
+    38.1,
+    7,
+    27.94
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DB1",
+    "label": "DB1 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    5.8,
+    27.94
+   ],
+   "b": [
+    38.1,
+    6.6,
+    27.94
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DB1",
+    "label": "DB1 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB1.b",
+    "net": "LIFT_B1",
+    "nets": [
+     "LIFT_B1"
+    ],
+    "label": "DB1 pin b"
+   },
+   "points": [
+    [
+     38.1,
+     7,
+     27.94
+    ],
+    [
+     38.19667299371067,
+     7.486007959103664,
+     27.94
+    ],
+    [
+     38.471974387893084,
+     7.898025612106915,
+     27.94
+    ],
+    [
+     38.88399204089634,
+     8.173327006289334,
+     27.94
+    ],
+    [
+     39.370000000000005,
+     8.27,
+     27.94
+    ],
+    [
+     39.856007959103664,
+     8.173327006289334,
+     27.94
+    ],
+    [
+     40.26802561210692,
+     7.898025612106915,
+     27.94
+    ],
+    [
+     40.54332700628933,
+     7.486007959103664,
+     27.94
+    ],
+    [
+     40.64,
+     7,
+     27.94
+    ],
+    [
+     40.64,
+     -1.9000000000000001,
+     27.94
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    0,
+    27.94
+   ],
+   "b": [
+    38.1,
+    -3.1,
+    27.94
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB1.a",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "DB1 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    38.1,
+    -1.6,
+    27.94
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB1.a",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "DB1 pin a joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    40.64,
+    -1.6,
+    27.94
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB1.b",
+    "net": "LIFT_B1",
+    "nets": [
+     "LIFT_B1"
+    ],
+    "label": "DB1 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    0,
+    30.48
+   ],
+   "b": [
+    40.64,
+    7,
+    30.48
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DB2",
+    "label": "DB2 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    5.8,
+    30.48
+   ],
+   "b": [
+    40.64,
+    6.6,
+    30.48
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DB2",
+    "label": "DB2 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB2.b",
+    "net": "LIFT_B2",
+    "nets": [
+     "LIFT_B2"
+    ],
+    "label": "DB2 pin b"
+   },
+   "points": [
+    [
+     40.64,
+     7,
+     30.48
+    ],
+    [
+     40.64,
+     7.486007959103664,
+     30.576672993710666
+    ],
+    [
+     40.64,
+     7.898025612106915,
+     30.851974387893087
+    ],
+    [
+     40.64,
+     8.173327006289334,
+     31.263992040896337
+    ],
+    [
+     40.64,
+     8.27,
+     31.75
+    ],
+    [
+     40.64,
+     8.173327006289334,
+     32.23600795910367
+    ],
+    [
+     40.64,
+     7.898025612106915,
+     32.64802561210691
+    ],
+    [
+     40.64,
+     7.486007959103664,
+     32.923327006289334
+    ],
+    [
+     40.64,
+     7,
+     33.02
+    ],
+    [
+     40.64,
+     1,
+     33.02
+    ],
+    [
+     40.64,
+     1,
+     33.02
+    ],
+    [
+     40.64,
+     -1.9000000000000001,
+     33.02
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    0,
+    30.48
+   ],
+   "b": [
+    40.64,
+    -3.1,
+    30.48
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB2.a",
+    "net": "LIFT_B1",
+    "nets": [
+     "LIFT_B1"
+    ],
+    "label": "DB2 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    40.64,
+    -1.6,
+    30.48
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB2.a",
+    "net": "LIFT_B1",
+    "nets": [
+     "LIFT_B1"
+    ],
+    "label": "DB2 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    40.64,
+    -1.6,
+    33.02
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB2.b",
+    "net": "LIFT_B2",
+    "nets": [
+     "LIFT_B2"
+    ],
+    "label": "DB2 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    0,
+    35.56
+   ],
+   "b": [
+    40.64,
+    7,
+    35.56
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DB3",
+    "label": "DB3 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    5.8,
+    35.56
+   ],
+   "b": [
+    40.64,
+    6.6,
+    35.56
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DB3",
+    "label": "DB3 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB3.b",
+    "net": "LIFT_B3",
+    "nets": [
+     "LIFT_B3"
+    ],
+    "label": "DB3 pin b"
+   },
+   "points": [
+    [
+     40.64,
+     7,
+     35.56
+    ],
+    [
+     40.64,
+     7.486007959103664,
+     35.65667299371067
+    ],
+    [
+     40.64,
+     7.898025612106915,
+     35.931974387893085
+    ],
+    [
+     40.64,
+     8.173327006289334,
+     36.34399204089634
+    ],
+    [
+     40.64,
+     8.27,
+     36.83
+    ],
+    [
+     40.64,
+     8.173327006289334,
+     37.316007959103665
+    ],
+    [
+     40.64,
+     7.898025612106915,
+     37.72802561210692
+    ],
+    [
+     40.64,
+     7.486007959103664,
+     38.00332700628934
+    ],
+    [
+     40.64,
+     7,
+     38.1
+    ],
+    [
+     40.64,
+     -1.9000000000000001,
+     38.1
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    0,
+    35.56
+   ],
+   "b": [
+    40.64,
+    -3.1,
+    35.56
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB3.a",
+    "net": "LIFT_B2",
+    "nets": [
+     "LIFT_B2"
+    ],
+    "label": "DB3 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    40.64,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB3.a",
+    "net": "LIFT_B2",
+    "nets": [
+     "LIFT_B2"
+    ],
+    "label": "DB3 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    40.64,
+    -1.6,
+    38.1
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB3.b",
+    "net": "LIFT_B3",
+    "nets": [
+     "LIFT_B3"
+    ],
+    "label": "DB3 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    0,
+    40.64
+   ],
+   "b": [
+    40.64,
+    7,
+    40.64
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DB4",
+    "label": "DB4 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    5.8,
+    40.64
+   ],
+   "b": [
+    40.64,
+    6.6,
+    40.64
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DB4",
+    "label": "DB4 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB4.b",
+    "net": "LIFT_B4",
+    "nets": [
+     "LIFT_B4"
+    ],
+    "label": "DB4 pin b"
+   },
+   "points": [
+    [
+     40.64,
+     7,
+     40.64
+    ],
+    [
+     40.54332700628933,
+     7.486007959103664,
+     40.64
+    ],
+    [
+     40.26802561210692,
+     7.898025612106915,
+     40.64
+    ],
+    [
+     39.856007959103664,
+     8.173327006289334,
+     40.64
+    ],
+    [
+     39.370000000000005,
+     8.27,
+     40.64
+    ],
+    [
+     38.88399204089634,
+     8.173327006289334,
+     40.64
+    ],
+    [
+     38.471974387893084,
+     7.898025612106915,
+     40.64
+    ],
+    [
+     38.19667299371066,
+     7.486007959103664,
+     40.64
+    ],
+    [
+     38.1,
+     7,
+     40.64
+    ],
+    [
+     38.1,
+     -1.9000000000000001,
+     40.64
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    0,
+    40.64
+   ],
+   "b": [
+    40.64,
+    -3.1,
+    40.64
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB4.a",
+    "net": "LIFT_B3",
+    "nets": [
+     "LIFT_B3"
+    ],
+    "label": "DB4 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    40.64,
+    -1.6,
+    40.64
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB4.a",
+    "net": "LIFT_B3",
+    "nets": [
+     "LIFT_B3"
+    ],
+    "label": "DB4 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    38.1,
+    -1.6,
+    40.64
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB4.b",
+    "net": "LIFT_B4",
+    "nets": [
+     "LIFT_B4"
+    ],
+    "label": "DB4 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    0,
+    38.1
+   ],
+   "b": [
+    38.1,
+    7,
+    38.1
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DB5",
+    "label": "DB5 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    5.8,
+    38.1
+   ],
+   "b": [
+    38.1,
+    6.6,
+    38.1
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DB5",
+    "label": "DB5 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB5.b",
+    "net": "LIFT_B5",
+    "nets": [
+     "LIFT_B5"
+    ],
+    "label": "DB5 pin b"
+   },
+   "points": [
+    [
+     38.1,
+     7,
+     38.1
+    ],
+    [
+     38.1,
+     7.486007959103664,
+     38.00332700628933
+    ],
+    [
+     38.1,
+     7.898025612106915,
+     37.72802561210692
+    ],
+    [
+     38.1,
+     8.173327006289334,
+     37.316007959103665
+    ],
+    [
+     38.1,
+     8.27,
+     36.83
+    ],
+    [
+     38.1,
+     8.173327006289334,
+     36.34399204089634
+    ],
+    [
+     38.1,
+     7.898025612106915,
+     35.931974387893085
+    ],
+    [
+     38.1,
+     7.486007959103664,
+     35.65667299371067
+    ],
+    [
+     38.1,
+     7,
+     35.56
+    ],
+    [
+     38.1,
+     -1.9000000000000001,
+     35.56
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    0,
+    38.1
+   ],
+   "b": [
+    38.1,
+    -3.1,
+    38.1
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB5.a",
+    "net": "LIFT_B4",
+    "nets": [
+     "LIFT_B4"
+    ],
+    "label": "DB5 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    38.1,
+    -1.6,
+    38.1
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB5.a",
+    "net": "LIFT_B4",
+    "nets": [
+     "LIFT_B4"
+    ],
+    "label": "DB5 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    38.1,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB5.b",
+    "net": "LIFT_B5",
+    "nets": [
+     "LIFT_B5"
+    ],
+    "label": "DB5 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    0,
+    33.02
+   ],
+   "b": [
+    38.1,
+    7,
+    33.02
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DB6",
+    "label": "DB6 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    5.8,
+    33.02
+   ],
+   "b": [
+    38.1,
+    6.6,
+    33.02
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DB6",
+    "label": "DB6 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB6.b",
+    "net": "LIFT_B6",
+    "nets": [
+     "LIFT_B6"
+    ],
+    "label": "DB6 pin b"
+   },
+   "points": [
+    [
+     38.1,
+     7,
+     33.02
+    ],
+    [
+     38.00332700628933,
+     7.486007959103664,
+     33.02
+    ],
+    [
+     37.72802561210692,
+     7.898025612106915,
+     33.02
+    ],
+    [
+     37.316007959103665,
+     8.173327006289334,
+     33.02
+    ],
+    [
+     36.83,
+     8.27,
+     33.02
+    ],
+    [
+     36.34399204089634,
+     8.173327006289334,
+     33.02
+    ],
+    [
+     35.931974387893085,
+     7.898025612106915,
+     33.02
+    ],
+    [
+     35.65667299371067,
+     7.486007959103664,
+     33.02
+    ],
+    [
+     35.56,
+     7,
+     33.02
+    ],
+    [
+     35.56,
+     -1.9000000000000001,
+     33.02
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    0,
+    33.02
+   ],
+   "b": [
+    38.1,
+    -3.1,
+    33.02
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB6.a",
+    "net": "LIFT_B5",
+    "nets": [
+     "LIFT_B5"
+    ],
+    "label": "DB6 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    38.1,
+    -1.6,
+    33.02
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB6.a",
+    "net": "LIFT_B5",
+    "nets": [
+     "LIFT_B5"
+    ],
+    "label": "DB6 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    33.02
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB6.b",
+    "net": "LIFT_B6",
+    "nets": [
+     "LIFT_B6"
+    ],
+    "label": "DB6 pin b joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    0,
+    35.56
+   ],
+   "b": [
+    35.56,
+    7,
+    35.56
+   ],
+   "radius": 1.35,
+   "color": "#1d1f21",
+   "tag": {
+    "kind": "part",
+    "id": "DB7",
+    "label": "DB7 1N4001"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    5.8,
+    35.56
+   ],
+   "b": [
+    35.56,
+    6.6,
+    35.56
+   ],
+   "radius": 1.3900000000000001,
+   "color": "#9aa0a6",
+   "tag": {
+    "kind": "part",
+    "id": "DB7",
+    "label": "DB7 1N4001"
+   }
+  },
+  {
+   "kind": "tube",
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB7.b",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "DB7 pin b"
+   },
+   "points": [
+    [
+     35.56,
+     7,
+     35.56
+    ],
+    [
+     35.56,
+     7.486007959103664,
+     35.65667299371067
+    ],
+    [
+     35.56,
+     7.898025612106915,
+     35.931974387893085
+    ],
+    [
+     35.56,
+     8.173327006289334,
+     36.34399204089634
+    ],
+    [
+     35.56,
+     8.27,
+     36.83
+    ],
+    [
+     35.56,
+     8.173327006289334,
+     37.316007959103665
+    ],
+    [
+     35.56,
+     7.898025612106915,
+     37.72802561210692
+    ],
+    [
+     35.56,
+     7.486007959103664,
+     38.00332700628934
+    ],
+    [
+     35.56,
+     7,
+     38.1
+    ],
+    [
+     35.56,
+     -3.1,
+     38.1
+    ]
+   ]
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    0,
+    35.56
+   ],
+   "b": [
+    35.56,
+    -3.1,
+    35.56
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "leg",
+    "id": "DB7.a",
+    "net": "LIFT_B6",
+    "nets": [
+     "LIFT_B6"
+    ],
+    "label": "DB7 pin a"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    35.56
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB7.a",
+    "net": "LIFT_B6",
+    "nets": [
+     "LIFT_B6"
+    ],
+    "label": "DB7 pin a joint",
+    "owners": [
+     "part",
+     "fold"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    38.1
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "DB7.b",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "DB7 pin b joint",
+    "owners": [
+     "part",
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     0,
+     -1.9000000000000001,
+     43.18
+    ],
+    [
+     43.18,
+     -1.9000000000000001,
+     43.18
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "trail T1"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    0,
+    -1.6,
+    43.18
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "T1 joint at R1",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    43.18,
+    -1.6,
+    43.18
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "T1 joint at R18",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    5.08,
+    -1.6,
+    43.18
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "T1 joint at R3",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    15.24,
+    -1.6,
+    43.18
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "T1 joint at R7",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    17.78,
+    -1.6,
+    43.18
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "T1 joint at R8",
+    "owners": [
+     "trail",
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    25.4,
+    -1.6,
+    43.18
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "T1 joint at R11",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    43.18
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "T1 joint at R15",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    38.1,
+    -1.6,
+    43.18
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T1",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "T1 joint at R16",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     20.32,
+     -1.9000000000000001,
+     0
+    ],
+    [
+     20.32,
+     -1.9000000000000001,
+     38.1
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T2",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "trail T2"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    20.32,
+    -1.6,
+    38.1
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T2",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "T2 joint at P9",
+    "owners": [
+     "trail",
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    20.32,
+    -1.6,
+    7.62
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T2",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "T2 joint at D9",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     5.08,
+     -1.9000000000000001,
+     0
+    ],
+    [
+     5.08,
+     -1.9000000000000001,
+     2.54
+    ],
+    [
+     2.54,
+     -1.9000000000000001,
+     2.54
+    ],
+    [
+     2.54,
+     -1.9000000000000001,
+     15.24
+    ],
+    [
+     5.08,
+     -1.9000000000000001,
+     15.24
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T3",
+    "net": "W1A",
+    "nets": [
+     "W1A"
+    ],
+    "label": "trail T3"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     10.16,
+     -1.9000000000000001,
+     0
+    ],
+    [
+     10.16,
+     -1.9000000000000001,
+     15.24
+    ],
+    [
+     12.7,
+     -1.9000000000000001,
+     15.24
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T4",
+    "net": "W2A",
+    "nets": [
+     "W2A"
+    ],
+    "label": "trail T4"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     12.7,
+     -1.9000000000000001,
+     7.62
+    ],
+    [
+     20.32,
+     -1.9000000000000001,
+     7.62
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T5",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "trail T5"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     15.24,
+     -1.9000000000000001,
+     12.7
+    ],
+    [
+     15.24,
+     -1.9000000000000001,
+     25.4
+    ],
+    [
+     12.7,
+     -1.9000000000000001,
+     25.4
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T6",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "trail T6"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    15.24,
+    -1.6,
+    20.32
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T6",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "T6 joint at I7",
+    "owners": [
+     "trail",
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     5.08,
+     -1.9000000000000001,
+     25.4
+    ],
+    [
+     5.08,
+     -1.9000000000000001,
+     30.48
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T7",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "trail T7"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    5.08,
+    -1.6,
+    30.48
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T7",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "T7 joint at M3",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     12.7,
+     -1.9000000000000001,
+     20.32
+    ],
+    [
+     10.16,
+     -1.9000000000000001,
+     20.32
+    ],
+    [
+     10.16,
+     -1.9000000000000001,
+     30.48
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T8",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "trail T8"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    10.16,
+    -1.6,
+    30.48
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T8",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "T8 joint at M5",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     2.54,
+     -1.9000000000000001,
+     27.94
+    ],
+    [
+     2.54,
+     -1.9000000000000001,
+     30.48
+    ],
+    [
+     12.7,
+     -1.9000000000000001,
+     30.48
+    ],
+    [
+     12.7,
+     -1.9000000000000001,
+     35.56
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T9",
+    "net": "DATA_A",
+    "nets": [
+     "DATA_A"
+    ],
+    "label": "trail T9"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     10.16,
+     -1.9000000000000001,
+     35.56
+    ],
+    [
+     10.16,
+     -1.9000000000000001,
+     38.1
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T10",
+    "net": "GATE_A",
+    "nets": [
+     "GATE_A"
+    ],
+    "label": "trail T10"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     15.24,
+     -1.9000000000000001,
+     35.56
+    ],
+    [
+     15.24,
+     -1.9000000000000001,
+     43.18
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T11",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "trail T11"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     35.56,
+     -1.9000000000000001,
+     0
+    ],
+    [
+     35.56,
+     -1.9000000000000001,
+     2.54
+    ],
+    [
+     38.1,
+     -1.9000000000000001,
+     2.54
+    ],
+    [
+     38.1,
+     -1.9000000000000001,
+     15.24
+    ],
+    [
+     35.56,
+     -1.9000000000000001,
+     15.24
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T12",
+    "net": "W1B",
+    "nets": [
+     "W1B"
+    ],
+    "label": "trail T12"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     30.48,
+     -1.9000000000000001,
+     0
+    ],
+    [
+     30.48,
+     -1.9000000000000001,
+     15.24
+    ],
+    [
+     27.94,
+     -1.9000000000000001,
+     15.24
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T13",
+    "net": "W2B",
+    "nets": [
+     "W2B"
+    ],
+    "label": "trail T13"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     27.94,
+     -1.9000000000000001,
+     7.62
+    ],
+    [
+     20.32,
+     -1.9000000000000001,
+     7.62
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T14",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "trail T14"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     25.4,
+     -1.9000000000000001,
+     17.78
+    ],
+    [
+     25.4,
+     -1.9000000000000001,
+     25.4
+    ],
+    [
+     27.94,
+     -1.9000000000000001,
+     25.4
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T15",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "trail T15"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    25.4,
+    -1.6,
+    20.32
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T15",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "T15 joint at I11",
+    "owners": [
+     "trail",
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     35.56,
+     -1.9000000000000001,
+     25.4
+    ],
+    [
+     35.56,
+     -1.9000000000000001,
+     30.48
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T16",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "trail T16"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    30.48
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T16",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "T16 joint at M15",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     27.94,
+     -1.9000000000000001,
+     20.32
+    ],
+    [
+     30.48,
+     -1.9000000000000001,
+     20.32
+    ],
+    [
+     30.48,
+     -1.9000000000000001,
+     30.48
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T17",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "trail T17"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    30.48,
+    -1.6,
+    30.48
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T17",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "T17 joint at M13",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     38.1,
+     -1.9000000000000001,
+     27.94
+    ],
+    [
+     38.1,
+     -1.9000000000000001,
+     30.48
+    ],
+    [
+     27.94,
+     -1.9000000000000001,
+     30.48
+    ],
+    [
+     27.94,
+     -1.9000000000000001,
+     35.56
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T18",
+    "net": "DATA_B",
+    "nets": [
+     "DATA_B"
+    ],
+    "label": "trail T18"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     30.48,
+     -1.9000000000000001,
+     35.56
+    ],
+    [
+     30.48,
+     -1.9000000000000001,
+     38.1
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T19",
+    "net": "GATE_B",
+    "nets": [
+     "GATE_B"
+    ],
+    "label": "trail T19"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     25.4,
+     -1.9000000000000001,
+     35.56
+    ],
+    [
+     25.4,
+     -1.9000000000000001,
+     43.18
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T20",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "trail T20"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     25.4,
+     -1.9000000000000001,
+     50.8
+    ],
+    [
+     38.1,
+     -1.9000000000000001,
+     50.8
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T21",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "trail T21"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    25.4,
+    -1.6,
+    50.8
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T21",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "T21 joint at U11",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    38.1,
+    -1.6,
+    50.8
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T21",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "T21 joint at U16",
+    "owners": [
+     "trail"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     38.1,
+     -1.9000000000000001,
+     43.18
+    ],
+    [
+     38.1,
+     -1.9000000000000001,
+     50.8
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T22",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "trail T22"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     25.4,
+     -1.9000000000000001,
+     48.26
+    ],
+    [
+     30.48,
+     -1.9000000000000001,
+     48.26
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T23",
+    "net": "DRV_B",
+    "nets": [
+     "DRV_B"
+    ],
+    "label": "trail T23"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     38.1,
+     -1.9000000000000001,
+     55.88
+    ],
+    [
+     38.1,
+     -1.9000000000000001,
+     58.42
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T24",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "trail T24"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    38.1,
+    -1.6,
+    58.42
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T24",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "T24 joint at X16",
+    "owners": [
+     "trail",
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     27.94,
+     -1.9000000000000001,
+     55.88
+    ],
+    [
+     25.4,
+     -1.9000000000000001,
+     55.88
+    ],
+    [
+     25.4,
+     -1.9000000000000001,
+     58.42
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T25",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "trail T25"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    27.94,
+    -1.6,
+    55.88
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T25",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "T25 joint at W12",
+    "owners": [
+     "trail",
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     40.64,
+     -1.9000000000000001,
+     55.88
+    ],
+    [
+     40.64,
+     -1.9000000000000001,
+     58.42
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T26",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "trail T26"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    40.64,
+    -1.6,
+    58.42
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T26",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "T26 joint at X17",
+    "owners": [
+     "trail",
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     40.64,
+     -1.9000000000000001,
+     55.88
+    ],
+    [
+     40.64,
+     -1.9000000000000001,
+     53.34
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T27",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "trail T27"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     20.32,
+     -1.9000000000000001,
+     55.88
+    ],
+    [
+     20.32,
+     -1.9000000000000001,
+     58.42
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T28",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "trail T28"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    20.32,
+    -1.6,
+    58.42
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T28",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "T28 joint at X9",
+    "owners": [
+     "trail",
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     22.86,
+     -1.9000000000000001,
+     55.88
+    ],
+    [
+     22.86,
+     -1.9000000000000001,
+     58.42
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T29",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "trail T29"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     43.18,
+     -1.9000000000000001,
+     55.88
+    ],
+    [
+     43.18,
+     -1.9000000000000001,
+     43.18
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T30",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "trail T30"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     25.4,
+     -1.9000000000000001,
+     50.8
+    ],
+    [
+     25.4,
+     -1.9000000000000001,
+     53.34
+    ],
+    [
+     22.86,
+     -1.9000000000000001,
+     53.34
+    ],
+    [
+     22.86,
+     -1.9000000000000001,
+     55.88
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T31",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "trail T31"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     25.4,
+     -1.9000000000000001,
+     45.72
+    ],
+    [
+     22.86,
+     -1.9000000000000001,
+     45.72
+    ],
+    [
+     22.86,
+     -1.9000000000000001,
+     48.26
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T32",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "trail T32"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    25.4,
+    -1.6,
+    45.72
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T32",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "T32 joint at S11",
+    "owners": [
+     "trail",
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     15.24,
+     -1.9000000000000001,
+     0
+    ],
+    [
+     15.24,
+     -1.9000000000000001,
+     5.08
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T33",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "trail T33"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    15.24,
+    -1.6,
+    5.08
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "T33",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "T33 joint at C7",
+    "owners": [
+     "trail",
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     5.08,
+     -1.9000000000000001,
+     38.1
+    ],
+    [
+     5.08,
+     -1.9000000000000001,
+     40.64
+    ],
+    [
+     5.08,
+     -1.9000000000000001,
+     43.18
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T34",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "trail T34"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     35.56,
+     -1.9000000000000001,
+     38.1
+    ],
+    [
+     35.56,
+     -1.9000000000000001,
+     40.64
+    ],
+    [
+     35.56,
+     -1.9000000000000001,
+     43.18
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "trail",
+    "id": "T35",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "trail T35"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     0,
+     -1.9000000000000001,
+     27.94
+    ],
+    [
+     0,
+     -1.9000000000000001,
+     30.48
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DA1.b",
+    "net": "LIFT_A1",
+    "nets": [
+     "LIFT_A1"
+    ],
+    "label": "DA1.b folded to M1"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     0,
+     -1.9000000000000001,
+     33.02
+    ],
+    [
+     0,
+     -1.9000000000000001,
+     35.56
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DA2.b",
+    "net": "LIFT_A2",
+    "nets": [
+     "LIFT_A2"
+    ],
+    "label": "DA2.b folded to O1"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     0,
+     -1.9000000000000001,
+     38.1
+    ],
+    [
+     0,
+     -1.9000000000000001,
+     40.64
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DA3.b",
+    "net": "LIFT_A3",
+    "nets": [
+     "LIFT_A3"
+    ],
+    "label": "DA3.b folded to Q1"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     2.54,
+     -1.9000000000000001,
+     40.64
+    ],
+    [
+     2.54,
+     -1.9000000000000001,
+     38.1
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DA4.b",
+    "net": "LIFT_A4",
+    "nets": [
+     "LIFT_A4"
+    ],
+    "label": "DA4.b folded to P2"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     2.54,
+     -1.9000000000000001,
+     35.56
+    ],
+    [
+     2.54,
+     -1.9000000000000001,
+     33.02
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DA5.b",
+    "net": "LIFT_A5",
+    "nets": [
+     "LIFT_A5"
+    ],
+    "label": "DA5.b folded to N2"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     5.08,
+     -1.9000000000000001,
+     33.02
+    ],
+    [
+     5.08,
+     -1.9000000000000001,
+     35.56
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DA6.b",
+    "net": "LIFT_A6",
+    "nets": [
+     "LIFT_A6"
+    ],
+    "label": "DA6.b folded to O3"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     40.64,
+     -1.9000000000000001,
+     27.94
+    ],
+    [
+     40.64,
+     -1.9000000000000001,
+     30.48
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DB1.b",
+    "net": "LIFT_B1",
+    "nets": [
+     "LIFT_B1"
+    ],
+    "label": "DB1.b folded to M17"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     40.64,
+     -1.9000000000000001,
+     33.02
+    ],
+    [
+     40.64,
+     -1.9000000000000001,
+     35.56
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DB2.b",
+    "net": "LIFT_B2",
+    "nets": [
+     "LIFT_B2"
+    ],
+    "label": "DB2.b folded to O17"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     40.64,
+     -1.9000000000000001,
+     38.1
+    ],
+    [
+     40.64,
+     -1.9000000000000001,
+     40.64
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DB3.b",
+    "net": "LIFT_B3",
+    "nets": [
+     "LIFT_B3"
+    ],
+    "label": "DB3.b folded to Q17"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     38.1,
+     -1.9000000000000001,
+     40.64
+    ],
+    [
+     38.1,
+     -1.9000000000000001,
+     38.1
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DB4.b",
+    "net": "LIFT_B4",
+    "nets": [
+     "LIFT_B4"
+    ],
+    "label": "DB4.b folded to P16"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     38.1,
+     -1.9000000000000001,
+     35.56
+    ],
+    [
+     38.1,
+     -1.9000000000000001,
+     33.02
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DB5.b",
+    "net": "LIFT_B5",
+    "nets": [
+     "LIFT_B5"
+    ],
+    "label": "DB5.b folded to N16"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     35.56,
+     -1.9000000000000001,
+     33.02
+    ],
+    [
+     35.56,
+     -1.9000000000000001,
+     35.56
+    ]
+   ],
+   "radius": 0.3,
+   "color": "#c3c7cb",
+   "metal": true,
+   "tag": {
+    "kind": "fold",
+    "id": "DB6.b",
+    "net": "LIFT_B6",
+    "nets": [
+     "LIFT_B6"
+    ],
+    "label": "DB6.b folded to O15"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     2.54,
+     -2.3,
+     20.32
+    ],
+    [
+     3.069166666666667,
+     -2.8612626265462215,
+     20.32
+    ],
+    [
+     3.598333333333333,
+     -3.412921893940839,
+     20.32
+    ],
+    [
+     4.1274999999999995,
+     -3.945538759169886,
+     20.32
+    ],
+    [
+     4.656666666666666,
+     -4.449999999999999,
+     20.32
+    ],
+    [
+     5.185833333333333,
+     -4.917674144737498,
+     20.32
+    ],
+    [
+     5.715,
+     -5.340559159102154,
+     20.32
+    ],
+    [
+     6.244166666666667,
+     -5.711419363252311,
+     20.32
+    ],
+    [
+     6.7733333333333325,
+     -6.023909236273086,
+     20.32
+    ],
+    [
+     7.302499999999999,
+     -6.272681989798532,
+     20.32
+    ],
+    [
+     7.831666666666667,
+     -6.453481053042993,
+     20.32
+    ],
+    [
+     8.360833333333332,
+     -6.5632129039073845,
+     20.32
+    ],
+    [
+     8.89,
+     -6.6,
+     20.32
+    ],
+    [
+     9.419166666666666,
+     -6.5632129039073845,
+     20.32
+    ],
+    [
+     9.948333333333334,
+     -6.453481053042993,
+     20.32
+    ],
+    [
+     10.4775,
+     -6.272681989798532,
+     20.32
+    ],
+    [
+     11.006666666666664,
+     -6.023909236273086,
+     20.32
+    ],
+    [
+     11.535833333333333,
+     -5.711419363252311,
+     20.32
+    ],
+    [
+     12.064999999999998,
+     -5.340559159102154,
+     20.32
+    ],
+    [
+     12.594166666666666,
+     -4.9176741447375,
+     20.32
+    ],
+    [
+     13.123333333333335,
+     -4.449999999999999,
+     20.32
+    ],
+    [
+     13.6525,
+     -3.945538759169886,
+     20.32
+    ],
+    [
+     14.181666666666665,
+     -3.4129218939408403,
+     20.32
+    ],
+    [
+     14.710833333333333,
+     -2.8612626265462215,
+     20.32
+    ],
+    [
+     15.239999999999998,
+     -2.3000000000000003,
+     20.32
+    ]
+   ],
+   "radius": 0.7,
+   "color": "#f08c00",
+   "tag": {
+    "kind": "wire",
+    "id": "W1",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "flying wire W1"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    2.54,
+    0,
+    20.32
+   ],
+   "b": [
+    2.54,
+    -2.3,
+    20.32
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W1",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "flying wire W1"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    2.54,
+    -1.6,
+    20.32
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "W1",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "W1 joint at I2",
+    "owners": [
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    15.24,
+    0,
+    20.32
+   ],
+   "b": [
+    15.24,
+    -2.3,
+    20.32
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W1",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "flying wire W1"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     38.1,
+     -2.3,
+     20.32
+    ],
+    [
+     37.57083333333333,
+     -2.8612626265462215,
+     20.32
+    ],
+    [
+     37.04166666666667,
+     -3.412921893940839,
+     20.32
+    ],
+    [
+     36.5125,
+     -3.945538759169886,
+     20.32
+    ],
+    [
+     35.983333333333334,
+     -4.449999999999999,
+     20.32
+    ],
+    [
+     35.454166666666666,
+     -4.917674144737498,
+     20.32
+    ],
+    [
+     34.925,
+     -5.340559159102154,
+     20.32
+    ],
+    [
+     34.395833333333336,
+     -5.711419363252311,
+     20.32
+    ],
+    [
+     33.86666666666667,
+     -6.023909236273086,
+     20.32
+    ],
+    [
+     33.3375,
+     -6.272681989798532,
+     20.32
+    ],
+    [
+     32.80833333333334,
+     -6.453481053042993,
+     20.32
+    ],
+    [
+     32.27916666666667,
+     -6.5632129039073845,
+     20.32
+    ],
+    [
+     31.75,
+     -6.6,
+     20.32
+    ],
+    [
+     31.220833333333335,
+     -6.5632129039073845,
+     20.32
+    ],
+    [
+     30.691666666666666,
+     -6.453481053042993,
+     20.32
+    ],
+    [
+     30.1625,
+     -6.272681989798532,
+     20.32
+    ],
+    [
+     29.633333333333333,
+     -6.023909236273086,
+     20.32
+    ],
+    [
+     29.104166666666664,
+     -5.711419363252311,
+     20.32
+    ],
+    [
+     28.575,
+     -5.340559159102154,
+     20.32
+    ],
+    [
+     28.045833333333334,
+     -4.9176741447375,
+     20.32
+    ],
+    [
+     27.516666666666666,
+     -4.449999999999999,
+     20.32
+    ],
+    [
+     26.987499999999997,
+     -3.945538759169886,
+     20.32
+    ],
+    [
+     26.458333333333332,
+     -3.4129218939408403,
+     20.32
+    ],
+    [
+     25.929166666666667,
+     -2.8612626265462215,
+     20.32
+    ],
+    [
+     25.4,
+     -2.3000000000000003,
+     20.32
+    ]
+   ],
+   "radius": 0.7,
+   "color": "#f08c00",
+   "tag": {
+    "kind": "wire",
+    "id": "W2",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "flying wire W2"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    0,
+    20.32
+   ],
+   "b": [
+    38.1,
+    -2.3,
+    20.32
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W2",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "flying wire W2"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    38.1,
+    -1.6,
+    20.32
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "W2",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "W2 joint at I16",
+    "owners": [
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    25.4,
+    0,
+    20.32
+   ],
+   "b": [
+    25.4,
+    -2.3,
+    20.32
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W2",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "flying wire W2"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     20.32,
+     -2.3,
+     38.1
+    ],
+    [
+     20.531666666666666,
+     -2.8612626265462215,
+     38.417500000000004
+    ],
+    [
+     20.743333333333332,
+     -3.412921893940839,
+     38.735
+    ],
+    [
+     20.955,
+     -3.945538759169886,
+     39.0525
+    ],
+    [
+     21.166666666666668,
+     -4.449999999999999,
+     39.370000000000005
+    ],
+    [
+     21.378333333333334,
+     -4.917674144737498,
+     39.6875
+    ],
+    [
+     21.59,
+     -5.340559159102154,
+     40.005
+    ],
+    [
+     21.801666666666666,
+     -5.711419363252311,
+     40.3225
+    ],
+    [
+     22.013333333333332,
+     -6.023909236273086,
+     40.64
+    ],
+    [
+     22.225,
+     -6.272681989798532,
+     40.9575
+    ],
+    [
+     22.436666666666667,
+     -6.453481053042993,
+     41.275
+    ],
+    [
+     22.648333333333333,
+     -6.5632129039073845,
+     41.5925
+    ],
+    [
+     22.86,
+     -6.6,
+     41.91
+    ],
+    [
+     23.071666666666665,
+     -6.5632129039073845,
+     42.2275
+    ],
+    [
+     23.28333333333333,
+     -6.453481053042993,
+     42.545
+    ],
+    [
+     23.494999999999997,
+     -6.272681989798532,
+     42.8625
+    ],
+    [
+     23.706666666666667,
+     -6.023909236273086,
+     43.18
+    ],
+    [
+     23.918333333333333,
+     -5.711419363252311,
+     43.4975
+    ],
+    [
+     24.13,
+     -5.340559159102154,
+     43.815
+    ],
+    [
+     24.341666666666665,
+     -4.9176741447375,
+     44.1325
+    ],
+    [
+     24.553333333333335,
+     -4.449999999999999,
+     44.45
+    ],
+    [
+     24.765,
+     -3.945538759169886,
+     44.7675
+    ],
+    [
+     24.976666666666667,
+     -3.4129218939408403,
+     45.085
+    ],
+    [
+     25.188333333333333,
+     -2.8612626265462215,
+     45.402499999999996
+    ],
+    [
+     25.4,
+     -2.3000000000000003,
+     45.72
+    ]
+   ],
+   "radius": 0.7,
+   "color": "#d62839",
+   "tag": {
+    "kind": "wire",
+    "id": "W3",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "flying wire W3"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    20.32,
+    0,
+    38.1
+   ],
+   "b": [
+    20.32,
+    -2.3,
+    38.1
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W3",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "flying wire W3"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    25.4,
+    0,
+    45.72
+   ],
+   "b": [
+    25.4,
+    -2.3,
+    45.72
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W3",
+    "net": "V12",
+    "nets": [
+     "V12"
+    ],
+    "label": "flying wire W3"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     20.32,
+     -2.3,
+     45.72
+    ],
+    [
+     19.790833333333335,
+     -2.8612626265462215,
+     45.825833333333335
+    ],
+    [
+     19.261666666666667,
+     -3.412921893940839,
+     45.931666666666665
+    ],
+    [
+     18.7325,
+     -3.945538759169886,
+     46.0375
+    ],
+    [
+     18.203333333333333,
+     -4.449999999999999,
+     46.14333333333333
+    ],
+    [
+     17.674166666666668,
+     -4.917674144737498,
+     46.24916666666667
+    ],
+    [
+     17.145,
+     -5.340559159102154,
+     46.355
+    ],
+    [
+     16.615833333333335,
+     -5.711419363252311,
+     46.46083333333333
+    ],
+    [
+     16.086666666666666,
+     -6.023909236273086,
+     46.56666666666666
+    ],
+    [
+     15.557500000000001,
+     -6.272681989798532,
+     46.6725
+    ],
+    [
+     15.028333333333332,
+     -6.453481053042993,
+     46.77833333333333
+    ],
+    [
+     14.499166666666667,
+     -6.5632129039073845,
+     46.884166666666665
+    ],
+    [
+     13.97,
+     -6.6,
+     46.989999999999995
+    ],
+    [
+     13.440833333333334,
+     -6.5632129039073845,
+     47.09583333333333
+    ],
+    [
+     12.911666666666667,
+     -6.453481053042993,
+     47.20166666666667
+    ],
+    [
+     12.3825,
+     -6.272681989798532,
+     47.3075
+    ],
+    [
+     11.853333333333335,
+     -6.023909236273086,
+     47.413333333333334
+    ],
+    [
+     11.324166666666667,
+     -5.711419363252311,
+     47.51916666666666
+    ],
+    [
+     10.795000000000002,
+     -5.340559159102154,
+     47.625
+    ],
+    [
+     10.265833333333335,
+     -4.9176741447375,
+     47.73083333333333
+    ],
+    [
+     9.736666666666666,
+     -4.449999999999999,
+     47.836666666666666
+    ],
+    [
+     9.207500000000001,
+     -3.945538759169886,
+     47.942499999999995
+    ],
+    [
+     8.678333333333335,
+     -3.4129218939408403,
+     48.04833333333333
+    ],
+    [
+     8.149166666666668,
+     -2.8612626265462215,
+     48.15416666666667
+    ],
+    [
+     7.620000000000001,
+     -2.3000000000000003,
+     48.26
+    ]
+   ],
+   "radius": 0.7,
+   "color": "#7cb342",
+   "tag": {
+    "kind": "wire",
+    "id": "W4",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "flying wire W4"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    20.32,
+    0,
+    45.72
+   ],
+   "b": [
+    20.32,
+    -2.3,
+    45.72
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W4",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "flying wire W4"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    20.32,
+    -1.6,
+    45.72
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "W4",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "W4 joint at S9",
+    "owners": [
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    7.62,
+    0,
+    48.26
+   ],
+   "b": [
+    7.62,
+    -2.3,
+    48.26
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W4",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "flying wire W4"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    7.62,
+    -1.6,
+    48.26
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "W4",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "W4 joint at T4",
+    "owners": [
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     40.64,
+     -2.3,
+     58.42
+    ],
+    [
+     39.79333333333334,
+     -2.8612626265462215,
+     58.42
+    ],
+    [
+     38.946666666666665,
+     -3.412921893940839,
+     58.42
+    ],
+    [
+     38.1,
+     -3.945538759169886,
+     58.42
+    ],
+    [
+     37.25333333333333,
+     -4.449999999999999,
+     58.42
+    ],
+    [
+     36.406666666666666,
+     -4.917674144737498,
+     58.42
+    ],
+    [
+     35.56,
+     -5.340559159102154,
+     58.42
+    ],
+    [
+     34.71333333333333,
+     -5.711419363252311,
+     58.42
+    ],
+    [
+     33.86666666666667,
+     -6.023909236273086,
+     58.42
+    ],
+    [
+     33.02,
+     -6.272681989798532,
+     58.42
+    ],
+    [
+     32.17333333333333,
+     -6.453481053042993,
+     58.42
+    ],
+    [
+     31.326666666666668,
+     -6.5632129039073845,
+     58.42
+    ],
+    [
+     30.48,
+     -6.6,
+     58.42
+    ],
+    [
+     29.633333333333333,
+     -6.5632129039073845,
+     58.42
+    ],
+    [
+     28.78666666666667,
+     -6.453481053042993,
+     58.42
+    ],
+    [
+     27.94,
+     -6.272681989798532,
+     58.42
+    ],
+    [
+     27.093333333333334,
+     -6.023909236273086,
+     58.42
+    ],
+    [
+     26.246666666666666,
+     -5.711419363252311,
+     58.42
+    ],
+    [
+     25.4,
+     -5.340559159102154,
+     58.42
+    ],
+    [
+     24.553333333333335,
+     -4.9176741447375,
+     58.42
+    ],
+    [
+     23.706666666666667,
+     -4.449999999999999,
+     58.42
+    ],
+    [
+     22.86,
+     -3.945538759169886,
+     58.42
+    ],
+    [
+     22.013333333333335,
+     -3.4129218939408403,
+     58.42
+    ],
+    [
+     21.166666666666668,
+     -2.8612626265462215,
+     58.42
+    ],
+    [
+     20.32,
+     -2.3000000000000003,
+     58.42
+    ]
+   ],
+   "radius": 0.7,
+   "color": "#0aa294",
+   "tag": {
+    "kind": "wire",
+    "id": "W5",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "flying wire W5"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    40.64,
+    0,
+    58.42
+   ],
+   "b": [
+    40.64,
+    -2.3,
+    58.42
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W5",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "flying wire W5"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    20.32,
+    0,
+    58.42
+   ],
+   "b": [
+    20.32,
+    -2.3,
+    58.42
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W5",
+    "net": "IN_A",
+    "nets": [
+     "IN_A"
+    ],
+    "label": "flying wire W5"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     38.1,
+     -2.3,
+     58.42
+    ],
+    [
+     37.67666666666667,
+     -2.8612626265462215,
+     58.314166666666665
+    ],
+    [
+     37.25333333333334,
+     -3.412921893940839,
+     58.208333333333336
+    ],
+    [
+     36.83,
+     -3.945538759169886,
+     58.1025
+    ],
+    [
+     36.406666666666666,
+     -4.449999999999999,
+     57.99666666666667
+    ],
+    [
+     35.983333333333334,
+     -4.917674144737498,
+     57.89083333333333
+    ],
+    [
+     35.56,
+     -5.340559159102154,
+     57.785000000000004
+    ],
+    [
+     35.13666666666667,
+     -5.711419363252311,
+     57.67916666666667
+    ],
+    [
+     34.71333333333334,
+     -6.023909236273086,
+     57.57333333333334
+    ],
+    [
+     34.29,
+     -6.272681989798532,
+     57.4675
+    ],
+    [
+     33.86666666666667,
+     -6.453481053042993,
+     57.36166666666667
+    ],
+    [
+     33.443333333333335,
+     -6.5632129039073845,
+     57.255833333333335
+    ],
+    [
+     33.02,
+     -6.6,
+     57.150000000000006
+    ],
+    [
+     32.59666666666667,
+     -6.5632129039073845,
+     57.04416666666667
+    ],
+    [
+     32.17333333333333,
+     -6.453481053042993,
+     56.93833333333333
+    ],
+    [
+     31.75,
+     -6.272681989798532,
+     56.8325
+    ],
+    [
+     31.326666666666668,
+     -6.023909236273086,
+     56.72666666666667
+    ],
+    [
+     30.903333333333336,
+     -5.711419363252311,
+     56.62083333333334
+    ],
+    [
+     30.48,
+     -5.340559159102154,
+     56.515
+    ],
+    [
+     30.05666666666667,
+     -4.9176741447375,
+     56.40916666666667
+    ],
+    [
+     29.633333333333333,
+     -4.449999999999999,
+     56.303333333333335
+    ],
+    [
+     29.21,
+     -3.945538759169886,
+     56.197500000000005
+    ],
+    [
+     28.78666666666667,
+     -3.4129218939408403,
+     56.09166666666667
+    ],
+    [
+     28.363333333333337,
+     -2.8612626265462215,
+     55.98583333333333
+    ],
+    [
+     27.94,
+     -2.3000000000000003,
+     55.88
+    ]
+   ],
+   "radius": 0.7,
+   "color": "#0aa294",
+   "tag": {
+    "kind": "wire",
+    "id": "W6",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "flying wire W6"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    38.1,
+    0,
+    58.42
+   ],
+   "b": [
+    38.1,
+    -2.3,
+    58.42
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W6",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "flying wire W6"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    27.94,
+    0,
+    55.88
+   ],
+   "b": [
+    27.94,
+    -2.3,
+    55.88
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W6",
+    "net": "IN_B",
+    "nets": [
+     "IN_B"
+    ],
+    "label": "flying wire W6"
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     5.08,
+     -2.3,
+     5.08
+    ],
+    [
+     6.244166666666667,
+     -2.8612626265462215,
+     7.3025
+    ],
+    [
+     7.408333333333333,
+     -3.412921893940839,
+     9.525
+    ],
+    [
+     8.572500000000002,
+     -3.945538759169886,
+     11.7475
+    ],
+    [
+     9.736666666666668,
+     -4.449999999999999,
+     13.97
+    ],
+    [
+     10.900833333333335,
+     -4.917674144737498,
+     16.192500000000003
+    ],
+    [
+     12.065000000000001,
+     -5.340559159102154,
+     18.415
+    ],
+    [
+     13.229166666666668,
+     -5.711419363252311,
+     20.637500000000003
+    ],
+    [
+     14.393333333333334,
+     -6.023909236273086,
+     22.86
+    ],
+    [
+     15.557500000000003,
+     -6.272681989798532,
+     25.082500000000003
+    ],
+    [
+     16.72166666666667,
+     -6.453481053042993,
+     27.305
+    ],
+    [
+     17.885833333333338,
+     -6.5632129039073845,
+     29.527500000000003
+    ],
+    [
+     19.050000000000004,
+     -6.6,
+     31.75
+    ],
+    [
+     20.21416666666667,
+     -6.5632129039073845,
+     33.9725
+    ],
+    [
+     21.378333333333337,
+     -6.453481053042993,
+     36.19500000000001
+    ],
+    [
+     22.542500000000004,
+     -6.272681989798532,
+     38.417500000000004
+    ],
+    [
+     23.70666666666667,
+     -6.023909236273086,
+     40.64
+    ],
+    [
+     24.870833333333337,
+     -5.711419363252311,
+     42.862500000000004
+    ],
+    [
+     26.035000000000004,
+     -5.340559159102154,
+     45.085
+    ],
+    [
+     27.19916666666667,
+     -4.9176741447375,
+     47.3075
+    ],
+    [
+     28.363333333333337,
+     -4.449999999999999,
+     49.53
+    ],
+    [
+     29.527500000000003,
+     -3.945538759169886,
+     51.7525
+    ],
+    [
+     30.69166666666667,
+     -3.4129218939408403,
+     53.975
+    ],
+    [
+     31.855833333333337,
+     -2.8612626265462215,
+     56.197500000000005
+    ],
+    [
+     33.02,
+     -2.3000000000000003,
+     58.42
+    ]
+   ],
+   "radius": 0.7,
+   "color": "#c19a00",
+   "tag": {
+    "kind": "wire",
+    "id": "W7",
+    "net": "COIL_A",
+    "nets": [
+     "COIL_A"
+    ],
+    "label": "flying wire W7"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    5.08,
+    0,
+    5.08
+   ],
+   "b": [
+    5.08,
+    -2.3,
+    5.08
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W7",
+    "net": "COIL_A",
+    "nets": [
+     "COIL_A"
+    ],
+    "label": "flying wire W7"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    5.08,
+    -1.6,
+    5.08
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "W7",
+    "net": "COIL_A",
+    "nets": [
+     "COIL_A"
+    ],
+    "label": "W7 joint at C3",
+    "owners": [
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    33.02,
+    0,
+    58.42
+   ],
+   "b": [
+    33.02,
+    -2.3,
+    58.42
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W7",
+    "net": "COIL_A",
+    "nets": [
+     "COIL_A"
+    ],
+    "label": "flying wire W7"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    33.02,
+    -1.6,
+    58.42
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "W7",
+    "net": "COIL_A",
+    "nets": [
+     "COIL_A"
+    ],
+    "label": "W7 joint at X14",
+    "owners": [
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     35.56,
+     -2.3,
+     5.08
+    ],
+    [
+     35.56,
+     -2.8612626265462215,
+     7.090833333333333
+    ],
+    [
+     35.56,
+     -3.412921893940839,
+     9.101666666666667
+    ],
+    [
+     35.56,
+     -3.945538759169886,
+     11.1125
+    ],
+    [
+     35.56,
+     -4.449999999999999,
+     13.123333333333333
+    ],
+    [
+     35.56,
+     -4.917674144737498,
+     15.134166666666669
+    ],
+    [
+     35.56,
+     -5.340559159102154,
+     17.145000000000003
+    ],
+    [
+     35.56,
+     -5.711419363252311,
+     19.155833333333334
+    ],
+    [
+     35.56,
+     -6.023909236273086,
+     21.166666666666664
+    ],
+    [
+     35.56,
+     -6.272681989798532,
+     23.177500000000002
+    ],
+    [
+     35.56,
+     -6.453481053042993,
+     25.18833333333334
+    ],
+    [
+     35.56,
+     -6.5632129039073845,
+     27.19916666666667
+    ],
+    [
+     35.56,
+     -6.6,
+     29.21
+    ],
+    [
+     35.56,
+     -6.5632129039073845,
+     31.22083333333333
+    ],
+    [
+     35.56,
+     -6.453481053042993,
+     33.23166666666667
+    ],
+    [
+     35.56,
+     -6.272681989798532,
+     35.2425
+    ],
+    [
+     35.56,
+     -6.023909236273086,
+     37.25333333333333
+    ],
+    [
+     35.56,
+     -5.711419363252311,
+     39.26416666666667
+    ],
+    [
+     35.56,
+     -5.340559159102154,
+     41.275000000000006
+    ],
+    [
+     35.56,
+     -4.9176741447375,
+     43.285833333333336
+    ],
+    [
+     35.56,
+     -4.449999999999999,
+     45.296666666666674
+    ],
+    [
+     35.56,
+     -3.945538759169886,
+     47.307500000000005
+    ],
+    [
+     35.56,
+     -3.4129218939408403,
+     49.318333333333335
+    ],
+    [
+     35.56,
+     -2.8612626265462215,
+     51.32916666666667
+    ],
+    [
+     35.56,
+     -2.3000000000000003,
+     53.34
+    ]
+   ],
+   "radius": 0.7,
+   "color": "#c19a00",
+   "tag": {
+    "kind": "wire",
+    "id": "W8",
+    "net": "COIL_B",
+    "nets": [
+     "COIL_B"
+    ],
+    "label": "flying wire W8"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    0,
+    5.08
+   ],
+   "b": [
+    35.56,
+    -2.3,
+    5.08
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W8",
+    "net": "COIL_B",
+    "nets": [
+     "COIL_B"
+    ],
+    "label": "flying wire W8"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    5.08
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "W8",
+    "net": "COIL_B",
+    "nets": [
+     "COIL_B"
+    ],
+    "label": "W8 joint at C15",
+    "owners": [
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    35.56,
+    0,
+    53.34
+   ],
+   "b": [
+    35.56,
+    -2.3,
+    53.34
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W8",
+    "net": "COIL_B",
+    "nets": [
+     "COIL_B"
+    ],
+    "label": "flying wire W8"
+   }
+  },
+  {
+   "kind": "cone",
+   "base": [
+    35.56,
+    -1.6,
+    53.34
+   ],
+   "up": -1,
+   "radius": 0.9,
+   "height": 0.9,
+   "color": "#a9aeb3",
+   "metal": true,
+   "tag": {
+    "kind": "joint",
+    "id": "W8",
+    "net": "COIL_B",
+    "nets": [
+     "COIL_B"
+    ],
+    "label": "W8 joint at V15",
+    "owners": [
+     "wire"
+    ]
+   }
+  },
+  {
+   "kind": "tube",
+   "points": [
+    [
+     15.24,
+     -2.3,
+     5.08
+    ],
+    [
+     15.345833333333333,
+     -2.8612626265462215,
+     6.6675
+    ],
+    [
+     15.451666666666666,
+     -3.412921893940839,
+     8.254999999999999
+    ],
+    [
+     15.557500000000001,
+     -3.945538759169886,
+     9.842500000000001
+    ],
+    [
+     15.663333333333334,
+     -4.449999999999999,
+     11.43
+    ],
+    [
+     15.769166666666667,
+     -4.917674144737498,
+     13.017500000000002
+    ],
+    [
+     15.875,
+     -5.340559159102154,
+     14.605
+    ],
+    [
+     15.980833333333333,
+     -5.711419363252311,
+     16.192500000000003
+    ],
+    [
+     16.086666666666666,
+     -6.023909236273086,
+     17.78
+    ],
+    [
+     16.1925,
+     -6.272681989798532,
+     19.3675
+    ],
+    [
+     16.298333333333336,
+     -6.453481053042993,
+     20.955000000000002
+    ],
+    [
+     16.40416666666667,
+     -6.5632129039073845,
+     22.542499999999997
+    ],
+    [
+     16.51,
+     -6.6,
+     24.130000000000003
+    ],
+    [
+     16.615833333333335,
+     -6.5632129039073845,
+     25.7175
+    ],
+    [
+     16.721666666666668,
+     -6.453481053042993,
+     27.305
+    ],
+    [
+     16.8275,
+     -6.272681989798532,
+     28.8925
+    ],
+    [
+     16.933333333333334,
+     -6.023909236273086,
+     30.479999999999997
+    ],
+    [
+     17.039166666666667,
+     -5.711419363252311,
+     32.0675
+    ],
+    [
+     17.145,
+     -5.340559159102154,
+     33.655
+    ],
+    [
+     17.250833333333333,
+     -4.9176741447375,
+     35.2425
+    ],
+    [
+     17.35666666666667,
+     -4.449999999999999,
+     36.830000000000005
+    ],
+    [
+     17.462500000000002,
+     -3.945538759169886,
+     38.4175
+    ],
+    [
+     17.568333333333335,
+     -3.4129218939408403,
+     40.004999999999995
+    ],
+    [
+     17.674166666666668,
+     -2.8612626265462215,
+     41.5925
+    ],
+    [
+     17.78,
+     -2.3000000000000003,
+     43.18
+    ]
+   ],
+   "radius": 0.7,
+   "color": "#111111",
+   "tag": {
+    "kind": "wire",
+    "id": "W9",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "flying wire W9"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    15.24,
+    0,
+    5.08
+   ],
+   "b": [
+    15.24,
+    -2.3,
+    5.08
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W9",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "flying wire W9"
+   }
+  },
+  {
+   "kind": "cylinder",
+   "a": [
+    17.78,
+    0,
+    43.18
+   ],
+   "b": [
+    17.78,
+    -2.3,
+    43.18
+   ],
+   "radius": 0.3,
+   "color": "#b87333",
+   "metal": true,
+   "tag": {
+    "kind": "wire",
+    "id": "W9",
+    "net": "GND",
+    "nets": [
+     "GND"
+    ],
+    "label": "flying wire W9"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    3.81,
+    -1.8,
+    20.32
+   ],
+   "size": [
+    3.54,
+    0.4,
+    1
+   ],
+   "color": "#c8c8c8",
+   "metal": true,
+   "tag": {
+    "kind": "bridge",
+    "id": "I2-I3",
+    "net": "F12A",
+    "nets": [
+     "F12A"
+    ],
+    "label": "solder bridge I2-I3"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    36.83,
+    -1.8,
+    20.32
+   ],
+   "size": [
+    3.539999999999999,
+    0.4,
+    1
+   ],
+   "color": "#c8c8c8",
+   "metal": true,
+   "tag": {
+    "kind": "bridge",
+    "id": "I16-I15",
+    "net": "F12B",
+    "nets": [
+     "F12B"
+    ],
+    "label": "solder bridge I16-I15"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    20.32,
+    -1.8,
+    46.989999999999995
+   ],
+   "size": [
+    1,
+    0.4,
+    3.539999999999999
+   ],
+   "color": "#c8c8c8",
+   "metal": true,
+   "tag": {
+    "kind": "bridge",
+    "id": "S9-T9",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "solder bridge S9-T9"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    8.89,
+    -1.8,
+    48.26
+   ],
+   "size": [
+    3.54,
+    0.4,
+    1
+   ],
+   "color": "#c8c8c8",
+   "metal": true,
+   "tag": {
+    "kind": "bridge",
+    "id": "T4-T5",
+    "net": "DRV_A",
+    "nets": [
+     "DRV_A"
+    ],
+    "label": "solder bridge T4-T5"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    5.08,
+    -1.8,
+    6.35
+   ],
+   "size": [
+    1,
+    0.4,
+    3.54
+   ],
+   "color": "#c8c8c8",
+   "metal": true,
+   "tag": {
+    "kind": "bridge",
+    "id": "C3-D3",
+    "net": "COIL_A",
+    "nets": [
+     "COIL_A"
+    ],
+    "label": "solder bridge C3-D3"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    33.02,
+    -1.8,
+    57.150000000000006
+   ],
+   "size": [
+    1,
+    0.4,
+    3.539999999999999
+   ],
+   "color": "#c8c8c8",
+   "metal": true,
+   "tag": {
+    "kind": "bridge",
+    "id": "X14-W14",
+    "net": "COIL_A",
+    "nets": [
+     "COIL_A"
+    ],
+    "label": "solder bridge X14-W14"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    35.56,
+    -1.8,
+    6.35
+   ],
+   "size": [
+    1,
+    0.4,
+    3.54
+   ],
+   "color": "#c8c8c8",
+   "metal": true,
+   "tag": {
+    "kind": "bridge",
+    "id": "C15-D15",
+    "net": "COIL_B",
+    "nets": [
+     "COIL_B"
+    ],
+    "label": "solder bridge C15-D15"
+   }
+  },
+  {
+   "kind": "box",
+   "center": [
+    35.56,
+    -1.8,
+    54.61
+   ],
+   "size": [
+    1,
+    0.4,
+    3.539999999999999
+   ],
+   "color": "#c8c8c8",
+   "metal": true,
+   "tag": {
+    "kind": "bridge",
+    "id": "V15-W15",
+    "net": "COIL_B",
+    "nets": [
+     "COIL_B"
+    ],
+    "label": "solder bridge V15-W15"
+   }
+  }
+ ],
+ "bounds": {
+  "min": [
+   -3.8099999999999987,
+   -7.3,
+   -3.8100000000000023
+  ],
+  "max": [
+   46.989999999999995,
+   15.5,
+   62.230000000000004
+  ]
+ },
+ "skipped": []
+}
