@@ -693,7 +693,7 @@ const sideTitle = (s: Side) => (s === 'top'
                     size="xs"
                     class="w-20 justify-center"
                     color="neutral"
-                    :variant="view === v.id ? 'subtle' : 'ghost'"
+                    :variant="view === v.id ? 'subtle' : 'soft'"
                     :label="v.label"
                     :title="`${v.label} (${v.key})`"
                     :aria-pressed="view === v.id"
