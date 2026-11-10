@@ -140,8 +140,9 @@ export function returnEntry(path: string, now = Date.now()): string {
 }
 
 /**
- * The path in a stored entry if it is a board page of this app (a share link or board id)
- * stored less than RETURN_TTL_MS ago, else null: never another site, never a stale one.
+ * The path in a stored entry if it is a board page (a share link or board id) or a dashboard
+ * page (the board lists, the settings tabs) of this app, stored less than RETURN_TTL_MS ago,
+ * else null: never another site, never a stale one.
  */
 export function returnPath(stored: string | null, now = Date.now()): string | null {
   if (stored === null) return null
@@ -153,7 +154,10 @@ export function returnPath(stored: string | null, now = Date.now()): string | nu
   }
   const { path, at } = (typeof entry === 'object' && entry !== null ? entry : {}) as { path?: unknown, at?: unknown }
   if (typeof path !== 'string' || typeof at !== 'number' || at > now || now - at >= RETURN_TTL_MS) return null
-  return /^\/b\/[\w-]{1,64}$/.test(path) ? path : null
+  const known = /^\/b\/[\w-]{1,64}$/.test(path)
+    || /^\/boards(\/(shared|trash))?$/.test(path)
+    || /^\/settings(\/(account|devices|connections|admin))?$/.test(path)
+  return known ? path : null
 }
 
 /** A control that is off in 3D (or while not live): disabled there with the lock's title, else its own title. */

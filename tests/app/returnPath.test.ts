@@ -18,4 +18,11 @@ describe('returnPath', () => {
       expect(returnPath(returnEntry(path, 1000), 1000), path).toBeNull()
     }
   })
+
+  it('gives back the dashboard pages, nothing else', () => {
+    for (const p of ['/boards', '/boards/shared', '/boards/trash', '/settings', '/settings/account', '/settings/devices', '/settings/connections', '/settings/admin'])
+      expect(returnPath(returnEntry(p, 1000), 1000), p).toBe(p)
+    for (const p of ['/settings/evil', '/boards/x', '/boards?list=trash', '/settings/account?error=x', '/login', '/', '/boards/'])
+      expect(returnPath(returnEntry(p, 1000), 1000), p).toBeNull()
+  })
 })

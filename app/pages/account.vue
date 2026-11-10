@@ -2,6 +2,8 @@
 // The account page: sign in, or your name, the providers you sign in with, and sign out.
 // In local mode there is nothing to sign in to. A deleted account waiting for its purge
 // sees only this page (ruling R1); restoring it comes with account deletion.
+import { signInError as signInErrorText } from '~/utils/nav'
+
 useHead({ title: 'Account · WireBender' })
 
 type Provider = 'github' | 'google'
@@ -12,16 +14,9 @@ interface Me {
 }
 
 const LABEL: Record<Provider, string> = { github: 'GitHub', google: 'Google' }
-const ERRORS: Record<string, string> = {
-  taken: 'That sign-in is already used by another WireBender account, so it was not linked.',
-  suspended: 'This account is suspended.',
-  deleted: 'This account is deleted.',
-  oauth: 'Sign-in did not finish. Try again.'
-}
-
 const route = useRoute()
 const errorCode = computed(() => typeof route.query.error === 'string' ? route.query.error : null)
-const signInError = computed(() => errorCode.value ? ERRORS[errorCode.value] ?? ERRORS.oauth : null)
+const signInError = computed(() => signInErrorText(errorCode.value))
 
 // Loaded on the client only, like the board list: who is signed in is per browser.
 const { data: me, status, refresh } = useFetch<Me>('/api/me', { server: false })
