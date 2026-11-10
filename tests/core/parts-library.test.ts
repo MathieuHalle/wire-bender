@@ -84,17 +84,79 @@ describe('electrolytic capacitors', () => {
   })
 })
 
+describe('TO-92', () => {
+  it('three pins in a row, its flat facing +y and turning with the part', () => {
+    expect(FOOTPRINTS['to92']!.pins.map(x => [x.name, x.dx, x.dy])).toEqual([['1', 0, 0], ['2', 1, 0], ['3', 2, 0]])
+    const tab = (over: Partial<Part>) => placePart({ ref: 'Q1', footprint: 'to92', at: 'E5', rotation: 0, pins: {}, ...over }).tab
+    expect(tab({})).toEqual({ dx: 0, dy: 1 })
+    expect(tab({ rotation: 90 })).toEqual({ dx: -1, dy: 0 })
+    expect(tab({ rotation: 180 })).toEqual({ dx: 0, dy: -1 })
+    expect(tab({ flip: true })).toEqual({ dx: 0, dy: 1 })
+  })
+
+  it('the 3D flat face is on the tab side, and the outer legs splay out to their holes', () => {
+    const s = scene([{ ref: 'Q1', footprint: 'to92', at: 'E5', rotation: 90, pins: {} }])
+    const d = bodyOf(s.prims, 'Q1').find(p => p.kind === 'extrude')!
+    if (d.kind !== 'extrude') throw new Error('no body')
+    // At rotation 90 the flat faces -x: the outline's straight edge (its two ends) is the
+    // body rect's -x side, and the round back reaches the +x side.
+    const r = placePart({ ref: 'Q1', footprint: 'to92', at: 'E5', rotation: 90, pins: {} }).bodyRectMm
+    for (const end of [d.outline[0]!, d.outline.at(-1)!]) expect(end.x).toBeCloseTo(r.x)
+    expect(Math.max(...d.outline.map(q => q.x))).toBeCloseTo(r.x + r.w)
+    const legs = s.prims.filter(p => p.tag.kind === 'leg')
+    expect(legs.filter(p => p.kind === 'tube')).toHaveLength(2)
+    expect(legs.filter(p => p.kind === 'cylinder')).toHaveLength(1)
+  })
+
+  it('has no metal tab to touch', () => {
+    const s = buildScene(mk({ board: { cols: 30, rows: 30 }, parts: [{ ref: 'Q1', footprint: 'to92', at: 'E5', rotation: 0, pins: {} }] }))
+    expect(s.prims.some(p => p.tag.id === 'Q1' && p.metal && p.tag.kind === 'part')).toBe(false)
+  })
+})
+
+describe('tact switches and trimmers', () => {
+  it('the switches come in five heights on the 3 x 2 hole pattern', () => {
+    for (const h of [4.3, 5, 7, 9.5, 13]) {
+      const fp = FOOTPRINTS[`button-6x6-h${h}`]!
+      expect(fp.body.heightMm).toBe(h)
+      expect(fp.pins.map(x => [x.name, x.dx, x.dy])).toEqual([['1', 0, 0], ['2', 3, 0], ['3', 0, 2], ['4', 3, 2]])
+    }
+    expect(FOOTPRINTS['button-6x6-h6']).toBeUndefined()
+  })
+
+  it('a switch body is 6 x 6 centred on its pins', () => {
+    const r = placePart({ ref: 'S1', footprint: 'button-6x6-h5', at: 'E5', rotation: 90, pins: {} }).bodyRectMm
+    expect([r.w, r.h]).toEqual([6, 6].map(v => expect.closeTo(v, 6)))
+  })
+
+  it('trimmers have pins 1, 2 (wiper) and 3 in a row', () => {
+    for (const id of ['trimmer-3296w', 'trimmer-3362p'])
+      expect(FOOTPRINTS[id]!.pins.map(x => x.name)).toEqual(['1', '2', '3'])
+    expect(FOOTPRINTS['trimmer-3296w']!.body.heightMm).toBe(10)
+    expect(FOOTPRINTS['trimmer-3362p']!.body.heightMm).toBe(4.5)
+  })
+
+  it('the 3296W screw sits at the pin-1 end', () => {
+    const s = scene([{ ref: 'RV1', footprint: 'trimmer-3296w', at: 'E5', rotation: 0, pins: {} }])
+    const screw = bodyOf(s.prims, 'RV1').find(p => p.kind === 'lathe')!
+    if (screw.kind !== 'lathe') throw new Error('no screw')
+    expect(dist(screw.axis, mm('E5'))).toBeLessThan(dist(screw.axis, mm('E7')))
+  })
+})
+
 describe('bench sheet orientation', () => {
   it('names the LED cathode and the electrolytic minus by hole', () => {
     const m = benchModel(mk({
       board: { cols: 30, rows: 30 },
       parts: [
         { ref: 'D1', footprint: 'led-5mm', at: 'E5', to: 'F5', rotation: 0, pins: {} },
-        { ref: 'C1', footprint: 'cap-elec-6.3x11', at: 'H8', to: 'H9', rotation: 0, pins: {} }
+        { ref: 'C1', footprint: 'cap-elec-6.3x11', at: 'H8', to: 'H9', rotation: 0, pins: {} },
+        { ref: 'Q1', footprint: 'to92', at: 'L12', rotation: 0, pins: {} }
       ]
     }))
     const text = JSON.stringify(m)
     expect(text).toContain('cathode (flat side) at F5')
     expect(text).toContain('minus (stripe) at H9')
+    expect(text).toMatch(/flat side toward row/)
   })
 })

@@ -189,7 +189,44 @@ function capElecFp({ d, h, span }: { d: number, h: number, span: number }): Foot
   }
 }
 
+/** TO-92: a D-shaped body 4.8 wide and 3.8 deep (flat face toward +y at rotation 0), on 3 mm of leg. */
+export const TO92_LIFT_MM = 3
+const TO92: Footprint = {
+  id: 'to92', name: 'TO-92',
+  pins: [p('1', 0, 0), p('2', 1, 0), p('3', 2, 0)],
+  body: { rect: { x: PITCH - 2.4, y: -2.3, w: 4.8, h: 3.8 }, heightMm: TO92_LIFT_MM + 4.5, side: 'top' },
+  shape: 'to92', mark: 'flat', tab: { dx: 0, dy: 1 }
+}
+
+/** 6 x 6 mm tact switch heights, mm. */
+export const BUTTON_HEIGHTS = [4.3, 5, 7, 9.5, 13]
+/** A 6 x 6 tact switch: `1`-`2` and `3`-`4` are joined inside; pressing joins the pairs. */
+function buttonFp(heightMm: number): Footprint {
+  return {
+    id: `button-6x6-h${heightMm}`, name: `Tact switch 6 x 6, ${heightMm} mm`,
+    pins: [p('1', 0, 0), p('2', 3, 0), p('3', 0, 2), p('4', 3, 2)],
+    body: { rect: centred(3, 2, 6, 6), heightMm, side: 'top' }, shape: 'button'
+  }
+}
+
+/** Trimmers: pins `1`, `2` (the wiper) and `3` in a row, the body centred over pin 2. */
+const TRIMMERS: Footprint[] = [
+  {
+    id: 'trimmer-3296w', name: 'Trimmer 3296W (multi-turn, top adjust)',
+    pins: [p('1', 0, 0), p('2', 1, 0), p('3', 2, 0)],
+    body: { rect: { x: PITCH - 4.75, y: -2.4, w: 9.5, h: 4.8 }, heightMm: 10, side: 'top' }, shape: 'trimmer-3296w', mark: 'pin1'
+  },
+  {
+    id: 'trimmer-3362p', name: 'Trimmer 3362P (single turn)',
+    pins: [p('1', 0, 0), p('2', 1, 0), p('3', 2, 0)],
+    body: { rect: { x: PITCH - 3.4, y: -3.5, w: 6.8, h: 7.0 }, heightMm: 4.5, side: 'top' }, shape: 'trimmer-3362p', mark: 'pin1'
+  }
+]
+
 const FAMILIES: Footprint[] = [
+  TO92,
+  ...BUTTON_HEIGHTS.map(buttonFp),
+  ...TRIMMERS,
   ledFp(3, 3.8, 6.5),
   ledFp(5, 5.8, 9.6),
   ...CAP_ELEC_SIZES.map(capElecFp),

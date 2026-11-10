@@ -1,4 +1,4 @@
-import { bodyHeightMm, isDiodePart, CAP_ELEC_BASE_MM, DIP_SOCKET_LIFT_MM, DIP_SOCKET_RIM_MM, FOOTPRINT_PITCH_MM, TAB_PLATE_MM, tabPlateMm, type PlacedPart, type Rect } from '../footprints'
+import { bodyHeightMm, isDiodePart, CAP_ELEC_BASE_MM, TO92_LIFT_MM, DIP_SOCKET_LIFT_MM, DIP_SOCKET_RIM_MM, FOOTPRINT_PITCH_MM, TAB_PLATE_MM, tabPlateMm, type PlacedPart, type Rect } from '../footprints'
 import { holeMm } from '../holes'
 import {
   BOARD_BOTTOM_Y, COLORS, LEG_DIAMETER_MM, LEG_END_Y, LEG_FOLD_Y, SOLDER_BASE_DIAMETER_MM, SOLDER_HEIGHT_MM
@@ -46,6 +46,13 @@ const LED_FLAT_MM = 0.5
 /** Half the angle the minus stripe covers round an electrolytic's can, radians. */
 const CAP_ELEC_STRIPE_RAD = 0.45
 const DOME_STEPS = 8
+/** TO-92 legs leave the body this far either side of the middle one (1.27 pitch), mm. */
+const TO92_LEG_GAP_MM = 1.27
+/** A tact switch's base is this tall (its metal cover included); the plunger stands above it. */
+const BUTTON_BASE_MM = 3.5
+
+/** The nearest axis-aligned unit vector to u. */
+const axisOf = (u: XZ): XZ => Math.abs(u.x) >= Math.abs(u.z) ? { x: Math.sign(u.x) || 1, z: 0 } : { x: 0, z: Math.sign(u.z) }
 
 /** A cylinder of radius r from y0, with a half-sphere dome reaching `top`. */
 function domeProfile(r: number, y0: number, top: number): { r: number, y: number }[] {
@@ -400,6 +407,66 @@ export function partPrims(
         kind: 'extrude', color: COLORS.capElecStripe, tag: body, y0: y0 + 0.6, y1: h - 0.9,
         outline: [...band(R + STRIPE_PROUD_MM, a0 - w, a0 + w), ...band(R - 0.05, a0 + w, a0 - w)]
       })
+      allStraight(0)
+      break
+    }
+    case 'to92': {
+      // A D-shaped body on 3 mm of leg, its flat face toward the tab direction. The legs leave
+      // the body 1.27 apart and splay out to the 2.54 holes.
+      const n: XZ = { x: pp.tab!.dx, z: pp.tab!.dy }
+      const along: XZ = { x: -n.z, z: n.x }
+      const R = halfAlong(r, along)
+      const flatAt = halfAlong(r, n) * 2 - R
+      const cc = { x: c.x + n.x * (R - flatAt) / 2, z: c.z + n.z * (R - flatAt) / 2 }
+      out.push({ kind: 'extrude', outline: dOutline(cc, R, n, flatAt), y0: TO92_LIFT_MM, y1: h, color: COLORS.black, tag: body })
+      // The printed face: a light patch on the flat.
+      const face = { x: cc.x + n.x * (flatAt + MARK_MM / 2), z: cc.z + n.z * (flatAt + MARK_MM / 2) }
+      out.push(axisBox(face, along, R * 1.1, MARK_MM, TO92_LIFT_MM + 1.4, h - 1, COLORS.print, body))
+      const mid = pinNamed('2')
+      for (const pin of pins) {
+        const q = pinXZ(pin)
+        const off = (q.x - mid.x) * along.x + (q.z - mid.z) * along.z
+        if (Math.abs(off) < 1e-6) {
+          straight.set(pin.name, TO92_LIFT_MM)
+          continue
+        }
+        const top: V3 = [mid.x + along.x * Math.sign(off) * TO92_LEG_GAP_MM, TO92_LIFT_MM, mid.z + along.z * Math.sign(off) * TO92_LEG_GAP_MM]
+        out.push({ kind: 'tube', radius: LEG_R, color: COLORS.leg, metal: true, tag: legTag(pin), points: [top, [top[0], TO92_LIFT_MM - 0.6, top[2]], [q.x, 1.2, q.z], [q.x, legEnd(pin), q.z]] })
+      }
+      break
+    }
+    case 'button': {
+      // A 6 x 6 tact switch: a black base under a metal cover, four corner studs, the plunger.
+      const base = Math.min(BUTTON_BASE_MM, h - 0.8)
+      out.push(rectBox(r, 0, base - 0.3, COLORS.black, body))
+      out.push({ ...rectBox({ x: r.x + 0.2, y: r.y + 0.2, w: r.w - 0.4, h: r.h - 0.4 }, base - 0.3, base, COLORS.buttonCover, body), metal: true })
+      for (const [sx, sz] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+        const q = { x: r.x + 0.75 + sx * (r.w - 1.5), z: r.y + 0.75 + sz * (r.h - 1.5) }
+        out.push({ kind: 'cylinder', a: [q.x, base, q.z], b: [q.x, base + 0.3, q.z], radius: 0.45, color: COLORS.black, tag: body })
+      }
+      out.push({ kind: 'lathe', axis: c, color: COLORS.black, tag: body, profile: [{ r: 0, y: base }, { r: 1.75, y: base }, { r: 1.75, y: h - 0.2 }, { r: 1.55, y: h }, { r: 0, y: h }] })
+      allStraight(0)
+      break
+    }
+    case 'trimmer-3296w': {
+      // A blue multi-turn box; the brass adjusting screw stands on the top at the pin-1 end.
+      const p1 = pinNamed('1')
+      const u = leadAxis(c, p1).u
+      out.push(rectBox(r, 0, h - 0.5, COLORS.trimmer, body))
+      const s = { x: c.x + u.x * (halfAlong(r, axisOf(u)) - 1.6), z: c.z + u.z * (halfAlong(r, axisOf(u)) - 1.6) }
+      out.push({ kind: 'lathe', axis: s, color: COLORS.brass, metal: true, tag: body, profile: [{ r: 0, y: h - 1.2 }, { r: 1.15, y: h - 1.2 }, { r: 1.15, y: h - 0.1 }, { r: 1.0, y: h }, { r: 0, y: h }] })
+      out.push(axisBox(s, axisOf(u), 1.8, 0.35, h - 0.1, h + MARK_MM, COLORS.slot, body))
+      allStraight(0)
+      break
+    }
+    case 'trimmer-3362p': {
+      // A blue square body with a white dial on top, slotted to turn.
+      const top = h - 0.9
+      out.push(rectBox(r, 0, top, COLORS.trimmer, body))
+      const R = Math.min(r.w, r.h) / 2 - 0.6
+      out.push({ kind: 'lathe', axis: c, color: COLORS.dial, tag: body, profile: [{ r: 0, y: top }, { r: R, y: top }, { r: R, y: h }, { r: 0, y: h }] })
+      out.push(axisBox(c, { x: 1, z: 0 }, R * 1.4, 0.4, h - 0.1, h + MARK_MM, COLORS.slot, body))
+      out.push(axisBox(c, { x: 0, z: 1 }, R * 1.4, 0.4, h - 0.1, h + MARK_MM, COLORS.slot, body))
       allStraight(0)
       break
     }

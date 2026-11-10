@@ -54,6 +54,10 @@ export const COLORS = {
   ledYellow: '#f2c230',
   ledWhite: '#eef2f4',
   ledOrange: '#f07d1e',
+  buttonCover: '#b9bec3',
+  trimmer: '#2b5fb4',
+  brass: '#c9a646',
+  dial: '#ececec',
   /** Pin-1 marks on dark or blue bodies (relay dot, header triangle). */
   markLight: '#e8e8e8',
   /** Moulded marks on a black body (DIP notch and dot). */
