@@ -98,32 +98,32 @@ describe('finishSignIn', () => {
     expect(replaced).not.toHaveBeenCalled()
   })
 
-  it('another account\'s identity goes to /account?error=taken', async () => {
+  it('another account\'s identity goes to /settings/account?error=taken', async () => {
     const a = existing('42')
     existing('7', 'Bob')
     session = { user: { id: a } }
-    expect(await finishSignIn(callback(), 'github', { id: '7', name: 'Bob' })).toEqual({ redirect: '/account?error=taken', status: 302 })
+    expect(await finishSignIn(callback(), 'github', { id: '7', name: 'Bob' })).toEqual({ redirect: '/settings/account?error=taken', status: 302 })
     expect(replaced).not.toHaveBeenCalled()
   })
 
-  it('a suspended account goes to /account?error=suspended', async () => {
+  it('a suspended account goes to /login?error=suspended', async () => {
     const a = existing('42')
     useDb().update(users).set({ suspendedAt: Date.now() }).where(eq(users.id, a)).run()
-    expect(await finishSignIn(callback(), 'github', { id: '42', name: 'Ada' })).toEqual({ redirect: '/account?error=suspended', status: 302 })
+    expect(await finishSignIn(callback(), 'github', { id: '42', name: 'Ada' })).toEqual({ redirect: '/login?error=suspended', status: 302 })
     expect(replaced).not.toHaveBeenCalled()
   })
 
-  it('a deleted account goes to /account with a pendingDeletion session (R1)', async () => {
+  it('a deleted account goes to /account/deleted with a pendingDeletion session (R1)', async () => {
     const a = existing('42')
     useDb().update(users).set({ deletedAt: Date.now() }).where(eq(users.id, a)).run()
-    expect(await finishSignIn(callback(), 'github', { id: '42', name: 'Ada' })).toEqual({ redirect: '/account', status: 302 })
+    expect(await finishSignIn(callback(), 'github', { id: '42', name: 'Ada' })).toEqual({ redirect: '/account/deleted', status: 302 })
     expect(replaced).toHaveBeenCalledWith({ user: { id: a }, pendingDeletion: true })
   })
 
-  it('a failed sign-in goes to /account?error=oauth and logs no data', async () => {
+  it('a failed sign-in goes to /login?error=oauth and logs no data', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const error = { statusCode: 401, data: { access_token: 'gho_secret' } }
-    expect(failedSignIn(callback(), 'github', error)).toEqual({ redirect: '/account?error=oauth', status: 302 })
+    expect(failedSignIn(callback(), 'github', error)).toEqual({ redirect: '/login?error=oauth', status: 302 })
     expect(warn).toHaveBeenCalledWith('[wirebender] GitHub sign-in failed (401)')
     expect(JSON.stringify(warn.mock.calls)).not.toContain('gho_secret')
     warn.mockRestore()

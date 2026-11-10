@@ -160,7 +160,7 @@ describe('access middleware, public mode', () => {
   beforeEach(publicMode)
 
   it('anonymous may read pages, /api/me, /auth/* and board reads', async () => {
-    for (const url of ['/', '/account', '/b/abc', '/api/me', '/auth/github', '/auth/google?code=1&state=2', '/api/boards/abc', '/api/boards/abc/check', '/api/boards/abc/revisions/2', '/_nuxt/entry.js']) {
+    for (const url of ['/', '/settings/account', '/b/abc', '/api/me', '/auth/github', '/auth/google?code=1&state=2', '/api/boards/abc', '/api/boards/abc/check', '/api/boards/abc/revisions/2', '/_nuxt/entry.js']) {
       const e = publicEvent('GET', url)
       expect(await middleware(e), url).toBeUndefined()
       expect(e.context.who, url).toEqual({ kind: 'anonymous' })
@@ -240,13 +240,22 @@ describe('access middleware, public mode', () => {
     expect(cleared).toHaveBeenCalled()
   })
 
-  it('a pendingDeletion session reaches /account only (R1)', async () => {
+  it('old page URLs redirect for anyone, in both modes', async () => {
+    expect(await middleware(publicEvent('GET', '/api'))).toEqual({ redirect: '/settings/connections', status: 302 })
+    expect(await middleware(publicEvent('GET', '/account'))).toEqual({ redirect: '/settings/account', status: 302 })
+    expect(await middleware(publicEvent('GET', '/api/boards?list=mine'))).toEqual({ error: 'Sign in first.' })
+    vi.stubEnv('WIREBENDER_MODE', 'local')
+    expect(await middleware(event('GET', '/admin', '192.168.1.20', { host: 'localhost:3002' }))).toEqual({ redirect: '/settings/admin', status: 302 })
+  })
+
+  it('a pendingDeletion session reaches /account/deleted only (R1)', async () => {
     const id = newUser()
     useDb().update(users).set({ deletedAt: Date.now() }).where(eq(users.id, id)).run()
     session = { user: { id }, pendingDeletion: true }
-    expect(await middleware(publicEvent('GET', '/'))).toEqual({ redirect: '/account', status: 302 })
-    expect(await middleware(publicEvent('GET', '/b/abc'))).toEqual({ redirect: '/account', status: 302 })
-    expect(await middleware(publicEvent('GET', '/account'))).toBeUndefined()
+    for (const url of ['/', '/b/abc', '/boards', '/settings/account'])
+      expect(await middleware(publicEvent('GET', url)), url).toEqual({ redirect: '/account/deleted', status: 302 })
+    expect(await middleware(publicEvent('GET', '/account/deleted'))).toBeUndefined()
+    expect(await middleware(publicEvent('GET', '/logout'))).toBeUndefined()
     expect(await middleware(publicEvent('GET', '/api/me'))).toBeUndefined()
     expect(await middleware(publicEvent('DELETE', '/api/_auth/session'))).toBeUndefined()
     expect(await middleware(publicEvent('POST', '/api/boards'))).toEqual({ error: 'Sign in first.' })

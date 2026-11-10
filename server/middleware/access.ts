@@ -1,5 +1,5 @@
 import type { H3Event } from 'h3'
-import { TOKEN_REFUSED, gate, publicGate, refusal, tokenRefusal } from '../utils/access'
+import { TOKEN_REFUSED, gate, legacyRedirect, publicGate, refusal, tokenRefusal } from '../utils/access'
 import { cookieSecure, enforceCookieSecure, type CookieRes } from '../utils/cookieSecure'
 import { checkMode, type Mode } from '../utils/mode'
 import { INVALID_TOKEN, resolveSession, sessionCookieName, type SessionState } from '../utils/who'
@@ -64,7 +64,7 @@ async function signedIn(event: H3Event) {
   if (s.who.kind === 'user') event.context.author = s.who.author
   const g = publicGate(event.method, event.path, s.who.kind === 'user', s.pendingDeletion)
   if (g === 'pass') return
-  if (g === 'account') return sendRedirect(event, '/account', 302)
+  if (g === 'account') return sendRedirect(event, '/account/deleted', 302)
   if (g === 'not-found') {
     setResponseStatus(event, 404)
     return { error: 'not found' }
@@ -88,5 +88,7 @@ export default defineEventHandler((event) => {
     setResponseStatus(event, 403)
     return { error: 'This request names another site.' }
   }
+  const to = legacyRedirect(event.method, event.path)
+  if (to) return sendRedirect(event, to, 302)
   return mode === 'local' ? local(event) : signedIn(event)
 })

@@ -22,15 +22,16 @@ export function redirectUrl(provider: Provider): string {
 
 /**
  * Signs in (or, from a signed-in session, links) with the provider's profile. Refusals go
- * to /account with the reason; a deleted, not yet purged account gets a session that only
- * reaches /account (ruling R1).
+ * to /login with the reason (a taken profile, from a signed-in session, to /settings/account);
+ * a deleted, not yet purged account gets a session that only reaches /account/deleted
+ * (ruling R1).
  */
 export async function finishSignIn(event: H3Event, provider: Provider, profile: Profile) {
   const state = await resolveSession(event)
   const who = state.who
   const current = who.kind === 'user' ? who.userId : undefined
   const r = signIn(useDb(), provider, profile, current)
-  if (!r.ok) return sendRedirect(event, `/account?error=${r.reason}`, 302)
+  if (!r.ok) return sendRedirect(event, r.reason === 'taken' ? '/settings/account?error=taken' : `/login?error=${r.reason}`, 302)
   // The setup code was entered first: this account becomes the admin. claimSetup refuses
   // when an admin exists by now or the code changed since (a restart, R11); the sign-in then
   // stands, and /setup says why this account is no admin. The new session drops the flag.
@@ -44,13 +45,13 @@ export async function finishSignIn(event: H3Event, provider: Provider, profile: 
     const session = r.deleted ? { user: { id: r.userId }, pendingDeletion: true } : { user: { id: r.userId } }
     await replaceUserSession(event, unlocked.length > 0 ? { ...session, unlocked } : session)
   }
-  return sendRedirect(event, r.deleted ? '/account' : refused ? '/setup?error=done' : '/', 302)
+  return sendRedirect(event, r.deleted ? '/account/deleted' : refused ? '/setup?error=done' : '/', 302)
 }
 
 /** A failed or cancelled sign-in. Only the provider and the error's status are logged (its data may hold tokens). */
 export function failedSignIn(event: H3Event, provider: Provider, error: { statusCode?: number, status?: number }) {
   console.warn(`[wirebender] ${LABEL[provider]} sign-in failed (${error.statusCode ?? error.status ?? 'error'})`)
-  return sendRedirect(event, '/account?error=oauth', 302)
+  return sendRedirect(event, '/login?error=oauth', 302)
 }
 
 /** 404 unless this provider's sign-in is available here. */

@@ -4,7 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openDb, type Db } from '../../server/db'
 import {
-  completePairing, gate, isLoopback, lanAddress, listDevices, PAIR_TTL_MS, refusal, resetPairing, startPairing, trust, unpair
+  completePairing, gate, isLoopback, lanAddress, legacyRedirect, listDevices, PAIR_TTL_MS, refusal, resetPairing, startPairing, trust, unpair
 } from '../../server/utils/access'
 import { PEER_HEADER, remoteOf, stampPeer, stampSecret, type NodeReqLike } from '../../server/utils/peerAddress'
 
@@ -300,5 +300,20 @@ describe('lanAddress', () => {
     expect(lanAddress({ lo0: [v4('127.0.0.1', true)], utun0: [v4('10.0.0.7')] })).toBe('10.0.0.7')
     expect(lanAddress({ lo0: [v4('127.0.0.1', true)] })).toBeUndefined()
     expect(lanAddress({ eth0: [v4('100.127.255.1')], wl0: [v4('100.128.0.1')] })).toBe('100.128.0.1')
+  })
+})
+
+describe('legacyRedirect', () => {
+  it('moves the old pages, keeping the query', () => {
+    expect(legacyRedirect('GET', '/account')).toBe('/settings/account')
+    expect(legacyRedirect('GET', '/account?error=taken')).toBe('/settings/account?error=taken')
+    expect(legacyRedirect('HEAD', '/admin')).toBe('/settings/admin')
+    expect(legacyRedirect('GET', '/api')).toBe('/settings/connections')
+  })
+  it('leaves everything else alone', () => {
+    for (const p of ['/api/', '/api/boards', '/api/me', '/apix', '/account/deleted', '/admin/x', '/', '/b/abc', '/pair', '/setup'])
+      expect(legacyRedirect('GET', p), p).toBeNull()
+    expect(legacyRedirect('POST', '/api')).toBeNull()
+    expect(legacyRedirect('POST', '/account')).toBeNull()
   })
 })

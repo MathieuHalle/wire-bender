@@ -271,7 +271,7 @@ function anonymousRead(pathname: string): boolean {
 /**
  * Public mode (spec §3): anyone may load pages, `GET /api/me`, sign-in (`/auth/*`) and the
  * board read routes; everything else needs a signed-in user. A session of a deleted
- * account waiting for its restore (ruling R1) is sent to /account for every page, and may
+ * account waiting for its restore (ruling R1) is sent to /account/deleted for every page, and may
  * send `POST /api/me/restore`. Signing out is always allowed.
  */
 export function publicGate(method: string, path: string, signedIn: boolean, pendingDeletion = false): PublicGate {
@@ -289,8 +289,27 @@ export function publicGate(method: string, path: string, signedIn: boolean, pend
   const get = method === 'GET' || method === 'HEAD'
   if (!get || !anonymousRead(pathname)) return 'deny'
   const page = !(pathname === '/api' || pathname.startsWith('/api/') || pathname.startsWith('/_') || pathname.startsWith('/auth/') || OPEN_FILES.has(pathname))
-  if (pendingDeletion && page && pathname !== '/account') return 'account'
+  if (pendingDeletion && page && pathname !== '/account/deleted' && pathname !== '/logout') return 'account'
   return 'pass'
+}
+
+/** The old page URLs and where each moved to (the dashboard layout). */
+const MOVED_PAGES: Record<string, string> = {
+  '/account': '/settings/account',
+  '/admin': '/settings/admin',
+  '/api': '/settings/connections'
+}
+
+/**
+ * Where an old page URL now lives, or null. Only `GET`/`HEAD` of the exact old pathname; the
+ * query string is kept. It runs before the gates: a signed-out `GET /api` would otherwise
+ * be the 401 JSON, not a page.
+ */
+export function legacyRedirect(method: string, path: string): string | null {
+  if (method !== 'GET' && method !== 'HEAD') return null
+  const i = path.indexOf('?')
+  const to = MOVED_PAGES[i < 0 ? path : path.slice(0, i)]
+  return to ? to + (i < 0 ? '' : path.slice(i)) : null
 }
 
 // Pairing.
