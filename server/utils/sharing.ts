@@ -38,6 +38,8 @@ export interface SharingDeps {
   base: string | null
   /** nuxt-auth-utils' hashPassword in the route. */
   hash: (plain: string) => Promise<string>
+  /** utils/sealed.ts' seal with the session secret's key, so the owner can see the password again. */
+  seal: (plain: string) => string
 }
 
 /** The local user is premium; in public mode the account's flag, read fresh per request. */
@@ -110,17 +112,36 @@ export async function patchSharing(db: Db, req: BoardRequest, text: string, deps
     if (premiumAsked && !canUsePremium(req.who)) return { status: 403, body: { error: PREMIUM_NEEDED } }
 
     const passwordHash = typeof password === 'string' ? await deps.hash(password) : password
+    const passwordSealed = typeof password === 'string' ? deps.seal(password) : password
     // Read again after the (slow) hash: compare with what is stored now.
     const now = getBoardRow(db, a.boardId)
     if (!now) return notFound()
     const set: Partial<typeof boards.$inferInsert> = {}
     if (visibility !== undefined && visibility !== now.visibility) set.visibility = visibility
-    if (passwordHash !== undefined && (passwordHash !== null || now.passwordHash !== null)) set.passwordHash = passwordHash
+    if (passwordHash !== undefined && (passwordHash !== null || now.passwordHash !== null)) {
+      set.passwordHash = passwordHash
+      set.passwordSealed = passwordSealed
+    }
     if (Object.keys(set).length > 0) {
       db.update(boards).set(set).where(eq(boards.id, a.boardId)).run()
       kickLinkPeers(a.boardId)
     }
     return sharingOf(db, a.boardId, req.who, base)
+  })
+}
+
+/**
+ * `GET /api/boards/:id/sharing/password`: the link password for its owner, `{ password }`.
+ * `password` is null with no password, and also when it cannot be shown: set before it was
+ * kept, or kept under another session secret. Setting it again makes it showable.
+ */
+export function getSharingPassword(db: Db, req: BoardRequest, base: string | null, unseal: (sealed: string) => string | null): ApiResult {
+  if (base === null) return notFound()
+  return withOwner(db, req, (a) => {
+    const row = getBoardRow(db, a.boardId)
+    if (!row) return notFound()
+    const password = row.passwordHash !== null && row.passwordSealed !== null ? unseal(row.passwordSealed) : null
+    return { status: 200, body: { password } }
   })
 }
 

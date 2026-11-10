@@ -88,7 +88,7 @@ Every board has a share link, `<WIREBENDER_URL>/b/<link id>`. The owner chooses 
 - **Edit**: signed-in visitors can edit live. A signed-out visitor can look, but must sign in to edit.
 - **Private**: the link is off. Only the owner sees the board.
 
-An optional link password is asked once per session. Private and passwords need premium (`Premium is needed for private boards and link passwords.`). Losing premium keeps what is set; lowering visibility or removing a password is always allowed.
+An optional link password is asked once per session. The owner can show it again in the Sharing tab: the server keeps it encrypted with the session secret, so a new secret means setting the password again to see it (the link keeps asking for the old one until then). Private and passwords need premium (`Premium is needed for private boards and link passwords.`). Losing premium keeps what is set; lowering visibility or removing a password is always allowed.
 
 Changing the settings disconnects everyone who joined by link; they reconnect and are checked again. **New link** gives the board a new link, and the old one stops working.
 
@@ -234,7 +234,8 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | `POST /api/boards/:id/fork` | a copy in your account, `{ id }` (signed in; on your own board it is a duplicate named `<name> (copy)`) |
 | `POST /api/boards/:id/trash` | moves the board to the trash, `{ trashedAt }` (owner) |
 | `POST /api/boards/:id/untrash` | brings it back, `{ trashedAt: null }` (owner) |
-| `GET /api/boards/:id/sharing` | `{ visibility, hasPassword, link, canUsePremium }` (owner, public mode) |
+| `GET /api/boards/:id/sharing` | `{ visibility, hasPassword, link, canUsePremium, people }` (owner, public mode) |
+| `GET /api/boards/:id/sharing/password` | the link password, `{ password }`; `null` with none, or when it was set before passwords were kept (owner, public mode) |
 | `PATCH /api/boards/:id/sharing` | `{ "visibility"?: "view"\|"edit"\|"private", "password"?: string\|null }`; answers like the GET (owner, public mode) |
 | `POST /api/boards/:id/sharing/regenerate` | a new share link, `{ link }`; the old one stops working (owner, public mode) |
 | `POST /api/links/:linkId/unlock` | `{ "password" }` opens a password link for this session (public mode; 5 wrong tries per address per 10 minutes, then `429`) |

@@ -181,6 +181,7 @@ describe('requests made with a token', () => {
       ['PATCH', `/api/boards/${id}/sharing`],
       ['GET', `/api/boards/${id}/sharing`],
       ['POST', `/api/boards/${id}/sharing/regenerate`],
+      ['GET', `/api/boards/${id}/sharing/password`],
       ['GET', '/api/tokens'],
       ['POST', '/api/tokens'],
       ['DELETE', '/api/tokens/abc'],

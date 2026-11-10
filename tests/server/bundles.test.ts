@@ -351,10 +351,14 @@ describe('download-all and admin export', () => {
 })
 
 describe('the migration', () => {
+  const migration = (n: string) => readFileSync(path.join(MIGRATIONS, readdirSync(MIGRATIONS).find(f => f.startsWith(`${n}_`) && f.endsWith('.sql'))!), 'utf8')
   it('the migration only adds a column', () => {
-    const sqlFiles = readdirSync(MIGRATIONS).filter(f => f.endsWith('.sql')).sort()
-    const sql = readFileSync(path.join(MIGRATIONS, sqlFiles.at(-1)!), 'utf8')
+    const sql = migration('0004')
     expect(sql).toMatch(/ALTER TABLE `revisions` ADD `imported` integer DEFAULT 0 NOT NULL/)
     expect(sql).not.toMatch(/DROP|CREATE TABLE|RENAME|INSERT/i)
+  })
+  it('the sealed link password migration only adds a nullable column', () => {
+    const sql = migration('0005')
+    expect(sql.trim()).toBe('ALTER TABLE `boards` ADD `password_sealed` text;')
   })
 })

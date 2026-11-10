@@ -232,7 +232,7 @@ describe('trash', () => {
     for (const unlocked of [[], [unlockEntry(b.linkId, 'h:secret')]]) {
       const req = { key: b.linkId, who: bob, unlocked }
       expect(getSharing(db, req, base)).toEqual(unknown)
-      expect(await patchSharing(db, req, JSON.stringify({ visibility: 'view' }), { base, hash: async p => `h:${p}` })).toEqual(unknown)
+      expect(await patchSharing(db, req, JSON.stringify({ visibility: 'view' }), { base, hash: async p => `h:${p}`, seal: p => `s:${p}` })).toEqual(unknown)
       expect(trashBoard(db, req)).toEqual(unknown)
       expect(api.renameBoard(db, req, JSON.stringify({ name: 'X' }))).toEqual(unknown)
     }

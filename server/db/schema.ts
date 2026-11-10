@@ -18,6 +18,8 @@ export const boards = sqliteTable('boards', {
   linkId: text('link_id').notNull(),
   visibility: text('visibility', { enum: BOARD_VISIBILITY }).notNull().default('view'),
   passwordHash: text('password_hash'),
+  /** The link password sealed for its owner to see again (utils/sealed.ts); null before it was kept. */
+  passwordSealed: text('password_sealed'),
   trashedAt: integer('trashed_at'),
   /** The board this one was forked from. */
   forkedFrom: text('forked_from'),

@@ -11,7 +11,7 @@ import { signIn } from '../../server/utils/accounts'
 import { access, resetUnlocks, unlockLink, withUnlocked } from '../../server/utils/boardAccess'
 import { createBoard, getBoardRow } from '../../server/utils/boards'
 import { openRoom, type PeerLink } from '../../server/utils/rooms'
-import { PREMIUM_NEEDED, getSharing, patchSharing, regenerateLink } from '../../server/utils/sharing'
+import { PREMIUM_NEEDED, getSharing, getSharingPassword, patchSharing, regenerateLink } from '../../server/utils/sharing'
 import type { Who } from '../../server/utils/who'
 
 let dir: string
@@ -32,7 +32,10 @@ afterEach(() => {
 // A stand-in for nuxt-auth-utils' hashPassword / verifyPassword.
 const hash = async (plain: string) => `h:${plain}`
 const verify = async (h: string, plain: string) => h === `h:${plain}`
-const deps = { base: BASE, hash }
+// A stand-in for utils/sealed.ts' seal / unseal.
+const seal = (plain: string) => `s:${plain}`
+const unseal = (sealed: string) => sealed.startsWith('s:') ? sealed.slice(2) : null
+const deps = { base: BASE, hash, seal }
 
 function user(name: string, isPremium = false): Who & { kind: 'user' } {
   const r = signIn(db, 'github', { id: `gh-${name}`, name })
@@ -185,9 +188,9 @@ describe('PATCH sharing', () => {
       db.update(boards).set({ visibility: 'private', passwordHash: 'h:other' }).where(eq(boards.id, b.id)).run()
       return `h:${plain}`
     }
-    const r = await patchSharing(db, { key: b.id, who: pam }, JSON.stringify({ visibility: 'view', password: 'mine' }), { base: BASE, hash: slowHash })
+    const r = await patchSharing(db, { key: b.id, who: pam }, JSON.stringify({ visibility: 'view', password: 'mine' }), { base: BASE, hash: slowHash, seal })
     expect(r).toMatchObject({ status: 200, body: { visibility: 'view', hasPassword: true } })
-    expect(getBoardRow(db, b.id)).toMatchObject({ visibility: 'view', passwordHash: 'h:mine' })
+    expect(getBoardRow(db, b.id)).toMatchObject({ visibility: 'view', passwordHash: 'h:mine', passwordSealed: 's:mine' })
   })
 
   it('lowering edit to view closes link peers', async () => {
@@ -235,6 +238,44 @@ describe('PATCH sharing', () => {
     expect(access(db, bob, b.linkId, list)).toMatchObject({ ok: true })
     expect((await patch(pam, b.id, { password: null })).status).toBe(200)
     expect(access(db, bob, b.linkId, [])).toMatchObject({ ok: true })
+  })
+})
+
+describe('GET sharing/password', () => {
+  const read = (who: Who, key: string, base: string | null = BASE) => getSharingPassword(db, { key, who }, base, unseal)
+
+  it('the owner sees the password they set, until it is removed', async () => {
+    const ada = user('Ada', true)
+    const b = board(ada.userId)
+    expect(read(ada, b.id)).toEqual({ status: 200, body: { password: null } })
+    await patch(ada, b.id, { password: 'open sesame' })
+    expect(getBoardRow(db, b.id)).toMatchObject({ passwordHash: 'h:open sesame', passwordSealed: 's:open sesame' })
+    expect(read(ada, b.id)).toEqual({ status: 200, body: { password: 'open sesame' } })
+    await patch(ada, b.id, { password: 'new one' })
+    expect(read(ada, b.id).body).toEqual({ password: 'new one' })
+    await patch(ada, b.id, { password: null })
+    expect(getBoardRow(db, b.id)).toMatchObject({ passwordHash: null, passwordSealed: null })
+    expect(read(ada, b.id).body).toEqual({ password: null })
+  })
+
+  it('a password kept before, or under another secret, reads as null', () => {
+    const ada = user('Ada', true)
+    const before = board(ada.userId, { passwordHash: 'h:old' })
+    const otherKey = board(ada.userId, { passwordHash: 'h:x', passwordSealed: 'garbled' })
+    expect(read(ada, before.id).body).toEqual({ password: null })
+    expect(read(ada, otherKey.id).body).toEqual({ password: null })
+  })
+
+  it('is 404 to anyone but the owner, through the link, and in local mode', async () => {
+    const ada = user('Ada', true)
+    const bob = user('Bob', true)
+    const b = board(ada.userId)
+    await patch(ada, b.id, { password: 'secret' })
+    expect(read(bob, b.id).status).toBe(404)
+    expect(read(ada, b.linkId).status).toBe(404)
+    expect(read({ kind: 'anonymous' }, b.id).status).toBe(404)
+    expect(read(ada, b.id, null).status).toBe(404)
+    expect(tokenRefusal(`/api/boards/${b.id}/sharing/password`, 'GET')).toBe(true)
   })
 })
 

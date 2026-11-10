@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The Sharing tab: the board's link (with Copy), who the link lets in (View / Edit /
-// Private), a link password, "New link", and the signed-in people who opened the link. The
+// Private), a link password (which the owner can show again: GET .../sharing/password), "New link", and the signed-in people who opened the link. The
 // owner's only, in public mode (GET/PATCH /api/boards/:id/sharing). Private and passwords
 // need premium; losing it keeps them, and they can still be removed. Every change closes
 // the link's open sessions, which reconnect with the new access.
@@ -102,19 +102,37 @@ const passwordLength = computed(() => [...password.value].length)
 const passwordOk = computed(() => passwordLength.value >= 4 && passwordLength.value <= 100)
 async function setPassword() {
   if (!passwordOk.value) return
-  if (await change({ password: password.value }, 'Link password set')) password.value = ''
-}
-const removePassword = () => change({ password: null }, 'Link password removed')
-
-async function copy() {
-  if (!sharing.value) return
-  try {
-    await navigator.clipboard.writeText(sharing.value.link)
-    toast.add({ title: 'Link copied', color: 'success', icon: 'i-lucide-check' })
-  } catch {
-    toast.add({ title: 'Could not copy the link. Select it and copy it by hand.', color: 'warning', icon: 'i-lucide-ban' })
+  if (await change({ password: password.value }, 'Link password set')) {
+    password.value = ''
+    shown.value = undefined
   }
 }
+async function removePassword() {
+  if (await change({ password: null }, 'Link password removed')) shown.value = undefined
+}
+
+/** The link password on show: undefined while hidden, null when it can't be shown (set before it was kept). */
+const shown = ref<string | null | undefined>()
+watch(() => props.boardId, () => {
+  shown.value = undefined
+})
+async function showPassword() {
+  try {
+    shown.value = (await $fetch<{ password: string | null }>(`${url.value}/password`)).password
+  } catch (e) {
+    toast.add({ title: `Could not show the password: ${reasonOf(e)}`, color: 'error', icon: 'i-lucide-ban' })
+  }
+}
+
+async function copyText(text: string, done: string) {
+  try {
+    await navigator.clipboard.writeText(text)
+    toast.add({ title: done, color: 'success', icon: 'i-lucide-check' })
+  } catch {
+    toast.add({ title: 'Could not copy. Select it and copy it by hand.', color: 'warning', icon: 'i-lucide-ban' })
+  }
+}
+const copy = () => sharing.value && copyText(sharing.value.link, 'Link copied')
 
 async function newLink() {
   if (busy.value) return
@@ -193,14 +211,63 @@ function accessOf(p: Person, v: Visibility): string {
         </template>
       </URadioGroup>
 
+      <div
+        v-if="sharing.hasPassword"
+        class="flex flex-col gap-1"
+      >
+        <span class="text-xs font-medium text-muted">The link asks for a password</span>
+        <div class="flex items-center gap-1">
+          <span
+            class="min-w-0 flex-1 truncate font-mono"
+            :class="{ 'text-muted': shown === undefined }"
+            data-testid="link-password"
+          >{{ shown ?? '••••••••' }}</span>
+          <UButton
+            type="button"
+            size="sm"
+            variant="ghost"
+            color="neutral"
+            :icon="shown ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+            :label="shown ? 'Hide' : 'Show'"
+            :disabled="busy || shown === null"
+            @click="shown ? (shown = undefined) : showPassword()"
+          />
+          <UButton
+            v-if="shown"
+            type="button"
+            size="sm"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-copy"
+            label="Copy"
+            @click="copyText(shown, 'Password copied')"
+          />
+          <UButton
+            type="button"
+            size="sm"
+            variant="ghost"
+            color="error"
+            label="Remove"
+            :disabled="busy"
+            @click="removePassword"
+          />
+        </div>
+        <p
+          v-if="shown === null"
+          class="text-xs text-muted"
+        >
+          This password was set before passwords could be shown again. Set it again to see it here.
+        </p>
+      </div>
+
       <form
         v-if="sharing.canUsePremium"
         class="space-y-2"
         @submit.prevent="setPassword"
       >
         <UFormField
-          label="Link password"
-          :help="sharing.hasPassword ? 'The link asks for a password. Setting a new one asks everyone again.' : 'Optional: visitors must enter it to open the link. 4 to 100 characters.'"
+          :label="sharing.hasPassword ? 'New link password' : 'Link password'"
+          :help="sharing.hasPassword ? 'Setting a new one asks everyone again.' : 'Optional: visitors must enter it to open the link. 4 to 100 characters.'"
         >
           <div class="flex gap-2">
             <UInput
@@ -219,33 +286,6 @@ function accessOf(p: Person, v: Visibility): string {
           </div>
         </UFormField>
       </form>
-      <!-- Outside the password form: removing it never submits that form. -->
-      <UButton
-        v-if="sharing.canUsePremium && sharing.hasPassword"
-        type="button"
-        size="sm"
-        variant="link"
-        color="error"
-        label="Remove password"
-        class="-mt-4 self-start"
-        :disabled="busy"
-        @click="removePassword"
-      />
-      <div
-        v-else-if="sharing.hasPassword"
-        class="flex items-center gap-2"
-      >
-        <span class="text-muted">The link asks for a password.</span>
-        <UButton
-          type="button"
-          size="sm"
-          variant="link"
-          color="error"
-          label="Remove password"
-          :disabled="busy"
-          @click="removePassword"
-        />
-      </div>
 
       <UAlert
         v-if="confirmingNewLink"

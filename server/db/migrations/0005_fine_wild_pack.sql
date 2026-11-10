@@ -1,0 +1,1 @@
+ALTER TABLE `boards` ADD `password_sealed` text;
