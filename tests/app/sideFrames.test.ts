@@ -39,5 +39,12 @@ describe('sideFrames', () => {
     const f = sideFrames({ top: { w: 50, h: 60 }, bottom: { w: 40, h: 60 } })
     expect(f.top).toEqual({ x: 0, y: 0, w: 50, h: 60 })
     expect(f.bottom).toEqual({ x: 60, y: 0, w: 40, h: 60 })
+    expect(sideFrames({ top: { w: 50, h: 60 }, bottom: { w: 40, h: 60 } }, 'lr')).toEqual(f)
+  })
+
+  it('below (tb): the bottom under the top after a gap, both at x 0', () => {
+    const f = sideFrames({ top: { w: 50, h: 60 }, bottom: { w: 40, h: 70 } }, 'tb')
+    expect(f.top).toEqual({ x: 0, y: 0, w: 50, h: 60 })
+    expect(f.bottom).toEqual({ x: 0, y: 60 + 14, w: 40, h: 70 })
   })
 })

@@ -2,7 +2,7 @@
 // and lit sets for a highlighted group. Pure functions over core/ results (which group
 // sits at a hole is core's `groupAtHole`).
 import { holeKey, type Hole } from '~core/holes'
-import { sideMap, type Mirror, type SideMap } from '~core/sideView'
+import { sideMap, type Flip, type Mirror, type SideMap } from '~core/sideView'
 import type { BoardFile, Side } from '~core/schema'
 import type { Conductor, Connectivity } from '~core/connectivity'
 import type { PlacedPart } from '~core/footprints'
@@ -98,10 +98,20 @@ export function sideBox(geo: Geo, placed: PlacedPart[]): { x: number, y: number,
 }
 
 /**
- * Where the two sides sit on the canvas, in world mm: top on the left, bottom on the
- * right, a gap between them, both aligned at y 0.
+ * Where the two sides sit on the canvas, in world mm. `lr` (the bottom mirrored left↔right):
+ * the bottom beside the top, on its right, both aligned at y 0. `tb` (mirrored top↔bottom):
+ * the bottom below the top, both aligned at x 0. Either way a gap of a fifth of the larger
+ * side between them, so a hole on the bottom view lines up with itself on the top view
+ * straight across the gap.
  */
-export function sideFrames(sizes: Record<Side, { w: number, h: number }>): Record<Side, { x: number, y: number, w: number, h: number }> {
+export function sideFrames(sizes: Record<Side, { w: number, h: number }>, place: Flip = 'lr'): Record<Side, { x: number, y: number, w: number, h: number }> {
+  if (place === 'tb') {
+    const gap = Math.max(sizes.top.h, sizes.bottom.h) * 0.2
+    return {
+      top: { x: 0, y: 0, ...sizes.top },
+      bottom: { x: 0, y: sizes.top.h + gap, ...sizes.bottom }
+    }
+  }
   const gap = Math.max(sizes.top.w, sizes.bottom.w) * 0.2
   return {
     top: { x: 0, y: 0, ...sizes.top },

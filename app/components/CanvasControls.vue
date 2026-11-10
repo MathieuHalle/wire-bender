@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // The 2D canvas's own controls, over its top-right corner: zoom, fit, the bottom mirror and
-// which way it turns the board over. The 3D view has its own (orbit, the camera presets);
-// these only exist in 2D.
+// where the bottom sits: beside the top (mirrored left↔right, the board turned over sideways)
+// or below it (mirrored top↔bottom, end over end), so each hole lines up with itself across
+// the gap. The 3D view has its own (orbit, the camera presets); these only exist in 2D.
 import type { Flip } from '~core/sideView'
 import { ZOOM_MAX, ZOOM_MIN } from '~/utils/camera2d'
 
@@ -11,12 +12,12 @@ defineProps<{
 }>()
 const emit = defineEmits<{ 'zoom-in': [], 'zoom-out': [], 'fit': [] }>()
 const mirrorBottom = defineModel<boolean>('mirrorBottom', { required: true })
-/** Left-right (turned over sideways) or top-bottom (end over end); only drawn while mirrored. */
+/** Where the bottom sits, and so which way it is mirrored: `lr` beside the top, `tb` below it. */
 const flip = defineModel<Flip>('flip', { required: true })
 
 const FLIP_CHOICES = [
-  { id: 'lr', label: 'L↔R', title: 'Mirror left↔right: the board turned over sideways' },
-  { id: 'tb', label: 'T↔B', title: 'Mirror top↔bottom: the board turned over end over end' }
+  { id: 'lr', label: 'Beside', title: 'The bottom beside the top; mirrored, it is turned over sideways (left↔right)' },
+  { id: 'tb', label: 'Below', title: 'The bottom below the top; mirrored, it is turned over end over end (top↔bottom)' }
 ] as const
 </script>
 
@@ -71,7 +72,7 @@ const FLIP_CHOICES = [
     <div
       class="-ml-1 flex items-center pr-1"
       role="group"
-      aria-label="Mirror the bottom"
+      aria-label="Where the bottom sits"
     >
       <UButton
         v-for="(c, i) in FLIP_CHOICES"
@@ -81,9 +82,8 @@ const FLIP_CHOICES = [
         :variant="flip === c.id ? 'solid' : 'outline'"
         :class="i === 0 ? 'rounded-r-none' : 'rounded-l-none -ml-px'"
         :label="c.label"
-        :title="mirrorBottom ? c.title : `${c.title} (turn Mirror bottom on to use it)`"
+        :title="c.title"
         :aria-pressed="flip === c.id"
-        :disabled="!mirrorBottom"
         @click="flip = c.id"
       />
     </div>

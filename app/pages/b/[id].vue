@@ -161,7 +161,12 @@ onMounted(() => {
   bottomFlip.value = loadFlip(storage)
   loaded.value = true
   watch(panel, p => savePanel(p, storage), { deep: true })
-  watch(bottomFlip, f => saveFlip(f, storage))
+  watch(bottomFlip, (f) => {
+    saveFlip(f, storage)
+    // The bottom moved (beside or below): frame what was framed, in its new place.
+    const v = view.value
+    if (v !== '3d') nextTick(() => canvas.value?.frame(v))
+  })
 })
 /** The layers the views draw: the stored ones once loaded. */
 const layers = computed(() => (loaded.value ? panel.value.layers : ALL_LAYERS))
@@ -287,7 +292,7 @@ const sideEvents = Object.fromEntries((['top', 'bottom'] as const).map(s => [s, 
   segment: (a: Hole, b: Hole) => (tool.value === 'erase' && editsHidden(s, a, b)) || onSegmentClick(s, a, b)
 }])) as Record<Side, { hover(h: Hole | null): void, hole(h: Hole): void, segment(a: Hole, b: Hole): void }>
 
-/** The two sides as frames on the canvas, in mm: top on the left, bottom on the right. */
+/** The two sides as frames on the canvas, in mm: the bottom beside the top or below it (the flip). */
 const frames = computed(() => {
   const b = board.value
   if (!b) return []
@@ -295,7 +300,7 @@ const frames = computed(() => {
     const box = sideBox(makeGeo(b, s === 'bottom' ? bottomMirror.value : 'none'), placed.value)
     return { w: box.w, h: box.h }
   }
-  const at = sideFrames({ top: size('top'), bottom: size('bottom') })
+  const at = sideFrames({ top: size('top'), bottom: size('bottom') }, bottomFlip.value)
   return (['top', 'bottom'] as const).map(s => ({ id: s, title: sideTitle(s), rect: at[s] }))
 })
 
