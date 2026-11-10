@@ -1,6 +1,7 @@
 <!-- eslint-disable vue/multi-word-component-names -- the plan names it Toolbar -->
 <script setup lang="ts">
-// The view switch in the header: 2D or 3D. Each view keeps its own controls on its canvas: framing, zoom,
+// The view switch, 2D or 3D, at the top left of the canvas in both views, after that view's framing
+// buttons (2D) or camera presets (3D). Each view keeps its own other controls: zoom,
 // fit and mirror in 2D; the camera presets in 3D. The editing tools and undo/redo are in
 // the side panel's Edit tab.
 import type { View } from '~/utils/boardView'

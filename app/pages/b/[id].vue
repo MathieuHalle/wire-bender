@@ -439,10 +439,6 @@ const sideTitle = (s: Side) => (s === 'top'
         @click="openLayers"
       />
       <PresenceBar :peers="peers" />
-      <Toolbar
-        :view="view"
-        @mode="pickMode"
-      />
       <div class="ml-auto flex gap-1">
         <UButton
           v-if="canShare"
@@ -651,7 +647,14 @@ const sideTitle = (s: Side) => (s === 'top'
               :layers="layers"
               @hover-tag="(t: Tag | null) => hoverTag = t"
               @back="view = 'both'"
-            />
+            >
+              <template #controls>
+                <Toolbar
+                  :view="view"
+                  @mode="pickMode"
+                />
+              </template>
+            </LazyBoard3D>
             <template #error="{ error, clearError }">
               <Board3DFallback
                 v-bind="fallbackAlert({ kind: 'error', error })"
@@ -673,20 +676,28 @@ const sideTitle = (s: Side) => (s === 'top'
             @zoom="(p: number) => zoomPct = p"
           >
             <template #overlay>
-              <div
-                class="flex gap-1"
-                role="group"
-                aria-label="Frame"
-              >
-                <UButton
-                  v-for="v in FRAMINGS"
-                  :key="v.id"
-                  size="xs"
-                  color="neutral"
-                  :variant="view === v.id ? 'solid' : 'outline'"
-                  :label="v.label"
-                  :title="`${v.label} (${v.key})`"
-                  @click="pickView(v.id)"
+              <!-- The framings, then the 2D / 3D switch: the same place as in the 3D view. -->
+              <div class="flex items-center gap-3">
+                <div
+                  class="flex gap-1"
+                  role="group"
+                  aria-label="Frame"
+                >
+                  <UButton
+                    v-for="v in FRAMINGS"
+                    :key="v.id"
+                    size="xs"
+                    color="neutral"
+                    :variant="view === v.id ? 'solid' : 'outline'"
+                    :label="v.label"
+                    :title="`${v.label} (${v.key})`"
+                    :aria-pressed="view === v.id"
+                    @click="pickView(v.id)"
+                  />
+                </div>
+                <Toolbar
+                  :view="view"
+                  @mode="pickMode"
                 />
               </div>
             </template>

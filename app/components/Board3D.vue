@@ -213,10 +213,17 @@ function onLeave() {
   setHovered(null)
 }
 
+/** The camera preset the view is on; none once the user orbits, pans or zooms away from it. */
+const activePreset = ref<CameraPresetName | null>(null)
+function onUserMove() {
+  activePreset.value = null
+}
+
 function applyPreset(which: CameraPresetName) {
   const cam = camera
   const ctl = controls.value?.instance
   if (!ctl) return
+  activePreset.value = which
   const el = wrap.value
   const aspect = el && el.clientHeight > 0 ? el.clientWidth / el.clientHeight : cam.aspect
   const p = cameraPreset(scene.value, which, aspect)
@@ -232,6 +239,8 @@ function onReady(c: TresContext) {
   // The controls mount with the canvas; wait a tick so their instance exists.
   nextTick(() => {
     controls.value?.instance?.addEventListener('change', onCameraChange)
+    // 'start' is the user's own drag or wheel only (a preset's update() does not send it).
+    controls.value?.instance?.addEventListener('start', onUserMove)
     applyPreset('iso')
   })
   if (import.meta.dev) {
@@ -280,6 +289,7 @@ onBeforeUnmount(() => {
   prims = []
   pickable = []
   controls.value?.instance?.removeEventListener('change', onCameraChange)
+  controls.value?.instance?.removeEventListener('start', onUserMove)
   content.clear()
   dispose(marks)
   sun.dispose()
@@ -356,20 +366,27 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
           {{ tip.net }}
         </div>
       </div>
-      <div
-        class="absolute top-2 left-2 flex gap-1"
-        role="group"
-        aria-label="Camera"
-      >
-        <UButton
-          v-for="p in PRESETS"
-          :key="p.id"
-          size="xs"
-          color="neutral"
-          variant="solid"
-          :label="p.label"
-          @click="applyPreset(p.id)"
-        />
+      <!-- Top left, as on the 2D canvas: the camera presets, then the page's controls (the
+           2D / 3D switch). The preset the view is on is filled, like the 2D framings. -->
+      <div class="absolute top-2 left-2 flex items-center gap-3">
+        <div
+          class="flex gap-1"
+          role="group"
+          aria-label="Camera"
+        >
+          <UButton
+            v-for="p in PRESETS"
+            :key="p.id"
+            size="xs"
+            color="neutral"
+            :variant="activePreset === p.id ? 'solid' : 'outline'"
+            :label="p.label"
+            :title="`${p.label} view`"
+            :aria-pressed="activePreset === p.id"
+            @click="applyPreset(p.id)"
+          />
+        </div>
+        <slot name="controls" />
       </div>
     </div>
     <p class="border-t border-default px-4 py-1 text-xs text-muted">
