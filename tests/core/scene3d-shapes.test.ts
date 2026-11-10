@@ -40,6 +40,12 @@ describe('outlines', () => {
     expect(roundedRect(r, 0)).toHaveLength(4)
     const big = roundedRect(r, 99)
     expect(Math.max(...big.map(q => q.z)) - Math.min(...big.map(q => q.z))).toBeCloseTo(4)
+    // Clamped to half the short side the arcs meet: no point repeats the one before it.
+    for (const pts of [big, roundedRect({ x: 0, y: 0, w: 4, h: 4 }, 2)])
+      pts.forEach((q, i) => {
+        const prev = pts[(i + pts.length - 1) % pts.length]!
+        expect(Math.hypot(q.x - prev.x, q.z - prev.z)).toBeGreaterThan(1e-6)
+      })
   })
 
   it('a D outline is a circle cut flat on the flat side', () => {

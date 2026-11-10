@@ -1,7 +1,7 @@
 // Bench sheet model: what to place and in which order, which legs to fold, and the
 // beep / no-beep meter lists. Pure data; the export renders it.
 import { holeName, tryParseHole, type Hole } from '../holes'
-import { bodyHeightMm, FOOTPRINT_PITCH_MM, placePart, type PlacedPart } from '../footprints'
+import { bodyHeightMm, FOOTPRINT_PITCH_MM, isStanding, placePart, type PlacedPart } from '../footprints'
 import { buildConnectivity } from '../connectivity'
 import { runCheck, type CheckResult, type Finding } from '../check'
 import type { BoardFile, HoleName } from '../schema'
@@ -95,7 +95,7 @@ export function benchModel(board: BoardFile): BenchModel {
       heightMm: h,
       // placePart lays bodies out on the footprint grid, so facing compares on that grid.
       orientation: orientation(pp, FOOTPRINT_PITCH_MM),
-      mounting: pp.part.standing && pp.fp.twoLead ? 'standing' : pp.fp.twoLead ? 'lying' : 'upright'
+      mounting: isStanding(pp.part, pp.fp) ? 'standing' : pp.fp.twoLead && !pp.fp.body.round ? 'lying' : 'upright'
     }))
 
   const leads = new Map<string, { id: string, hole: Hole, net: string | null }>()

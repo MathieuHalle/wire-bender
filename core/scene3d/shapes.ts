@@ -22,12 +22,19 @@ export function roundedRect(r: Rect, radius: number, steps = ARC_STEPS): XZ[] {
   const z0 = r.y + k
   const z1 = r.y + r.h - k
   const h = Math.PI / 2
-  return [
+  return dedup([
     ...arc({ x: x1, z: z0 }, k, -h, 0, steps),
     ...arc({ x: x1, z: z1 }, k, 0, h, steps),
     ...arc({ x: x0, z: z1 }, k, h, 2 * h, steps),
     ...arc({ x: x0, z: z0 }, k, 2 * h, 3 * h, steps)
-  ]
+  ])
+}
+
+/** The outline without a point equal to the one before it (the last compared with the first). */
+function dedup(pts: XZ[]): XZ[] {
+  const same = (a: XZ, b: XZ) => Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.z - b.z) < 1e-9
+  const out = pts.filter((q, i) => i === 0 || !same(q, pts[i - 1]!))
+  return out.length > 1 && same(out[0]!, out.at(-1)!) ? out.slice(0, -1) : out
 }
 
 /**

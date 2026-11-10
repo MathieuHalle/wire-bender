@@ -44,8 +44,10 @@ pins `a` and `b`; `b` is always the cathode or minus (as for the diode today).
 | `to92` | `1`, `2`, `3` in a row | D-shaped body, flat face mark `flat`, 3 mm leg stand-off |
 | `button-6x6-hH` for H 4.3, 5, 7, 9.5, 13 | `1` (0,0), `2` (3,0), `3` (0,2), `4` (3,2) | `1`–`2` and `3`–`4` are joined inside; pressing joins them |
 | `trimmer-3296w` | `1`, `2` (wiper), `3` in a row | 9.5 x 4.8 x 10, adjust screw on top |
-| `trimmer-3362p` | `1`, `2` (wiper), `3` in a row | 6.8 x 7 x 4.5 square, round dial on top |
-| `relay-srd` | `C1`, `C2` (coil), `COM`, `NO`, `NC` | Songle SRD-05VDC-SL-C, 19 x 15.5 x 15; pins snapped to the grid |
+| `trimmer-3362p` | `1`, `2` (wiper), `3` in a row | 6.60 x 6.99 x 4.88 (Bourns datasheet: pins in-line on 2.54), round dial on top |
+| `relay-srd` | `1` COM, `2` and `5` coil, `3` and `4` contacts (KiCad pad numbers) | Songle SRD-05VDC-SL-C, 19 x 15.5 x 15; pins snapped to the grid 1–1.5 mm out, "bend to fit". Ruling (build): KiCad's symbol does not name NO and NC, so the contacts keep their numbers and the doc says to check them with a meter. |
+
+Ruling (review): a round body (LED, electrolytic) is checked and drawn as its real square on the lead midpoint, never the bounding box of a rotated one, and `standing` is ignored for it. Two round bodies still collide by their squares, not their circles (on the safe side).
 
 Heights are the part's highest point above the board, as `heightMm` is today.
 

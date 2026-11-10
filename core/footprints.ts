@@ -209,7 +209,12 @@ function buttonFp(heightMm: number): Footprint {
   }
 }
 
-/** Trimmers: pins `1`, `2` (the wiper) and `3` in a row, the body centred over pin 2. */
+/**
+ * Trimmers: pins `1`, `2` (the wiper) and `3` in a row 2.54 apart, the body centred over pin 2
+ * along the row. 3296W as KiCad's Potentiometer_Bourns_3296W_Vertical; 3362P from the Bourns
+ * 3362 datasheet ("all pins in-line on 2.54 center"; 6.60 x 6.99 x 4.88, the pin row 3.53 from
+ * the front edge).
+ */
 const TRIMMERS: Footprint[] = [
   {
     id: 'trimmer-3296w', name: 'Trimmer 3296W (multi-turn, top adjust)',
@@ -219,7 +224,7 @@ const TRIMMERS: Footprint[] = [
   {
     id: 'trimmer-3362p', name: 'Trimmer 3362P (single turn)',
     pins: [p('1', 0, 0), p('2', 1, 0), p('3', 2, 0)],
-    body: { rect: { x: PITCH - 3.4, y: -3.5, w: 6.8, h: 7.0 }, heightMm: 4.5, side: 'top' }, shape: 'trimmer-3362p', mark: 'pin1'
+    body: { rect: { x: PITCH - 3.3, y: 3.53 - 6.99, w: 6.6, h: 6.99 }, heightMm: 4.88, side: 'top' }, shape: 'trimmer-3362p', mark: 'pin1'
   }
 ]
 
@@ -287,8 +292,16 @@ function boxOf(corners: { x: number, y: number }[]): Rect {
   return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y }
 }
 
+/**
+ * A two-lead part stood on end (`standing`). Round bodies (LEDs, electrolytics) already stand
+ * upright over both leads, so `standing` means nothing for them and is ignored.
+ */
+export function isStanding(part: Part, fp: Footprint): boolean {
+  return !!part.standing && !!fp.twoLead && !fp.body.round
+}
+
 export function bodyHeightMm(part: Part, fp: Footprint): number {
-  return part.standing && fp.twoLead ? STANDING_HEIGHT_MM : fp.body.heightMm
+  return isStanding(part, fp) ? STANDING_HEIGHT_MM : fp.body.heightMm
 }
 
 export function placePart(part: Part): PlacedPart {
@@ -312,7 +325,7 @@ export function placePart(part: Part): PlacedPart {
     pins = [mk('a', a, fp.pins[0]!.role), mk('b', b, fp.pins[1]!.role)]
     const am = holeMm(a, PITCH)
     const bm = holeMm(b, PITCH)
-    if (part.standing) {
+    if (isStanding(part, fp)) {
       const d = isDiodePart(part) ? STANDING_DIODE_DIAMETER_MM : STANDING_RESISTOR_DIAMETER_MM
       local = { x: -d / 2, y: -d / 2, w: d, h: d }
       originMm = am
@@ -339,7 +352,7 @@ export function placePart(part: Part): PlacedPart {
   }
 
   let bodyRectMm: Rect
-  if (fp.twoLead && !part.standing) {
+  if (fp.twoLead && !isStanding(part, fp) && !fp.body.round) {
     const c = local
     const cs = [[c.x, c.y], [c.x + c.w, c.y], [c.x + c.w, c.y + c.h], [c.x, c.y + c.h]].map(([x, y]) => ({
       x: originMm.x + x! * Math.cos(angle) - y! * Math.sin(angle),

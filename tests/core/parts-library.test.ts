@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { benchModel } from '~core/bench/sheet'
-import { FOOTPRINT_PITCH_MM, FOOTPRINTS, placePart, RELAY_SRD_PADS_MM } from '~core/footprints'
+import { runCheck } from '~core/check'
+import { bodyHeightMm, FOOTPRINT_PITCH_MM, FOOTPRINTS, placePart, RELAY_SRD_PADS_MM, tabPlateMm } from '~core/footprints'
 import { holeMm } from '~core/holes'
 import { buildScene, COLORS, type Prim } from '~core/scene3d'
 import type { Part } from '~core/schema'
@@ -31,8 +32,8 @@ describe('LEDs', () => {
     }
   })
 
-  it('the body circle is centred between the leads, either way round', () => {
-    for (const [at, to] of [['C3', 'C4'], ['C3', 'D3']]) {
+  it('the body circle is centred between the leads and keeps its size, either way round or diagonal', () => {
+    for (const [at, to] of [['C3', 'C4'], ['C3', 'D3'], ['C3', 'D4'], ['E5', 'G7']]) {
       const r = placePart({ ref: 'D1', footprint: 'led-5mm', at, to, rotation: 0, pins: {} }).bodyRectMm
       const a = mm(at)
       const b = mm(to)
@@ -108,9 +109,39 @@ describe('TO-92', () => {
     expect(legs.filter(p => p.kind === 'cylinder')).toHaveLength(1)
   })
 
-  it('has no metal tab to touch', () => {
-    const s = buildScene(mk({ board: { cols: 30, rows: 30 }, parts: [{ ref: 'Q1', footprint: 'to92', at: 'E5', rotation: 0, pins: {} }] }))
-    expect(s.prims.some(p => p.tag.id === 'Q1' && p.metal && p.tag.kind === 'part')).toBe(false)
+  it('has no metal tab: a lead against its flat face is not a tab contact', () => {
+    const q1: Part = { ref: 'Q1', footprint: 'to92', at: 'E5', rotation: 0, pins: { 1: 'A', 2: 'B', 3: 'C' } }
+    expect(tabPlateMm(placePart(q1))).toBeUndefined()
+    // A resistor lead in the hole just in front of the flat face (row F).
+    const b = mk({ board: { cols: 30, rows: 30 }, parts: [q1, { ref: 'R1', footprint: 'axial', at: 'F6', to: 'F10', rotation: 0, pins: { a: 'D', b: 'E' } }] })
+    expect(runCheck(b).findings.filter(f => f.rule === 'touchesTab')).toEqual([])
+  })
+})
+
+describe('round bodies ignore standing', () => {
+  it('an LED or electrolytic marked standing keeps its height, size and place', () => {
+    for (const footprint of ['led-5mm', 'cap-elec-10x20']) {
+      const base: Part = { ref: 'C1', footprint, at: 'E5', rotation: 0, pins: {} }
+      const lying = placePart(base)
+      const standing = placePart({ ...base, standing: true })
+      expect(standing.bodyRectMm).toEqual(lying.bodyRectMm)
+      expect(standing.bodyHoles).toEqual(lying.bodyHoles)
+      expect(bodyHeightMm({ ...base, standing: true }, standing.fp)).toBe(standing.fp.body.heightMm)
+    }
+  })
+
+  it('the bench sheet calls them upright, and an axial lying or standing', () => {
+    const m = benchModel(mk({
+      board: { cols: 30, rows: 30 },
+      parts: [
+        { ref: 'C1', footprint: 'cap-elec-8x12', at: 'E5', to: 'E7', rotation: 0, standing: true, pins: {} },
+        { ref: 'D1', footprint: 'led-3mm', at: 'J5', to: 'J6', rotation: 0, pins: {} },
+        { ref: 'R1', footprint: 'axial', at: 'M5', to: 'M9', rotation: 0, pins: {} },
+        { ref: 'R2', footprint: 'axial', at: 'P5', to: 'P6', rotation: 0, standing: true, pins: {} }
+      ]
+    }))
+    const mounting = (ref: string) => JSON.stringify(m).match(new RegExp(`"ref":"${ref}"[^}]*?"mounting":"(\\w+)"`))?.[1]
+    expect([mounting('C1'), mounting('D1'), mounting('R1'), mounting('R2')]).toEqual(['upright', 'upright', 'lying', 'standing'])
   })
 })
 
@@ -133,7 +164,7 @@ describe('tact switches and trimmers', () => {
     for (const id of ['trimmer-3296w', 'trimmer-3362p'])
       expect(FOOTPRINTS[id]!.pins.map(x => x.name)).toEqual(['1', '2', '3'])
     expect(FOOTPRINTS['trimmer-3296w']!.body.heightMm).toBe(10)
-    expect(FOOTPRINTS['trimmer-3362p']!.body.heightMm).toBe(4.5)
+    expect(FOOTPRINTS['trimmer-3362p']!.body.heightMm).toBe(4.88)
   })
 
   it('the 3296W screw sits at the pin-1 end', () => {
