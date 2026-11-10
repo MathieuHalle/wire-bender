@@ -92,6 +92,7 @@ Built-in footprint ids, with their pin names. `N` stands for a number in the ran
 - `dipN-wide`, `dipN-wide-socket` (N even, 24 to 40): the same with the sides 6 holes (0.6") apart.
 - `terminal-Np-508` (N 2 to 6): a screw terminal block, pins `1` to `N`, 2 holes (5.08 mm) apart.
 - `relay-g5v2` (`1`, `16`, `4`, `13`, `6`, `11`, `8`, `9`), `to220-gds` (`G`, `D`, `S`).
+- `relay-srd` (the Songle SRD-05VDC-SL-C and kin, numbered as KiCad's `Relay_SPDT_SANYOU_SRD_Series_Form_C`): `1` COM, `2` and `5` the coil, `3` and `4` the contacts. Which contact is NO and which NC is not given: check it with a meter (with the coil off, NC beeps to COM) or on the diagram printed on the relay. Its pins are off the 2.54 grid; the footprint puts them in the nearest holes, 1 to 1.5 mm out, so the legs are bent to fit.
 - `to92` (`1`, `2`, `3` in a row; the flat face toward the next row at rotation 0). The pin order differs between parts (E B C, C B E, …): map each pin to its net.
 - `button-6x6-hH` (H 4.3, 5, 7, 9.5 or 13, the height in mm): a 6 x 6 tact switch, pins `1` and `2` 3 holes apart, `3` and `4` 2 rows below them. `1`–`2` and `3`–`4` are joined inside; pressing joins the two pairs.
 - `trimmer-3296w` (multi-turn) and `trimmer-3362p` (single turn): pins `1`, `2` and `3` in a row; `2` is the wiper.

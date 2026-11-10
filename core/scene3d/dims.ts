@@ -55,6 +55,7 @@ export const COLORS = {
   ledWhite: '#eef2f4',
   ledOrange: '#f07d1e',
   buttonCover: '#b9bec3',
+  relaySrd: '#1f5fbf',
   trimmer: '#2b5fb4',
   brass: '#c9a646',
   dial: '#ececec',

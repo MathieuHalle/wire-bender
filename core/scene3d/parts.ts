@@ -3,7 +3,7 @@ import { holeMm } from '../holes'
 import {
   BOARD_BOTTOM_Y, COLORS, LEG_DIAMETER_MM, LEG_END_Y, LEG_FOLD_Y, SOLDER_BASE_DIAMETER_MM, SOLDER_HEIGHT_MM
 } from './dims'
-import { dOutline } from './shapes'
+import { dOutline, roundedRect } from './shapes'
 import type { Prim, Tag, V3 } from './types'
 
 const LEG_R = LEG_DIAMETER_MM / 2
@@ -433,6 +433,15 @@ export function partPrims(
         const top: V3 = [mid.x + along.x * Math.sign(off) * TO92_LEG_GAP_MM, TO92_LIFT_MM, mid.z + along.z * Math.sign(off) * TO92_LEG_GAP_MM]
         out.push({ kind: 'tube', radius: LEG_R, color: COLORS.leg, metal: true, tag: legTag(pin), points: [top, [top[0], TO92_LIFT_MM - 0.6, top[2]], [q.x, 1.2, q.z], [q.x, legEnd(pin), q.z]] })
       }
+      break
+    }
+    case 'relay-srd': {
+      // The blue case with rounded upright edges, a printed label on top and a pin-1 dot.
+      out.push({ kind: 'extrude', outline: roundedRect(r, 1.2), y0: 0, y1: h, color: COLORS.relaySrd, tag: body })
+      const label = { x: r.x + 2, y: r.y + 2, w: r.w - 4, h: r.h - 4 }
+      out.push(rectBox(label, h, h + MARK_MM, COLORS.print, body))
+      out.push(disc(cornerNear(r, pinNamed('1'), PIN1_DOT_IN_MM), h, 0.6, COLORS.markLight, body))
+      allStraight(0)
       break
     }
     case 'button': {

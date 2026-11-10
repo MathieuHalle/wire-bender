@@ -223,7 +223,27 @@ const TRIMMERS: Footprint[] = [
   }
 ]
 
+/**
+ * Songle / Sanyou SRD (SRD-05VDC-SL-C and kin), pins numbered as KiCad's
+ * Relay_SPDT_SANYOU_SRD_Series_Form_C: `1` COM, `2` and `5` the coil, `3` and `4` the two
+ * contacts (which is NO and which NC is not given there: check it with a meter, or on the
+ * diagram printed on the relay). Its pads are off the 2.54 grid; snapped to the nearest holes,
+ * each is 1 to 1.5 mm out, so the legs are bent to fit. KiCad pad (mm from pad 1, y down) ->
+ * hole offset: 1 (0, 0) -> (0, 0); 2 (1.95, 6.05) -> (1, 2); 3 (14.15, 6.05) -> (6, 2);
+ * 4 (14.2, -6) -> (6, -2); 5 (1.95, -5.95) -> (1, -2).
+ */
+export const RELAY_SRD_PADS_MM: Record<string, { x: number, y: number }> = {
+  1: { x: 0, y: 0 }, 2: { x: 1.95, y: 6.05 }, 3: { x: 14.15, y: 6.05 }, 4: { x: 14.2, y: -6 }, 5: { x: 1.95, y: -5.95 }
+}
+const RELAY_SRD: Footprint = {
+  id: 'relay-srd', name: 'Relay SRD (Songle, bend to fit)',
+  pins: [p('1', 0, 0), p('2', 1, 2), p('3', 6, 2), p('4', 6, -2), p('5', 1, -2)],
+  // 19 x 15.5 x 15, placed as KiCad's fab outline (its long side from 1.0 mm behind pad 1).
+  body: { rect: { x: -1.0, y: -7.75, w: 19, h: 15.5 }, heightMm: 15, side: 'top' }, shape: 'relay-srd', mark: 'pin1'
+}
+
 const FAMILIES: Footprint[] = [
+  RELAY_SRD,
   TO92,
   ...BUTTON_HEIGHTS.map(buttonFp),
   ...TRIMMERS,

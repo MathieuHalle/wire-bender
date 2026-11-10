@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { benchModel } from '~core/bench/sheet'
-import { FOOTPRINT_PITCH_MM, FOOTPRINTS, placePart } from '~core/footprints'
+import { FOOTPRINT_PITCH_MM, FOOTPRINTS, placePart, RELAY_SRD_PADS_MM } from '~core/footprints'
 import { holeMm } from '~core/holes'
 import { buildScene, COLORS, type Prim } from '~core/scene3d'
 import type { Part } from '~core/schema'
@@ -141,6 +141,33 @@ describe('tact switches and trimmers', () => {
     const screw = bodyOf(s.prims, 'RV1').find(p => p.kind === 'lathe')!
     if (screw.kind !== 'lathe') throw new Error('no screw')
     expect(dist(screw.axis, mm('E5'))).toBeLessThan(dist(screw.axis, mm('E7')))
+  })
+})
+
+describe('SRD relay', () => {
+  it('snaps each KiCad pad to a hole at most 1.5 mm away, and says it needs bending', () => {
+    const fp = FOOTPRINTS['relay-srd']!
+    let worst = 0
+    for (const pin of fp.pins) {
+      const pad = RELAY_SRD_PADS_MM[pin.name]!
+      const off = Math.hypot(pin.dx * FOOTPRINT_PITCH_MM - pad.x, pin.dy * FOOTPRINT_PITCH_MM - pad.y)
+      expect(off, pin.name).toBeLessThanOrEqual(1.5)
+      worst = Math.max(worst, off)
+    }
+    expect(worst).toBeGreaterThan(0.6)
+    expect(fp.name).toContain('bend to fit')
+    expect(fp.pins.map(x => x.name).sort()).toEqual(['1', '2', '3', '4', '5'])
+  })
+
+  it('its body covers every pin, rotated too', () => {
+    for (const rotation of [0, 90] as const) {
+      const pp = placePart({ ref: 'K1', footprint: 'relay-srd', at: 'J10', rotation, pins: {} })
+      const r = pp.bodyRectMm
+      for (const { hole } of pp.pins) {
+        const m = holeMm(hole, FOOTPRINT_PITCH_MM)
+        expect(m.x > r.x && m.x < r.x + r.w && m.y > r.y && m.y < r.y + r.h).toBe(true)
+      }
+    }
   })
 })
 
