@@ -379,6 +379,7 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
             v-for="p in PRESETS"
             :key="p.id"
             size="xs"
+            class="w-20 justify-center"
             color="neutral"
             :variant="activePreset === p.id ? 'solid' : 'outline'"
             :label="p.label"

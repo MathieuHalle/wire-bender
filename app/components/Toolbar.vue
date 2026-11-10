@@ -23,6 +23,7 @@ const is3d = computed(() => props.view === '3d')
   >
     <UButton
       size="xs"
+      class="w-20 justify-center"
       :variant="is3d ? 'outline' : 'solid'"
       label="2D"
       title="2D view, for editing (3)"
@@ -31,6 +32,7 @@ const is3d = computed(() => props.view === '3d')
     />
     <UButton
       size="xs"
+      class="w-20 justify-center"
       :variant="is3d ? 'solid' : 'outline'"
       label="3D"
       title="3D view, for looking (3)"

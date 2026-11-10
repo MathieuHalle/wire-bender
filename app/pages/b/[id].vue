@@ -691,6 +691,7 @@ const sideTitle = (s: Side) => (s === 'top'
                     v-for="v in FRAMINGS"
                     :key="v.id"
                     size="xs"
+                    class="w-20 justify-center"
                     color="neutral"
                     :variant="view === v.id ? 'solid' : 'outline'"
                     :label="v.label"
