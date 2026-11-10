@@ -69,6 +69,8 @@ function orientation(pp: PlacedPart, pitch: number): string {
     case 'stripe-b': return `stripe (cathode) at ${holeName(pin('b')!.hole)}`
     case 'tab': return `metal tab ${facing(pp, pitch)}`
     case 'flat': return `flat side ${facing(pp, pitch)}`
+    case 'flat-b': return `cathode (flat side) at ${holeName(pin('b')!.hole)}`
+    case 'minus-b': return `minus (stripe) at ${holeName(pin('b')!.hole)}`
     default: return 'either way'
   }
 }

@@ -44,6 +44,7 @@ export const COLORS = {
   diode: '#1d1f21',
   diodeStripe: '#9aa0a6',
   capDisc: '#d9822b',
+  socket: '#2b2d30',
   /** Pin-1 marks on dark or blue bodies (relay dot, header triangle). */
   markLight: '#e8e8e8',
   /** Moulded marks on a black body (DIP notch and dot). */

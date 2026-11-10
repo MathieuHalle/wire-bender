@@ -23,7 +23,17 @@ export interface Footprint {
    * the rect is centred on the origin (the lead midpoint) with w along the lead axis.
    */
   body: { rect: { x: number, y: number, w: number, h: number }, heightMm: number, round?: boolean, side: 'top' }
-  mark?: 'pin1' | 'stripe-b' | 'flat' | 'tab'
+  /** The 3D builder that draws it (core/scene3d/parts.ts); a family shares one. */
+  shape: FootprintShape
+  /**
+   * `flat-b`: an LED's flat rim on lead b (the cathode). `minus-b`: an electrolytic's minus
+   * stripe on lead b.
+   */
+  mark?: 'pin1' | 'stripe-b' | 'flat' | 'tab' | 'flat-b' | 'minus-b'
+  /** DIP family: rows 3 holes apart (0.3") or 6 (0.6"), and whether it sits in a socket. */
+  dip?: { rows: 3 | 6, socket: boolean }
+  /** Header and socket families: one row or two. */
+  header?: { rows: 1 | 2 }
   /**
    * Which way the metal tab (or flat side) faces: a unit vector at rotation 0 in footprint
    * space (x right, y down). placePart flips and rotates it with the pins.
@@ -32,6 +42,10 @@ export interface Footprint {
   /** The pin the metal tab is connected to (TO-220: the drain). */
   tabPin?: string
 }
+
+export type FootprintShape
+  = | 'relay-g5v2' | 'to220' | 'dip' | 'terminal' | 'header' | 'socket' | 'polyfuse' | 'axial' | 'cap-disc'
+    | 'led' | 'cap-elec' | 'to92' | 'button' | 'trimmer-3296w' | 'trimmer-3362p' | 'relay-srd'
 
 /** An axis-aligned unit vector, x right, y down. */
 export interface Dir { dx: number, dy: number }
@@ -57,50 +71,108 @@ const centred = (bx: number, by: number, w: number, h: number): Rect => ({
 })
 const centredOrigin = (w: number, h: number): Rect => ({ x: -w / 2, y: -h / 2, w, h })
 
-export const FOOTPRINTS: Record<string, Footprint> = {
-  'relay-g5v2': {
+const range = (from: number, to: number, step = 1): number[] =>
+  Array.from({ length: Math.floor((to - from) / step) + 1 }, (_, i) => from + i * step)
+
+/** Header and socket families' height above the board, mm. */
+export const HEADER_HEIGHT_MM = 8.5
+/** A DIP chip's height; in a turned-pin socket it stands this much higher. */
+export const DIP_HEIGHT_MM = 4.5
+export const DIP_SOCKET_LIFT_MM = 3
+/** A DIP socket's frame reaches this far past the chip on each pin side, mm. */
+export const DIP_SOCKET_RIM_MM = 1.27
+export const HEADER_MAX = 40
+export const DIP_PINS = { min: 4, max: 40, wideMin: 24 }
+export const TERMINAL_POLES = { min: 2, max: 6 }
+
+/**
+ * A header (male, shape `header`) or a socket (female header, shape `socket`), `rows` x `n`.
+ * One row: pins 1..n left to right. Two rows: odd pins on row 0 and even pins on row 1, pin 2
+ * under pin 1 (the usual IDC numbering).
+ */
+function headerFp(kind: 'header' | 'socket', rows: 1 | 2, n: number): Footprint {
+  const pins = rows === 1
+    ? range(0, n - 1).map(i => p(String(i + 1), i, 0))
+    : range(0, n - 1).flatMap(i => [p(String(2 * i + 1), i, 0), p(String(2 * i + 2), i, 1)])
+  return {
+    id: `${kind}-${rows}x${n}`,
+    name: kind === 'header' ? `Header ${rows}x${n}` : `Socket ${rows}x${n} (female header)`,
+    pins,
+    body: { rect: { x: -PITCH / 2, y: -1.25, w: n * PITCH, h: rows * PITCH - 0.04 }, heightMm: HEADER_HEIGHT_MM, side: 'top' },
+    shape: kind, mark: 'pin1', header: { rows }
+  }
+}
+
+/**
+ * A DIP chip of `n` pins: 1..n/2 down the left column, then back up the right one, the
+ * columns 3 holes (0.3") or, `wide`, 6 holes (0.6") apart. In a `socket`, 3 mm higher.
+ */
+function dipFp(n: number, wide: boolean, socket: boolean): Footprint {
+  const rows = wide ? 6 : 3
+  const half = n / 2
+  const pins = [
+    ...range(0, half - 1).map(i => p(String(i + 1), 0, i)),
+    ...range(0, half - 1).map(i => p(String(half + i + 1), rows, half - 1 - i))
+  ]
+  const id = `dip${n}${wide ? '-wide' : ''}${socket ? '-socket' : ''}`
+  return {
+    id, name: `DIP-${n}${wide ? ' (0.6")' : ''}${socket ? ' in a socket' : ''}`,
+    pins,
+    // A socket's frame reaches past the pins, DIP_SOCKET_RIM_MM wider than the chip each side.
+    body: { rect: centred(rows, half - 1, rows * PITCH - 1.27 + (socket ? 2 * DIP_SOCKET_RIM_MM : 0), half * PITCH - 0.36), heightMm: DIP_HEIGHT_MM + (socket ? DIP_SOCKET_LIFT_MM : 0), side: 'top' },
+    shape: 'dip', mark: 'pin1', dip: { rows, socket }
+  }
+}
+
+/** A screw terminal block of `n` poles at 5.08 mm (2 holes). */
+function terminalFp(n: number): Footprint {
+  const w = n * 5.08
+  return {
+    id: `terminal-${n}p-508`, name: `Terminal block ${n}P 5.08`,
+    pins: range(0, n - 1).map(i => p(String(i + 1), 2 * i, 0)),
+    body: { rect: { x: (n - 1) * PITCH - w / 2, y: PITCH / 2 - 3.8, w, h: 7.6 }, heightMm: 10, side: 'top' },
+    shape: 'terminal'
+  }
+}
+
+const SINGLES: Footprint[] = [
+  {
     id: 'relay-g5v2', name: 'Relay G5V-2',
     pins: [p('1', 0, 0), p('16', 3, 0), p('4', 0, 3), p('13', 3, 3), p('6', 0, 5), p('11', 3, 5), p('8', 0, 7), p('9', 3, 7)],
-    body: { rect: centred(3, 7, 10.1, 20.5), heightMm: 11.5, side: 'top' }, mark: 'pin1'
+    body: { rect: centred(3, 7, 10.1, 20.5), heightMm: 11.5, side: 'top' }, shape: 'relay-g5v2', mark: 'pin1'
   },
-  'to220-gds': {
+  {
     id: 'to220-gds', name: 'TO-220 (G D S)',
     pins: [p('G', 0, 0), p('D', 0, 1), p('S', 0, 2)],
     // Straight-mounted: 4.5 thick over the pin line, the pins 2.5 from the tab (back) face.
     body: { rect: { x: 2.5 - 4.5, y: PITCH - 5, w: 4.5, h: 10.0 }, heightMm: 15.5, side: 'top' },
-    mark: 'tab', tab: { dx: 1, dy: 0 }, tabPin: 'D'
+    shape: 'to220', mark: 'tab', tab: { dx: 1, dy: 0 }, tabPin: 'D'
   },
-  'dip8': {
-    id: 'dip8', name: 'DIP-8',
-    pins: [p('1', 0, 0), p('2', 0, 1), p('3', 0, 2), p('4', 0, 3), p('5', 3, 3), p('6', 3, 2), p('7', 3, 1), p('8', 3, 0)],
-    body: { rect: centred(3, 3, 6.35, 9.8), heightMm: 4.5, side: 'top' }, mark: 'pin1'
-  },
-  'terminal-2p-508': {
-    id: 'terminal-2p-508', name: 'Terminal block 2P 5.08',
-    pins: [p('1', 0, 0), p('2', 2, 0)],
-    body: { rect: { x: 2 * PITCH / 2 - 5.08, y: PITCH / 2 - 3.8, w: 10.16, h: 7.6 }, heightMm: 10, side: 'top' }
-  },
-  'header-1x5': {
-    id: 'header-1x5', name: 'Header 1x5',
-    pins: [p('1', 0, 0), p('2', 1, 0), p('3', 2, 0), p('4', 3, 0), p('5', 4, 0)],
-    body: { rect: { x: -1.27, y: -1.25, w: 12.7, h: 2.5 }, heightMm: 8.5, side: 'top' }, mark: 'pin1'
-  },
-  'polyfuse-radial': {
+  {
     id: 'polyfuse-radial', name: 'Polyfuse (radial)',
     pins: [p('a', 0, 0), p('b', 2, 0)], twoLead: { minSpan: 2, maxSpan: 2 },
-    body: { rect: centredOrigin(7.0, 3.0), heightMm: 13, side: 'top' }
+    body: { rect: centredOrigin(7.0, 3.0), heightMm: 13, side: 'top' }, shape: 'polyfuse'
   },
-  'axial': {
+  {
     id: 'axial', name: 'Axial (resistor, diode)',
     pins: [p('a', 0, 0), p('b', 3, 0)], twoLead: { minSpan: 3, maxSpan: 6 },
-    body: { rect: centredOrigin(6.3, 2.5), heightMm: 2.5, side: 'top' }, mark: 'stripe-b'
+    body: { rect: centredOrigin(6.3, 2.5), heightMm: 2.5, side: 'top' }, shape: 'axial', mark: 'stripe-b'
   },
-  'cap-disc': {
+  {
     id: 'cap-disc', name: 'Disc capacitor',
     pins: [p('a', 0, 0), p('b', 1, 0)], twoLead: { minSpan: 1, maxSpan: 2 },
-    body: { rect: centredOrigin(5.0, 2.5), heightMm: 8, side: 'top' }
+    body: { rect: centredOrigin(5.0, 2.5), heightMm: 8, side: 'top' }, shape: 'cap-disc'
   }
-}
+]
+
+const FAMILIES: Footprint[] = [
+  ...([1, 2] as const).flatMap(rows => (['header', 'socket'] as const).flatMap(kind => range(1, HEADER_MAX).map(n => headerFp(kind, rows, n)))),
+  ...range(DIP_PINS.min, DIP_PINS.max, 2).flatMap(n => [dipFp(n, false, false), dipFp(n, false, true)]),
+  ...range(DIP_PINS.wideMin, DIP_PINS.max, 2).flatMap(n => [dipFp(n, true, false), dipFp(n, true, true)]),
+  ...range(TERMINAL_POLES.min, TERMINAL_POLES.max).map(terminalFp)
+]
+
+export const FOOTPRINTS: Record<string, Footprint> = Object.fromEntries([...SINGLES, ...FAMILIES].map(fp => [fp.id, fp]))
 
 /**
  * Standing axial parts are 7 mm tall and cover a circle over lead a: 2.7 mm for a diode

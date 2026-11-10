@@ -71,9 +71,9 @@ describe('placePart', () => {
   it('rotation 180 then 0 is identity for every footprint', () => {
     for (const fp of Object.values(FOOTPRINTS)) {
       if (fp.twoLead) continue
-      const base = names(part({ footprint: fp.id, at: 'AA30' }))
-      const r180 = names(part({ footprint: fp.id, at: 'AA30', rotation: 180 }))
-      const p1 = parseHole('AA30')
+      const base = names(part({ footprint: fp.id, at: 'AZ60' }))
+      const r180 = names(part({ footprint: fp.id, at: 'AZ60', rotation: 180 }))
+      const p1 = parseHole('AZ60')
       for (const pin of fp.pins) {
         const h0 = parseHole(base[pin.name]!)
         const once = rotateOffset(h0.col - p1.col, h0.row - p1.row, 180)
@@ -161,5 +161,71 @@ describe('schema footprint check', () => {
       parts: [part({ footprint: 'nope' })], trails: [], wires: [], legFolds: [], solderBridges: []
     })
     expect(r).toEqual({ ok: false, errors: ['parts[0].footprint: unknown "nope"'] })
+  })
+})
+
+describe('footprint families', () => {
+  const p = (name: string, dx: number, dy: number) => ({ name, dx, dy })
+  const pick = (id: string) => {
+    const { shape: _s, dip: _d, header: _h, ...rest } = FOOTPRINTS[id]!
+    return rest
+  }
+
+  it('keeps the ids from before the families exactly as they were', () => {
+    expect(pick('dip8')).toEqual({
+      id: 'dip8', name: 'DIP-8',
+      pins: [p('1', 0, 0), p('2', 0, 1), p('3', 0, 2), p('4', 0, 3), p('5', 3, 3), p('6', 3, 2), p('7', 3, 1), p('8', 3, 0)],
+      body: { rect: { x: 3 * 2.54 / 2 - 6.35 / 2, y: 3 * 2.54 / 2 - 9.8 / 2, w: 6.35, h: 9.8 }, heightMm: 4.5, side: 'top' }, mark: 'pin1'
+    })
+    expect(pick('terminal-2p-508')).toEqual({
+      id: 'terminal-2p-508', name: 'Terminal block 2P 5.08',
+      pins: [p('1', 0, 0), p('2', 2, 0)],
+      body: { rect: { x: 2 * 2.54 / 2 - 5.08, y: 2.54 / 2 - 3.8, w: 10.16, h: 7.6 }, heightMm: 10, side: 'top' }
+    })
+    expect(pick('header-1x5')).toEqual({
+      id: 'header-1x5', name: 'Header 1x5',
+      pins: [p('1', 0, 0), p('2', 1, 0), p('3', 2, 0), p('4', 3, 0), p('5', 4, 0)],
+      body: { rect: { x: -1.27, y: -1.25, w: 12.7, h: 2.5 }, heightMm: 8.5, side: 'top' }, mark: 'pin1'
+    })
+  })
+
+  it('numbers a 2-row header with pin 2 under pin 1', () => {
+    expect(FOOTPRINTS['header-2x3']!.pins).toEqual([p('1', 0, 0), p('2', 0, 1), p('3', 1, 0), p('4', 1, 1), p('5', 2, 0), p('6', 2, 1)])
+    expect(FOOTPRINTS['socket-2x3']!.pins).toEqual(FOOTPRINTS['header-2x3']!.pins)
+    expect(FOOTPRINTS['header-2x3']!.body.rect.h).toBeCloseTo(5.04)
+  })
+
+  it('numbers DIPs down one side and back up the other', () => {
+    expect(FOOTPRINTS['dip16']!.pins.find(x => x.name === '9')).toEqual(p('9', 3, 7))
+    expect(FOOTPRINTS['dip28-wide']!.pins.find(x => x.name === '15')).toEqual(p('15', 6, 13))
+    expect(FOOTPRINTS['dip28-wide']!.body.rect.w).toBeCloseTo(13.97)
+    expect(FOOTPRINTS['dip8-socket']!.body.heightMm).toBe(7.5)
+    expect(FOOTPRINTS['dip8-socket']!.pins).toEqual(FOOTPRINTS['dip8']!.pins)
+  })
+
+  it('a DIP socket covers its pins; the chip alone does not', () => {
+    const inside = (id: string) => {
+      const pp = placePart(part({ footprint: id, at: 'D5', rotation: 90 }))
+      const r = pp.bodyRectMm
+      return pp.pins.every(({ hole }) => {
+        const x = (hole.col - 1) * 2.54
+        const y = (hole.row - 1) * 2.54
+        return x > r.x && x < r.x + r.w && y > r.y && y < r.y + r.h
+      })
+    }
+    expect(inside('dip14-socket')).toBe(true)
+    expect(inside('dip14')).toBe(false)
+  })
+
+  it('spaces terminal poles 5.08 apart', () => {
+    expect(FOOTPRINTS['terminal-4p-508']!.pins.map(x => x.dx)).toEqual([0, 2, 4, 6])
+    expect(FOOTPRINTS['terminal-4p-508']!.body.rect.w).toBeCloseTo(20.32)
+  })
+
+  it('has no ids outside the families', () => {
+    for (const id of ['header-1x41', 'header-1x0', 'socket-3x2', 'dip7', 'dip2', 'dip42', 'dip22-wide', 'dip22-wide-socket', 'terminal-7p-508', 'terminal-1p-508'])
+      expect(FOOTPRINTS[id], id).toBeUndefined()
+    for (const id of ['header-1x1', 'header-2x40', 'socket-1x40', 'dip4', 'dip40', 'dip40-wide-socket', 'terminal-6p-508'])
+      expect(FOOTPRINTS[id], id).toBeDefined()
   })
 })

@@ -83,7 +83,19 @@ Each part is an object:
 | `pins` | object | Maps a pin name to a net name, or to `null` for no net. |
 | `roles` | object, optional | Maps a pin name to `"in"`, `"out"`, `"pwr"`, `"oc"` or `"passive"`. It overrides the footprint's default role. A pin with no role is `passive`. |
 
-Built-in footprint ids, with their pin names: `relay-g5v2` (`1`, `16`, `4`, `13`, `6`, `11`, `8`, `9`), `to220-gds` (`G`, `D`, `S`), `dip8` (`1` to `8`), `terminal-2p-508` (`1`, `2`), `header-1x5` (`1` to `5`), `polyfuse-radial` (`a`, `b`), `axial` (`a`, `b`) and `cap-disc` (`a`, `b`). Two-lead footprints (`polyfuse-radial`, `axial`, `cap-disc`) have an intended span between `at` and `to` (2, 3 to 6, and 1 to 2 holes). Readers need not enforce it. The reader refuses a footprint id it does not know.
+Built-in footprint ids, with their pin names. `N` stands for a number in the range given; any other number is not an id.
+
+<!-- footprint-list:start -->
+- `header-1xN`, `socket-1xN` (N 1 to 40): a male header or a female header (socket), pins `1` to `N` in a row.
+- `header-2xN`, `socket-2xN` (N 1 to 40): two rows, odd pins `1`, `3`, … on the first and even pins `2`, `4`, … on the second, pin 2 next to pin 1.
+- `dipN`, `dipN-socket` (N even, 4 to 40): a DIP chip, pins `1` to `N/2` down one side and the rest back up the other, the sides 3 holes (0.3") apart. `-socket` is the chip in a turned-pin socket, 3 mm higher.
+- `dipN-wide`, `dipN-wide-socket` (N even, 24 to 40): the same with the sides 6 holes (0.6") apart.
+- `terminal-Np-508` (N 2 to 6): a screw terminal block, pins `1` to `N`, 2 holes (5.08 mm) apart.
+- `relay-g5v2` (`1`, `16`, `4`, `13`, `6`, `11`, `8`, `9`), `to220-gds` (`G`, `D`, `S`).
+- Two-lead parts, pins `a` and `b`: `polyfuse-radial`, `axial` and `cap-disc`.
+<!-- footprint-list:end -->
+
+Two-lead footprints have an intended span between `at` and `to`: 2 holes for `polyfuse-radial`, 3 to 6 for `axial`, and 1 to 2 for `cap-disc`. Readers need not enforce it. On a two-lead part with a polarity, `b` is the cathode or minus. The reader refuses a footprint id it does not know.
 
 ### `trails`
 

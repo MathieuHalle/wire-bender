@@ -20,7 +20,8 @@ const parts = computed(() => props.placed.map((p) => {
   const v = (q: Pt): Pt => ({ x: g.x(q.x), y: g.y(q.y) }) // -> drawing mm
   const r = p.bodyRectMm
   const centre = { x: r.x + r.w / 2, y: r.y + r.h / 2 }
-  const round = !!(p.part.standing && p.fp.twoLead)
+  // Drawn as a circle: a round body (LED, electrolytic), or a two-lead part standing up.
+  const round = !!(p.fp.body.round || (p.part.standing && p.fp.twoLead))
   const marks: { d: string, w: number, color: string }[] = []
   const line = (a: Pt, b: Pt, w: number, color: string) => {
     const A = v(a)

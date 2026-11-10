@@ -1,4 +1,4 @@
-import { bodyHeightMm, isDiodePart, FOOTPRINT_PITCH_MM, TAB_PLATE_MM, tabPlateMm, type PlacedPart, type Rect } from '../footprints'
+import { bodyHeightMm, isDiodePart, DIP_SOCKET_LIFT_MM, DIP_SOCKET_RIM_MM, FOOTPRINT_PITCH_MM, TAB_PLATE_MM, tabPlateMm, type PlacedPart, type Rect } from '../footprints'
 import { holeMm } from '../holes'
 import {
   BOARD_BOTTOM_Y, COLORS, LEG_DIAMETER_MM, LEG_END_Y, LEG_FOLD_Y, SOLDER_BASE_DIAMETER_MM, SOLDER_HEIGHT_MM
@@ -34,6 +34,8 @@ const STANDING_KINK_Y = 1
 const STRIPE_MM = 0.8
 /** The diode band stands this far proud of the body (under the 0.05 height tolerance on top). */
 const STRIPE_PROUD_MM = 0.04
+/** The square entry on top of a female header's pin. */
+const SOCKET_ENTRY_MM = 1.0
 
 type Pin = PlacedPart['pins'][number]
 interface XZ { x: number, z: number }
@@ -46,6 +48,18 @@ const pinXZ = (pin: Pin): XZ => {
 /** A box over a board-mm rect from y0 to y1. */
 function rectBox(r: Rect, y0: number, y1: number, color: string, tag: Tag): Prim {
   return { kind: 'box', center: [r.x + r.w / 2, (y0 + y1) / 2, r.y + r.h / 2], size: [r.w, y1 - y0, r.h], color, tag }
+}
+
+/** Four boxes filling `outer` round the hole `inner` (inside it), from y0 to y1. */
+function frameBoxes(outer: Rect, inner: Rect, y0: number, y1: number, color: string, tag: Tag): Prim[] {
+  const right = outer.x + outer.w
+  const bottom = outer.y + outer.h
+  return [
+    { x: outer.x, y: outer.y, w: outer.w, h: inner.y - outer.y },
+    { x: outer.x, y: inner.y + inner.h, w: outer.w, h: bottom - inner.y - inner.h },
+    { x: outer.x, y: inner.y, w: inner.x - outer.x, h: inner.h },
+    { x: inner.x + inner.w, y: inner.y, w: right - inner.x - inner.w, h: inner.h }
+  ].filter(q => q.w > 0 && q.h > 0).map(q => rectBox(q, y0, y1, color, tag))
 }
 
 /**
@@ -148,13 +162,13 @@ export function partPrims(
   const pinNamed = (name: string) => pinXZ(pins.find(p => p.name === name) ?? pins[0]!)
   const c = centreOf(r)
 
-  switch (fp.id) {
+  switch (fp.shape) {
     case 'relay-g5v2':
       out.push(rectBox(r, 0, h, COLORS.relay, body))
       out.push(disc(cornerNear(r, pinNamed('1'), PIN1_DOT_IN_MM), h, 0.6, COLORS.markLight, body))
       allStraight(0)
       break
-    case 'to220-gds': {
+    case 'to220': {
       // Straight-mounted on its legs (the owner's choice): the body stands over the pins and
       // the tab plate (core's tabPlateMm) is its back face on the tab side, reaching the full
       // height. The footprint always has a tab, so the plate is defined.
@@ -179,38 +193,60 @@ export function partPrims(
       allStraight(y0)
       break
     }
-    case 'dip8': {
-      // On its 0.5 lead shoulders; the box is 0.5 shorter so the top is at the footprint height.
-      const y0 = DIP_LIFT_MM
-      const y1 = h
-      out.push(rectBox(r, y0, y1, COLORS.black, body))
-      // The notch on the pin-1 end (the end with pins 1 and 8) and the pin-1 dot.
+    case 'dip': {
+      // In a socket the chip stands on the socket's top; the socket's body rect covers the pins.
+      const base = fp.dip?.socket ? DIP_SOCKET_LIFT_MM : 0
       const p1 = pinNamed('1')
-      const p8 = pinNamed('8')
-      const end = leadAxis(c, { x: (p1.x + p8.x) / 2, z: (p1.z + p8.z) / 2 }).u
+      const pn = pinNamed(String(pins.length))
+      // Pin 1 and pin N face each other across the rows.
+      const acrossX = Math.abs(pn.x - p1.x) > Math.abs(pn.z - p1.z)
+      const chip: Rect = !fp.dip?.socket
+        ? r
+        : acrossX
+          ? { ...r, x: r.x + DIP_SOCKET_RIM_MM, w: r.w - 2 * DIP_SOCKET_RIM_MM }
+          : { ...r, y: r.y + DIP_SOCKET_RIM_MM, h: r.h - 2 * DIP_SOCKET_RIM_MM }
+      if (fp.dip?.socket) {
+        // A turned-pin socket: a frame round an open middle, a gold ring at every pin.
+        const open = acrossX
+          ? { x: chip.x + 1.6, y: r.y + 1, w: chip.w - 3.2, h: r.h - 2 }
+          : { x: r.x + 1, y: chip.y + 1.6, w: r.w - 2, h: chip.h - 3.2 }
+        out.push(rectBox(r, 0, base - 0.6, COLORS.socket, body))
+        out.push(...frameBoxes(r, open, base - 0.6, base, COLORS.socket, body))
+        for (const pin of pins) {
+          const q = pinXZ(pin)
+          out.push({ kind: 'cylinder', a: [q.x, base - 0.6, q.z], b: [q.x, base + MARK_MM, q.z], radius: 0.75, color: COLORS.headerPin, metal: true, tag: body })
+        }
+      }
+      // On its 0.5 lead shoulders; the box is 0.5 shorter so the top is at the footprint height.
+      const y0 = base + DIP_LIFT_MM
+      const y1 = h
+      const cc = centreOf(chip)
+      out.push(rectBox(chip, y0, y1, COLORS.black, body))
+      // The notch on the pin-1 end (the end with pins 1 and N) and the pin-1 dot.
+      const end = leadAxis(cc, { x: (p1.x + pn.x) / 2, z: (p1.z + pn.z) / 2 }).u
       const v = Math.abs(end.x) > Math.abs(end.z) ? { x: Math.sign(end.x), z: 0 } : { x: 0, z: Math.sign(end.z) }
-      const nd = halfAlong(r, v) - DIP_NOTCH_D_MM / 2
-      out.push(axisBox({ x: c.x + v.x * nd, z: c.z + v.z * nd }, { x: -v.z, z: v.x }, DIP_NOTCH_W_MM, DIP_NOTCH_D_MM, y1, y1 + MARK_MM, COLORS.markDark, body))
-      out.push(disc(cornerNear(r, p1, PIN1_DOT_IN_MM), y1, 0.45, COLORS.markDark, body))
-      // Flat leads: out of the body side at shoulder height, then down into the hole.
+      const nd = halfAlong(chip, v) - DIP_NOTCH_D_MM / 2
+      out.push(axisBox({ x: cc.x + v.x * nd, z: cc.z + v.z * nd }, { x: -v.z, z: v.x }, DIP_NOTCH_W_MM, DIP_NOTCH_D_MM, y1, y1 + MARK_MM, COLORS.markDark, body))
+      out.push(disc(cornerNear(chip, p1, PIN1_DOT_IN_MM), y1, 0.45, COLORS.markDark, body))
+      // Flat leads: out of the body side at shoulder height, then down into the hole (or the socket).
       for (const pin of pins) {
         const q = pinXZ(pin)
-        const n = Math.abs(q.x - c.x) > r.w / 2
-          ? { x: Math.sign(q.x - c.x), z: 0 }
-          : { x: 0, z: Math.sign(q.z - c.z) }
-        const inner = halfAlong(r, n) - 0.3 // starts inside the body
-        const outer = Math.abs(n.x) * Math.abs(q.x - c.x) + Math.abs(n.z) * Math.abs(q.z - c.z) + DIP_LEAD_T_MM / 2
+        const n = Math.abs(q.x - cc.x) > chip.w / 2
+          ? { x: Math.sign(q.x - cc.x), z: 0 }
+          : { x: 0, z: Math.sign(q.z - cc.z) }
+        const inner = halfAlong(chip, n) - 0.3 // starts inside the body
+        const outer = Math.abs(n.x) * Math.abs(q.x - cc.x) + Math.abs(n.z) * Math.abs(q.z - cc.z) + DIP_LEAD_T_MM / 2
         const mid = (inner + outer) / 2
-        const across = n.x !== 0 ? { x: c.x + n.x * mid, z: q.z } : { x: q.x, z: c.z + n.z * mid }
+        const across = n.x !== 0 ? { x: cc.x + n.x * mid, z: q.z } : { x: q.x, z: cc.z + n.z * mid }
         const tag = legTag(pin)
-        const sh = DIP_SHOULDER_Y
+        const sh = base + DIP_SHOULDER_Y
         out.push({ ...axisBox(across, n, outer - inner, DIP_LEAD_W_MM, sh - DIP_LEAD_T_MM / 2, sh + DIP_LEAD_T_MM / 2, COLORS.leg, tag), metal: true })
-        out.push({ ...axisBox(q, n, DIP_LEAD_T_MM, DIP_LEAD_W_MM, 0, sh + DIP_LEAD_T_MM / 2, COLORS.leg, tag), metal: true })
+        out.push({ ...axisBox(q, n, DIP_LEAD_T_MM, DIP_LEAD_W_MM, base, sh + DIP_LEAD_T_MM / 2, COLORS.leg, tag), metal: true })
       }
       allStraight(0)
       break
     }
-    case 'terminal-2p-508': {
+    case 'terminal': {
       out.push(rectBox(r, 0, h, COLORS.terminal, body))
       // The wire side is the long face the pins are nearer.
       const w = awayFromPins(r, pins)
@@ -229,7 +265,27 @@ export function partPrims(
       allStraight(0)
       break
     }
-    case 'header-1x5': {
+    case 'socket': {
+      // A female header: a tall black body with its top edges chamfered and a square entry
+      // over every pin; the pin's tail under it is the leg.
+      const k = HEADER_CHAMFER_MM
+      out.push(rectBox(r, 0, h - k, COLORS.black, body))
+      out.push(rectBox({ x: r.x + k, y: r.y + k, w: r.w - 2 * k, h: r.h - 2 * k }, h - k, h, COLORS.black, body))
+      for (const pin of pins) {
+        const q = pinXZ(pin)
+        out.push({ kind: 'box', center: [q.x, h + MARK_MM / 2, q.z], size: [SOCKET_ENTRY_MM, MARK_MM, SOCKET_ENTRY_MM], color: COLORS.slot, tag: body })
+        out.push({ kind: 'cylinder', a: [q.x, 0, q.z], b: [q.x, legEnd(pin), q.z], radius: HEADER_POST_MM / 2, color: COLORS.headerPin, metal: true, tag: legTag(pin) })
+      }
+      const p1 = pinNamed('1')
+      const next = pins.find(p => p.name === (fp.header?.rows === 2 ? '3' : '2'))
+      if (next) {
+        const u = leadAxis(pinXZ(next), p1).u
+        const d = SOCKET_ENTRY_MM / 2 + 0.35
+        out.push(axisBox({ x: p1.x + u.x * d, z: p1.z + u.z * d }, u, 0.25, 0.9, h, h + MARK_MM, COLORS.markLight, body))
+      }
+      break
+    }
+    case 'header': {
       // A bar with its top edges chamfered: the full bar, then a narrower cap.
       const k = HEADER_CHAMFER_MM
       out.push(rectBox(r, 0, HEADER_BAR_MM - k, COLORS.black, body))
@@ -243,17 +299,21 @@ export function partPrims(
         // The post's tail under the bar is the leg, in gold.
         out.push({ kind: 'cylinder', a: [q.x, 0, q.z], b: [q.x, legEnd(pin), q.z], radius: HEADER_POST_MM / 2, color: COLORS.headerPin, metal: true, tag: legTag(pin) })
       }
-      // A stepped triangle on the bar, outboard of pin 1, pointing at it.
+      // A stepped triangle on the bar, outboard of pin 1 along its row, pointing at it (none
+      // on a header of one column).
       const p1 = pinNamed('1')
-      const u = leadAxis(pinNamed('2'), p1).u
-      const steps = [0.4, 0.9, 1.4]
-      steps.forEach((wd, i) => {
-        const d = HEADER_POST_MM / 2 + 0.15 + i * 0.2
-        out.push(axisBox({ x: p1.x + u.x * d, z: p1.z + u.z * d }, u, 0.2, wd, HEADER_BAR_MM, HEADER_BAR_MM + MARK_MM, COLORS.markLight, body))
-      })
+      const next = pins.find(p => p.name === (fp.header?.rows === 2 ? '3' : '2'))
+      if (next) {
+        const u = leadAxis(pinXZ(next), p1).u
+        const steps = [0.4, 0.9, 1.4]
+        steps.forEach((wd, i) => {
+          const d = HEADER_POST_MM / 2 + 0.15 + i * 0.2
+          out.push(axisBox({ x: p1.x + u.x * d, z: p1.z + u.z * d }, u, 0.2, wd, HEADER_BAR_MM, HEADER_BAR_MM + MARK_MM, COLORS.markLight, body))
+        })
+      }
       break
     }
-    case 'polyfuse-radial':
+    case 'polyfuse':
       // Standing radial: a thin plate across the two leads.
       out.push(axisBox(axis!.mid, axis!.u, fp.body.rect.w, fp.body.rect.h, RADIAL_LIFT_MM, h, COLORS.polyfuse, body))
       allStraight(RADIAL_LIFT_MM)
