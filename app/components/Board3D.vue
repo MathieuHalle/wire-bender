@@ -381,7 +381,7 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
             size="xs"
             class="w-20 justify-center"
             color="neutral"
-            :variant="activePreset === p.id ? 'solid' : 'outline'"
+            :variant="activePreset === p.id ? 'subtle' : 'ghost'"
             :label="p.label"
             :title="`${p.label} view`"
             :aria-pressed="activePreset === p.id"
