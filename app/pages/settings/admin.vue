@@ -1,12 +1,12 @@
 <script setup lang="ts">
-// The admin page (spec §3): every account, with its premium and admin flags and
+// The Server Admin tab (spec §3): every account, with its premium and admin flags and
 // Suspend/Unsuspend. The last admin can't drop their own flag (the server says so, R13).
 // Nothing else: the admin sees how many boards an account has, never the boards. For anyone
-// but the admin the API answers 404, and so does this page.
+// but the admin the API answers 404, and so does this tab. Local mode has no accounts: it goes to Account.
 import type { Provider } from '~/composables/useMe'
 import { saveZip } from '~/utils/download'
 
-useHead({ title: 'Admin · WireBender' })
+useHead({ title: 'Server Admin · WireBender' })
 
 interface Account {
   id: string
@@ -23,8 +23,10 @@ interface Account {
 
 const LABEL: Record<Provider, string> = { github: 'GitHub', google: 'Google' }
 
-const { me, load } = useMe()
-onMounted(() => void load())
+const { me } = useMe()
+watch(me, (m) => {
+  if (m?.mode === 'local') void navigateTo('/settings/account', { replace: true })
+}, { immediate: true })
 
 // Loaded on the client only: who is asking is per browser.
 const { data: accounts, error, status } = useFetch<Account[]>('/api/admin/users', { server: false })
@@ -61,22 +63,14 @@ async function change(a: Account, body: { premium?: boolean, suspended?: boolean
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-5xl flex-col gap-5 p-6">
+  <div
+    v-if="me && me.mode !== 'local'"
+    class="flex max-w-5xl flex-col gap-5"
+  >
     <header class="flex items-center gap-3">
-      <NuxtLink
-        to="/"
-        aria-label="Boards"
-      >
-        <img
-          src="/icon.svg"
-          alt=""
-          width="28"
-          height="28"
-        >
-      </NuxtLink>
-      <h1 class="text-xl font-semibold">
+      <h2 class="text-base font-semibold">
         {{ notFound ? 'Page not found' : 'Accounts' }}
-      </h1>
+      </h2>
       <UButton
         v-if="accounts"
         class="ml-auto"

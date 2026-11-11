@@ -75,7 +75,7 @@ const when = (t: number) => new Date(t).toLocaleString(undefined, { dateStyle: '
     <p class="text-sm text-muted">
       A token lets a script or an AI tool act as you on your boards.
       <NuxtLink
-        to="/api"
+        to="/settings/connections#api"
         class="underline"
       >
         How to use one

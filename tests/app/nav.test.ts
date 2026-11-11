@@ -17,6 +17,8 @@ describe('navigation rules', () => {
     expect(settingsTabs(local)).toEqual(['account', 'devices', 'connections'])
     expect(settingsTabs(ada)).toEqual(['account', 'connections'])
     expect(settingsTabs(admin)).toEqual(['account', 'connections', 'admin'])
+    // The local user is an admin, but local mode has no Server Admin tab.
+    expect(settingsTabs({ ...local, user: { ...ada.user!, isAdmin: true } })).toEqual(['account', 'devices', 'connections'])
   })
 
   it('needs a login in public mode without a user only', () => {

@@ -27,7 +27,7 @@ async function send() {
     if (r.admin) {
       await load(true)
       toast.add({ title: 'You are the admin of this server', color: 'success' })
-      await navigateTo('/admin')
+      await navigateTo('/settings/admin')
       return
     }
     accepted.value = true

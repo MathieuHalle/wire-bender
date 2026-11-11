@@ -304,11 +304,6 @@ const frames = computed(() => {
   return (['top', 'bottom'] as const).map(s => ({ id: s, title: sideTitle(s), rect: at[s] }))
 })
 
-/** The "Pair a device" and "Paired devices" dialogs: local mode only (public mode has no pairing). */
-const pairing = ref(false)
-const devicesOpen = ref(false)
-const canPair = computed(() => me.value?.mode === 'local')
-
 /** "Share": the owner's, in public mode only (local mode offers none). It opens the Sharing tab. */
 const canShare = computed(() => isPublic.value && role.value === 'owner')
 const hiddenTabs = computed<PanelTab[]>(() => (canShare.value ? [] : ['sharing']))
@@ -461,22 +456,6 @@ const sideTitle = (s: Side) => (s === 'top'
           label="Share"
           @click="openSharing"
         />
-        <template v-if="canPair">
-          <UButton
-            size="xs"
-            variant="ghost"
-            icon="i-lucide-tablet-smartphone"
-            label="Pair a device"
-            @click="pairing = true"
-          />
-          <UButton
-            size="xs"
-            variant="ghost"
-            icon="i-lucide-monitor-smartphone"
-            label="Paired devices"
-            @click="devicesOpen = true"
-          />
-        </template>
       </div>
       <UTooltip text="Open the printable bench sheet in a new tab">
         <span class="inline-flex">
@@ -490,10 +469,6 @@ const sideTitle = (s: Side) => (s === 'top'
           />
         </span>
       </UTooltip>
-      <template v-if="canPair">
-        <PairDialog v-model:open="pairing" />
-        <DevicesDialog v-model:open="devicesOpen" />
-      </template>
     </header>
 
     <UAlert

@@ -13,7 +13,7 @@ export function boardLists(me: Me): BoardList[] {
 /** The settings tabs this mode and user see, in display order. */
 export function settingsTabs(me: Me): SettingsTab[] {
   const tabs: SettingsTab[] = me.mode === 'local' ? ['account', 'devices', 'connections'] : ['account', 'connections']
-  if (me.user?.isAdmin) tabs.push('admin')
+  if (me.mode === 'public' && me.user?.isAdmin) tabs.push('admin')
   return tabs
 }
 
