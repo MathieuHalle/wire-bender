@@ -4,7 +4,8 @@ import type { NavigationMenuItem } from '@nuxt/ui'
 import { BOARD_LIST_LINKS, boardLists, type BoardList } from '~/utils/nav'
 
 const { me, load } = useMe()
-await load()
+// Client only: a server-side /api/me has no session cookie and would hydrate as signed out.
+onMounted(() => void load())
 
 const links = computed<NavigationMenuItem[]>(() => [
   {
