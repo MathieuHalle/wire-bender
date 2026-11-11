@@ -316,6 +316,14 @@ function openSharing() {
   panel.value.open = true
   panel.value.tab = 'sharing'
 }
+// The board list's Share button opens /b/<id>#sharing: the Sharing tab, once the panel is
+// loaded and the role is known (only the owner can share).
+const wantsSharing = ref(route.hash === '#sharing')
+watch([canShare, loaded], ([can, ok]) => {
+  if (!wantsSharing.value || !can || !ok) return
+  wantsSharing.value = false
+  openSharing()
+}, { immediate: true })
 // A stored Sharing tab on a board that has none (not the owner, local mode) falls back.
 // Waits for both reads (the account and the board's role), or a slow one would reset it.
 watch([canShare, () => panel.value.tab, meta, me], ([can, tab, m, who]) => {

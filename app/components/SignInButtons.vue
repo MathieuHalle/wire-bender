@@ -13,13 +13,13 @@ const props = withDefaults(defineProps<{
   returnTo?: string
 }>(), { verb: 'Sign in with', returnTo: undefined })
 
-/** Remembered for this tab only; the board list sends the user on (index.vue). */
+/** Remembered for this tab only; `/` sends the user on. */
 function remember() {
   if (!props.returnTo) return
   try {
     sessionStorage.setItem(RETURN_KEY, returnEntry(props.returnTo))
   } catch {
-    // No storage (a private window): the user lands on the board list.
+    // No storage (a private window): the user lands on the boards.
   }
 }
 
