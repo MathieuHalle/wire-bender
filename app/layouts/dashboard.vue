@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // The shell of every dashboard page: a collapsible sidebar (boards, settings, help, account) and search.
 import type { NavigationMenuItem } from '@nuxt/ui'
-import { BOARD_LIST_LINKS, boardLists, type BoardList } from '~/utils/nav'
+import { BOARD_LIST_LINKS, boardLists, menuUser, type BoardList } from '~/utils/nav'
 
 const { me, load } = useMe()
 // Client only: a server-side /api/me has no session cookie and would hydrate as signed out.
@@ -77,7 +77,7 @@ const help: NavigationMenuItem[] = [{
           />
           <AccountMenu
             v-if="me"
-            :user="me.user"
+            :user="menuUser(me)"
             :collapsed="collapsed"
             block
           />

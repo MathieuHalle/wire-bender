@@ -12,7 +12,7 @@ const error = computed(() => signInError(typeof route.query.error === 'string' ?
 const { me, failed, load } = useMe()
 onMounted(async () => {
   const now = await load()
-  if (now && !needsLogin(now)) await navigateTo('/boards', { replace: true })
+  if (now && !needsLogin(now)) await navigateTo('/', { replace: true })
 })
 </script>
 

@@ -25,7 +25,7 @@ async function restore() {
   try {
     await $fetch('/api/me/restore', { method: 'POST' })
     await load(true)
-    await navigateTo('/boards', { replace: true })
+    await navigateTo('/', { replace: true })
   } catch (e) {
     const data = (e as { data?: { error?: unknown } }).data
     error.value = typeof data?.error === 'string' ? data.error : `Restore failed: ${(e as Error).message}`

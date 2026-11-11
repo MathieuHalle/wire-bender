@@ -22,6 +22,11 @@ export function needsLogin(me: Me): boolean {
   return me.mode === 'public' && !me.user
 }
 
+/** The user the account menu shows: only public mode has accounts; local mode's `Local` row is not one. */
+export function menuUser(me: Me): Me['user'] {
+  return me.mode === 'public' ? me.user : null
+}
+
 /** Where `/` goes: the page to return to, else the boards; null shows the signed-out home page. */
 export function homeTarget(me: Me, back: string | null): string | null {
   return needsLogin(me) ? null : (back ?? '/boards')

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Me } from '../../app/composables/useMe'
-import { SIGN_IN_ERRORS, boardLists, homeTarget, needsLogin, settingsTabs, signInError } from '../../app/utils/nav'
+import { SIGN_IN_ERRORS, boardLists, homeTarget, menuUser, needsLogin, settingsTabs, signInError } from '../../app/utils/nav'
 
 const local: Me = { mode: 'local', user: null, providers: [] }
 const anon: Me = { mode: 'public', user: null, providers: ['github'] }
@@ -8,6 +8,14 @@ const ada: Me = { mode: 'public', providers: ['github'], user: { id: 'u1', name:
 const admin: Me = { ...ada, user: { ...ada.user!, isAdmin: true } }
 
 describe('navigation rules', () => {
+  it('shows the account menu user only in public mode', () => {
+    // The real local /api/me has the seeded admin `Local` user, not null.
+    const localUser = { ...local, user: { ...ada.user!, name: 'Local', isAdmin: true } }
+    expect(menuUser(localUser)).toBeNull()
+    expect(menuUser(ada)).toBe(ada.user)
+    expect(menuUser(anon)).toBeNull()
+  })
+
   it('lists boards per mode', () => {
     expect(boardLists(local)).toEqual(['mine', 'trash'])
     expect(boardLists(ada)).toEqual(['mine', 'shared', 'trash'])
