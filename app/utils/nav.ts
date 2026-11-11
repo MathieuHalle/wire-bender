@@ -39,3 +39,10 @@ export const SIGN_IN_ERRORS: Record<string, string> = {
 export function signInError(code: string | null): string | null {
   return code ? SIGN_IN_ERRORS[code] ?? SIGN_IN_ERRORS.oauth! : null
 }
+
+/** How each board list shows in the sidebar and the search. */
+export const BOARD_LIST_LINKS: Record<BoardList, { label: string, to: string, icon: string }> = {
+  mine: { label: 'My boards', to: '/boards', icon: 'i-lucide-circuit-board' },
+  shared: { label: 'Shared with me', to: '/boards/shared', icon: 'i-lucide-users' },
+  trash: { label: 'Trash', to: '/boards/trash', icon: 'i-lucide-trash-2' }
+}
