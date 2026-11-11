@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RETURN_KEY, returnPath } from '~/utils/boardView'
-import { homeTarget } from '~/utils/nav'
+import { homeTarget, needsLogin } from '~/utils/nav'
 
 // `/` sends a signed-in user (or local mode) on: back to the page a sign-in started from,
 // else the boards. Signed out in public mode: a short intro with the sign-in buttons.
@@ -12,11 +12,14 @@ onMounted(async () => {
   const now = await loadMe()
   if (!now) return
   let stored: string | null = null
-  try {
-    stored = sessionStorage.getItem(RETURN_KEY)
-    sessionStorage.removeItem(RETURN_KEY)
-  } catch {
-    // No storage: go to the boards.
+  // Signed out, the stored return path stays: the sign-in that follows still needs it.
+  if (!needsLogin(now)) {
+    try {
+      stored = sessionStorage.getItem(RETURN_KEY)
+      sessionStorage.removeItem(RETURN_KEY)
+    } catch {
+      // No storage: go to the boards.
+    }
   }
   const to = homeTarget(now, returnPath(stored))
   if (to) {
@@ -24,6 +27,7 @@ onMounted(async () => {
     return
   }
   signedOut.value = true
+  // Only after hydration (we are past the awaited /api/me), or the layout would mismatch.
   setPageLayout('auth')
 })
 </script>

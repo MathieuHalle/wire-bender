@@ -15,7 +15,10 @@ watch(me, (m) => {
     </template>
 
     <template #body>
-      <BoardList list="shared" />
+      <BoardList
+        v-if="me?.mode !== 'local'"
+        list="shared"
+      />
     </template>
   </UDashboardPanel>
 </template>
