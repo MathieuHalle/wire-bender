@@ -2,6 +2,7 @@
 // First run in public mode (spec §3): the setup code from the server's log, then a sign-in.
 // The account that signs in becomes the admin and takes over this server's local boards.
 // Already signed in, the code makes this account the admin at once (ruling R9).
+definePageMeta({ layout: 'auth' })
 useHead({ title: 'Setup · WireBender' })
 
 const { me, load } = useMe()
@@ -43,23 +44,10 @@ async function send() {
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-md flex-col gap-5 p-6">
-    <header class="flex items-center gap-3">
-      <NuxtLink
-        to="/"
-        aria-label="Boards"
-      >
-        <img
-          src="/icon.svg"
-          alt=""
-          width="28"
-          height="28"
-        >
-      </NuxtLink>
-      <h1 class="text-xl font-semibold">
-        Setup
-      </h1>
-    </header>
+  <div class="flex flex-col gap-5">
+    <h1 class="text-lg font-semibold">
+      Setup
+    </h1>
 
     <p
       v-if="me?.mode === 'public' && refused && !accepted && !done"
@@ -83,7 +71,7 @@ async function send() {
         This server runs in local mode: there is no setup and no admin to make.
       </p>
       <UButton
-        to="/"
+        to="/boards"
         label="Back to boards"
         variant="soft"
         class="self-start"
@@ -95,7 +83,7 @@ async function send() {
         Setup is done: this server has an admin.
       </p>
       <UButton
-        to="/"
+        to="/boards"
         label="Back to boards"
         variant="soft"
         class="self-start"

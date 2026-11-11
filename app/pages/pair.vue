@@ -1,5 +1,6 @@
 <script setup lang="ts">
 // The one page an unpaired device can open: enter the code shown on the computer.
+definePageMeta({ layout: 'auth' })
 useHead({ title: 'Pair this device · WireBender' })
 
 const code = ref('')
@@ -24,21 +25,13 @@ async function pair() {
 </script>
 
 <template>
-  <div class="mx-auto flex max-w-sm flex-col gap-4 p-6">
-    <header class="flex items-center gap-3">
-      <img
-        src="/icon.svg"
-        alt=""
-        width="28"
-        height="28"
-      >
-      <h1 class="text-xl font-semibold">
-        Pair this device
-      </h1>
-    </header>
+  <div class="flex flex-col gap-4">
+    <h1 class="text-lg font-semibold">
+      Pair this device
+    </h1>
     <p class="text-sm text-muted">
-      On the computer running WireBender, open a board and choose "Pair a device". Enter the
-      code it shows, and a name for this device.
+      On the computer running WireBender, open Settings › Devices and choose "Pair a device".
+      Enter the code it shows, and a name for this device.
     </p>
     <form
       class="space-y-3"

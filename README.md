@@ -76,7 +76,7 @@ A public server with no admin prints a setup code in its log, `[wirebender] setu
 
 ### Admin page
 
-`/admin` lists the accounts. Each has a premium switch, an admin switch and a suspend button. A suspended account cannot sign in, its share links stop working (`404`), and its open boards disconnect until it is unsuspended.
+`/settings/admin` (Settings › Server Admin) lists the accounts. Each has a premium switch, an admin switch and a suspend button. A suspended account cannot sign in, its share links stop working (`404`), and its open boards disconnect until it is unsuspended.
 
 The admin switch makes another account an admin, with the same powers as you. The server always keeps one active (not deleted, not suspended) admin: the only admin can neither turn off their own admin switch nor delete their account, and is told `You are the only admin. Make another account admin first.` Turn on someone else's admin switch first.
 
@@ -100,7 +100,7 @@ Boards opened by someone else's link are listed under **Shared with me**. A sign
 
 - Deleting a board moves it to the trash. After 30 days it is purged, with its history. **Restore** brings it back before that.
 - **Delete for good** works only from the trash, and you must type the board's exact name.
-- Deleting your account starts a 30-day wait. Sign in again within 30 days and choose **Restore** on `/account` to keep it. After that the account and its boards are purged.
+- Deleting your account starts a 30-day wait. Sign in again within 30 days and choose **Restore** on the page it shows (`/account/deleted`) to keep it. After that the account and its boards are purged.
 - Limits, for signed-in accounts in public mode: 200 boards (not counting the trash) for free accounts, 2000 for premium, and 30 creates, imports or forks per minute. Local mode has no limits.
 
 ## Data and backups
@@ -148,7 +148,7 @@ On the board list, a board's menu has **Board file** (the current board only) an
 
 ### Download everything
 
-The Account page has **Download all my boards**: one zip with a bundle per board (not the trashed ones). It is rate limited (6 a minute; the app shows a message when you hit it). The admin page has **Download every board**, a server-wide zip that includes trashed boards. It is for moving boards, not a whole-server restore: each bundle imports as a new board owned by whoever imports it, and accounts, sharing and tokens are not in it. To restore a whole server, use a snapshot (see Backups).
+Settings › Account has **Download all my boards**: one zip with a bundle per board (not the trashed ones). It is rate limited (6 a minute; the app shows a message when you hit it). Settings › Server Admin has **Download every board**, a server-wide zip that includes trashed boards. It is for moving boards, not a whole-server restore: each bundle imports as a new board owned by whoever imports it, and accounts, sharing and tokens are not in it. To restore a whole server, use a snapshot (see Backups).
 
 ## Self-host with Docker
 
@@ -202,11 +202,11 @@ wire.example.org {
 
 Requests from this computer (`localhost`) are trusted. Any other device must pair once:
 
-1. On this computer, open a board and choose **Pair a device**. It shows a 6-digit code and a QR code.
+1. On this computer, open Settings › Devices and choose **Pair a device**. It shows a 6-digit code and a QR code.
 2. On the tablet, open the address shown (`http://<LAN address>:<port>/pair`), enter the code and a name for the device. The code works once and expires after 10 minutes; after 5 wrong tries from one address it is refused for a while.
 3. The tablet now lists the boards and edits live. Its edits are recorded as `Local · <device name>`.
 
-**Paired devices** lists them; **Unpair** makes the device's next request fail with `401`.
+The **Paired devices** list on the same page shows them; **Unpair** makes the device's next request fail with `401`.
 
 ## API
 
@@ -266,13 +266,13 @@ Send a token as `Authorization: Bearer <token>`. Every API write is its own revi
 
 To change a board safely while others may be editing it, `GET` it first and `PUT` with `"baseRevision"` set to the `head` from that `GET`. A `409` means someone changed it in between (live edits still being grouped count). `PUT` answers `{ current }`, the head now; undo, redo and restore answer `{ reason }`. Read the board again, redo the change on it, and send that with the new head; never retry the old body.
 
-The app's `/api` page lists these routes and the errors.
+Settings › Connections (`/settings/connections`) lists these routes and the errors.
 
 The board file itself, and the bundle zip, are described in [docs/format/wirebender-1.md](docs/format/wirebender-1.md), with a [JSON Schema](docs/format/wirebender-1.schema.json) (regenerate it with `pnpm schema`) and [example boards](docs/format/examples/).
 
 ## Tokens
 
-A token lets a script or an AI client use the API as you. Make one on `/account` (**Tokens**): give it a name, copy it at once, it is shown only that one time. A token starts with `wb_`; keep it private and never commit it. You can have 20. **Revoke** stops it at once, and closes its open live connections.
+A token lets a script or an AI client use the API as you. Make one in Settings › Connections (**Tokens**, `/settings/connections`): give it a name, copy it at once, it is shown only that one time. A token starts with `wb_`; keep it private and never commit it. You can have 20. **Revoke** stops it at once, and closes its open live connections.
 
 - In local mode a token can be made only on this computer, not from a paired device (`403`, `Create tokens on this computer.`): a token made on a tablet would outlive unpairing it. A paired device can still list and revoke tokens.
 - Send it as `Authorization: Bearer <token>`. It acts as its owner, with that owner's access to boards and share links.

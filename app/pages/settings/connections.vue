@@ -81,9 +81,9 @@ const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localh
       </p>
 
       <section class="space-y-2">
-        <h2 class="text-base font-medium">
+        <h3 class="text-base font-medium">
           Sign in with a token
-        </h2>
+        </h3>
         <p class="text-sm">
           Make a token in the Tokens list above
           and send it as a bearer token:
@@ -109,9 +109,9 @@ const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localh
       </section>
 
       <section class="space-y-2">
-        <h2 class="text-base font-medium">
+        <h3 class="text-base font-medium">
           Change a board
-        </h2>
+        </h3>
         <p class="text-sm">
           <code>GET /api/boards/:id</code> first, then <code>PUT /api/boards/:id</code> with <code>baseRevision</code> set
           to the <code>head</code> of that GET. Never send a <code>PUT</code> without it.
@@ -123,9 +123,9 @@ const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localh
       </section>
 
       <section class="space-y-2">
-        <h2 class="text-base font-medium">
+        <h3 class="text-base font-medium">
           Errors
-        </h2>
+        </h3>
         <ul class="list-disc space-y-1 pl-5 text-sm">
           <li><code>{ "error": "…" }</code> with the status: one message (<code>401</code>, <code>403</code>, <code>404</code>, <code>413</code>…).</li>
           <li><code>{ "errors": ["…"] }</code> with <code>422</code>: what is wrong with the data you sent, one line each.</li>
@@ -135,9 +135,9 @@ const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localh
       </section>
 
       <section class="space-y-2">
-        <h2 class="text-base font-medium">
+        <h3 class="text-base font-medium">
           Routes
-        </h2>
+        </h3>
         <p class="text-sm text-muted">
           <code>:id</code> is a key: a board id (owner only) or a share link id. A role limits what a key can do:
           <code>PUT</code>, undo, redo and restore need edit; rename, trash, sharing and the link need the owner.
@@ -190,9 +190,9 @@ const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localh
       </section>
 
       <section class="space-y-2">
-        <h2 class="text-base font-medium">
+        <h3 class="text-base font-medium">
           MCP server
-        </h2>
+        </h3>
         <p class="text-sm">
           An MCP server lets Claude and other AI tools read and edit your boards with a token. It reads
           <code>WIREBENDER_SERVER</code> (default <code>http://localhost:3000</code>) and <code>WIREBENDER_TOKEN</code>.

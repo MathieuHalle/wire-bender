@@ -6,7 +6,7 @@ import { runCheck, type Finding } from '~core/check'
 import { tagNets, type Tag } from '~core/scene3d'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
-import { jointSide, LOCKED_TITLE, makeGeo, PAUSED_TITLE, pageKey, SIGN_IN_TITLE, sideBox, sideFrames, VIEW_TITLE, type View } from '~/utils/boardView'
+import { jointSide, LOCKED_TITLE, makeGeo, PAUSED_TITLE, pageKey, RETURN_KEY, returnEntry, SIGN_IN_TITLE, sideBox, sideFrames, VIEW_TITLE, type View } from '~/utils/boardView'
 import { NO_ACCESS } from '~/composables/useLiveBoard'
 import { fallbackAlert } from '~/utils/board3dFallback'
 import { defaultPanel, loadPanel, savePanel, type PanelState, type PanelTab } from '~/utils/sidePanel'
@@ -325,8 +325,15 @@ watch([canShare, () => panel.value.tab, meta, me], ([can, tab, m, who]) => {
   if (!can && tab === 'sharing' && m && who) panel.value.tab = 'findings'
 })
 
-/** A link visitor's "Sign in to edit" (an edit link, signed out). */
-const signInOpen = ref(false)
+/** A link visitor's "Sign in to edit" (an edit link, signed out): sign in, then back here. */
+async function signInToEdit() {
+  try {
+    sessionStorage.setItem(RETURN_KEY, returnEntry(`/b/${id.value}`))
+  } catch {
+    // No storage (a private window): the user lands on the boards.
+  }
+  await navigateTo('/login')
+}
 
 /** Fork: a copy of this board in my account (signed in, someone else's board). */
 const forking = ref(false)
@@ -409,7 +416,7 @@ const sideTitle = (s: Side) => (s === 'top'
   <div class="flex h-dvh flex-col overflow-hidden">
     <header class="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b border-default px-4 py-2">
       <NuxtLink
-        to="/"
+        to="/boards"
         class="flex items-center gap-2"
         title="All boards"
       >
@@ -484,7 +491,7 @@ const sideTitle = (s: Side) => (s === 'top'
           size="xs"
           color="error"
           variant="outline"
-          to="/"
+          to="/boards"
           label="Back to the board list"
         />
       </template>
@@ -502,7 +509,7 @@ const sideTitle = (s: Side) => (s === 'top'
           size="xs"
           color="error"
           variant="outline"
-          to="/"
+          to="/boards"
           label="Back to the board list"
         />
       </template>
@@ -551,7 +558,7 @@ const sideTitle = (s: Side) => (s === 'top'
           size="xs"
           icon="i-lucide-log-in"
           label="Sign in to edit"
-          @click="signInOpen = true"
+          @click="signInToEdit"
         />
         <UButton
           v-else-if="signedIn"
@@ -564,19 +571,6 @@ const sideTitle = (s: Side) => (s === 'top'
         />
       </template>
     </UAlert>
-
-    <UModal
-      v-model:open="signInOpen"
-      title="Sign in to edit"
-      description="This link lets signed-in people edit. You come back to this board once signed in."
-    >
-      <template #body>
-        <SignInButtons
-          :providers="me?.providers ?? []"
-          :return-to="`/b/${id}`"
-        />
-      </template>
-    </UModal>
 
     <div
       v-if="needsPassword"
