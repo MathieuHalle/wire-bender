@@ -4,6 +4,9 @@ import { homeTarget, needsLogin } from '~/utils/nav'
 
 // `/` sends a signed-in user (or local mode) on: back to the page a sign-in started from,
 // else the boards. Signed out in public mode: a short intro with the sign-in buttons.
+// Always the auth layout: a signed-in visitor only passes through (`Loading…`), and a layout
+// switched at runtime (setPageLayout) did not apply on a client navigation from /logout.
+definePageMeta({ layout: 'auth' })
 const { me, failed: meFailed, load: loadMe } = useMe()
 /** Public mode, nobody signed in: the intro. */
 const signedOut = ref(false)
@@ -27,8 +30,6 @@ onMounted(async () => {
     return
   }
   signedOut.value = true
-  // Only after hydration (we are past the awaited /api/me), or the layout would mismatch.
-  setPageLayout('auth')
 })
 </script>
 
@@ -36,13 +37,13 @@ onMounted(async () => {
   <div>
     <p
       v-if="!me && meFailed"
-      class="p-4 text-error"
+      class="text-sm text-error"
     >
       Cannot reach the WireBender server.
     </p>
     <p
       v-else-if="!me || !signedOut"
-      class="p-4 text-muted"
+      class="text-sm text-muted"
     >
       Loading…
     </p>
