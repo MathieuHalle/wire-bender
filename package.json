@@ -8,6 +8,7 @@
     "dev": "WIREBENDER_MODE=local nuxt dev --host",
     "dev:public": "WIREBENDER_MODE=public nuxt dev",
     "preview": "nuxt preview",
+    "start": "nuxt build && WIREBENDER_MODE=local node .output/server/index.mjs",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",

@@ -1,12 +1,58 @@
+# WireBender, and (profile `https`) Caddy in front of it for HTTPS. See the README,
+# "Self-host with Docker".
+#
+# On a server, .env sets COMPOSE_PROFILES=https and WIREBENDER_DOMAIN: Caddy answers on
+# ports 80 and 443, gets the certificate, and is the only way in from outside.
+# On your own computer, leave both out: WireBender alone on http://localhost:3000.
 services:
   wirebender:
     build: .
     env_file: .env
+    environment:
+      # The rate limits read the visitor's address from Caddy's X-Forwarded-For, and only
+      # from Caddy's own fixed address below. Set it in .env to trust another proxy instead.
+      WIREBENDER_TRUST_PROXY: ${WIREBENDER_TRUST_PROXY:-172.30.84.2}
+    # This machine only, never the internet (Docker's published ports bypass the host firewall).
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     volumes:
       - wirebender-data:/data
+    networks:
+      - wirebender
     restart: unless-stopped
+
+  caddy:
+    image: caddy:2.10.2
+    profiles: [https]
+    depends_on:
+      - wirebender
+    environment:
+      WIREBENDER_DOMAIN: ${WIREBENDER_DOMAIN:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The certificates and keys: kept across restarts (Let's Encrypt limits new ones).
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      wirebender:
+        ipv4_address: 172.30.84.2
+    restart: unless-stopped
+
+networks:
+  wirebender:
+    ipam:
+      config:
+        # Fixed, so Caddy's address (above) is known. If it clashes with a network on the
+        # host, change it here and in both Caddy lines (ipv4_address, WIREBENDER_TRUST_PROXY).
+        - subnet: 172.30.84.0/24
+          # Containers without a fixed address get one from here, so none takes Caddy's.
+          ip_range: 172.30.84.128/25
 
 volumes:
   wirebender-data:
+  caddy-data:
+  caddy-config:

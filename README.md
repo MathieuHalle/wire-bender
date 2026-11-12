@@ -6,9 +6,12 @@ WireBender is a local Nuxt app for planning hand-soldered perfboards: you draw w
 
 ```sh
 pnpm install
-pnpm dev                # http://localhost:3000
+pnpm start              # build, then run: http://localhost:3000
+pnpm dev                # the dev server, while you change WireBender itself
 WIREBENDER_DATA=/tmp/wb PORT=3002 pnpm dev   # a second server: its own port and data folder
 ```
+
+For everyday use, run `pnpm start` (`PORT=3001 pnpm start` for another port). It builds WireBender, then runs the build in local mode, listening on the network like `pnpm dev`. Unlike the dev server, it does not rebuild when the code changes (a `git pull` or merge leaves it running the old version: stop it and run `pnpm start` again), and it shows nobody the project source.
 
 `pnpm dev` runs in local mode and listens on the network (`--host`), so a tablet on the same Wi-Fi can open `http://<this computer's LAN address>:<port>`. Open the board list, import a `.wirebender.json` file or start a new board. Boards are live: every open copy updates as you edit, and a copy that loses the server goes read-only (`Reconnecting… editing is paused`) until it is back.
 
@@ -35,10 +38,13 @@ Set these before you start:
 | --- | --- |
 | `WIREBENDER_URL` | the address people use to reach this server, e.g. `https://wire.example.org`. Without it the server stops: `public mode needs WIREBENDER_URL, the address people use to reach this server` |
 | `WIREBENDER_DATA` | the data folder, as above |
+| `WIREBENDER_TRUST_PROXY` | behind a reverse proxy: its addresses or ranges, comma-separated (e.g. `172.30.84.2` or `10.0.0.0/8`). See below |
 | `NUXT_OAUTH_GITHUB_CLIENT_ID`, `NUXT_OAUTH_GITHUB_CLIENT_SECRET` | the GitHub sign-in |
 | `NUXT_OAUTH_GOOGLE_CLIENT_ID`, `NUXT_OAUTH_GOOGLE_CLIENT_SECRET` | the Google sign-in |
 
 You need at least one provider pair, or the server stops: `public mode needs a sign-in provider: set NUXT_OAUTH_GITHUB_CLIENT_ID and NUXT_OAUTH_GITHUB_CLIENT_SECRET, or the Google pair`.
+
+**Behind a reverse proxy** (Caddy, nginx, a load balancer), every request comes from the proxy, so the per-address limits (setup codes, password-link tries, bundle downloads for visitors) would lump all signed-out visitors together. Set `WIREBENDER_TRUST_PROXY` to the proxy's address: a request from it is counted by the visitor address it adds to `X-Forwarded-For` (the last entry that is not itself a listed proxy). A request from anywhere else is counted by its own address, whatever it sends. List only your proxies: anything listed can choose which address its requests count as. A wrong entry stops the server at start, naming it. Local mode never reads it. The Docker setup below sets it for you.
 
 **Register the OAuth app** with each provider:
 
@@ -101,6 +107,7 @@ Boards opened by someone else's link are listed under **Shared with me**. A sign
 - Deleting a board moves it to the trash. After 30 days it is purged, with its history. **Restore** brings it back before that.
 - **Delete for good** works only from the trash, and you must type the board's exact name.
 - Deleting your account starts a 30-day wait. Sign in again within 30 days and choose **Restore** on the page it shows (`/account/deleted`) to keep it. After that the account and its boards are purged.
+- A board can be up to 2 000 000 bytes, measured as it is stored (compact JSON). A board's own download is pretty-printed and so larger; a write body (import, `PUT`) may be up to 4 000 000 bytes, so any board that downloads imports again.
 - Limits, for signed-in accounts in public mode: 200 boards (not counting the trash) for free accounts, 2000 for premium, and 30 creates, imports or forks per minute. Local mode has no limits.
 
 ## Data and backups
@@ -108,7 +115,7 @@ Boards opened by someone else's link are listed under **Shared with me**. A sign
 Everything is stored in `WIREBENDER_DATA` (default `./.data`, which git ignores):
 
 - `wirebender.sqlite`: all boards, their revision history, the accounts and the paired devices.
-- `backups/`: `pre-migration-<time>.sqlite` is written here before the server changes the database layout (a migration that fails is rolled back and the server refuses to start). `daily-<time>.sqlite` is an online snapshot taken at start and then once a day while the server runs, checked with `PRAGMA integrity_check` before older ones are pruned. The newest 14 daily snapshots are kept; `pre-migration-*` files are never pruned.
+- `backups/`: `pre-migration-<time>.sqlite` is written here before the server changes the database layout (a migration that fails is rolled back and the server refuses to start). `daily-<time>.sqlite` is an online snapshot taken at start and then once a day while the server runs, checked with `PRAGMA integrity_check` before older ones are pruned. The newest 14 daily snapshots are kept; `pre-migration-*` files are never pruned. Each copy needs twice the database's size free on the disk: a daily snapshot without that room is skipped, older ones are kept, and the log says `backup failed: not enough free disk space for a backup: <free> free, <needed> needed` (once a day). Without room for the `pre-migration` copy, the server does not start (`not enough free disk space to back up the database before upgrading it: ...`): free some space and start it again.
 - `session-secret`: public mode only, made once by `pnpm dev:public` when no `NUXT_APP_SECRET` or `NUXT_SESSION_PASSWORD` is set. Anyone who has it can forge a session as any account: keep it private, including in your backups.
 
 Revisions are never edited. They are deleted only with their board: when the trash is purged (30 days after the board was trashed, or with a purged account), or by **Delete for good**. To back up, stop the server and copy the whole data folder. To restore, put the folder back. Use `WIREBENDER_DATA=/some/folder pnpm dev` to keep experiments apart from your real boards.
@@ -144,7 +151,7 @@ docker compose up -d
 
 ### Moving a board between servers (with history)
 
-On the board list, a board's menu has **Board file** (the current board only) and **Board with history** (a `.wirebender.zip` holding every revision). The board page's **Board** tab (side panel) has both too, for anyone who can open the board, including through a share link; it also shows when the board was created and last changed, its size, what it was forked from, and lets the owner rename it. On the other server, **Import** accepts either file; a zip creates a new board with its history. Revisions that came from a zip show `(imported)` after the author in the History tab: the author is a name only, and Undo works across them. From a script: `GET /api/boards/:id/bundle` and `POST /api/boards/import-bundle` (raw zip body, `Content-Type: application/zip`), or the CLI below. Bundle downloads share the download-all limit below (6 a minute per account, or per address for a visitor on a view link; past it, `429 Too many exports. Wait a minute and try again.`).
+On the board list, a board's menu has **Board file** (the current board only) and **Board with history** (a `.wirebender.zip` holding every revision). The board page's **Board** tab (side panel) has both too, for anyone who can open the board, including through a share link; it also shows when the board was created and last changed, its size, what it was forked from, and lets the owner rename it. On the other server, **Import** accepts either file; a zip creates a new board with its history. Each file in the zip is checked against its checksum; a zip damaged on the way is refused (`This bundle is damaged: <file> does not match its checksum.`). Revisions that came from a zip show `(imported)` after the author in the History tab: the author is a name only, and Undo works across them. From a script: `GET /api/boards/:id/bundle` and `POST /api/boards/import-bundle` (raw zip body, `Content-Type: application/zip`), or the CLI below. Bundle downloads share the download-all limit below (6 a minute per account, or per address for a visitor on a view link; past it, `429 Too many exports. Wait a minute and try again.`).
 
 ### Download everything
 
@@ -158,14 +165,14 @@ The image runs the server in public mode. You need Docker with Compose, and a si
 cp .env.example .env
 ```
 
-Edit `.env`: set `WIREBENDER_URL` to the address people will use (e.g. `https://wire.example.org`), set `NUXT_APP_SECRET` to the output of `openssl rand -hex 32`, and fill in the GitHub pair, and uncomment the Google pair only if you use Google. With no sign-in pair or no secret, the server refuses to start and says why in its log. `.env` is ignored by the repo; never commit it. Then:
+Edit `.env`: set `WIREBENDER_URL` to the address people will use (e.g. `https://wire.example.org`) and `WIREBENDER_DOMAIN` to its domain (`wire.example.org`), set `NUXT_APP_SECRET` to the output of `openssl rand -hex 32`, and fill in the GitHub pair, and uncomment the Google pair only if you use Google. With no sign-in pair or no secret, the server refuses to start and says why in its log. `.env` is ignored by the repo; never commit it. Then:
 
 ```sh
 docker compose up -d
 docker compose logs wirebender    # the setup code for the first admin is printed here
 ```
 
-The server listens on port 3000 (`ports` in `compose.yaml` maps it to the host). Register the OAuth app with these callback URLs, using your `WIREBENDER_URL`:
+This starts two containers: Caddy, on ports 80 and 443, and WireBender behind it (see HTTPS with Caddy below). The domain's DNS must point at the machine, and ports 80 and 443 must be open, for Caddy to get the certificate. Register the OAuth app with these callback URLs, using your `WIREBENDER_URL`:
 
 - GitHub: `<WIREBENDER_URL>/auth/github`
 - Google: `<WIREBENDER_URL>/auth/google`
@@ -188,15 +195,12 @@ The server writes a `pre-migration-*` backup before it changes the database layo
 
 ### HTTPS with Caddy
 
-Sign-in needs `https` in front of the server. With Caddy on the same machine, a `Caddyfile` of one site is enough; Caddy gets and renews the certificate:
+Sign-in needs `https` in front of the server. `compose.yaml` runs Caddy for that, when `.env` has `COMPOSE_PROFILES=https` (as `.env.example` does). Caddy reads `Caddyfile` (one site, `WIREBENDER_DOMAIN`), gets and renews the certificate, and passes the live-editing WebSockets through. Its certificates are kept in the `caddy-data` volume.
 
-```
-wire.example.org {
-    reverse_proxy localhost:3000
-}
-```
-
-`WIREBENDER_URL` must be `https://wire.example.org`, the address people type. Live editing uses WebSockets, and `reverse_proxy` passes them through with no extra setting. With Caddy, change the port mapping in `compose.yaml` to `"127.0.0.1:3000:3000"`, so only Caddy can reach the container. Docker's published ports bypass the host firewall (ufw, firewalld): with `3000:3000`, plain http on port 3000 is open to the internet next to Caddy.
+- WireBender's port 3000 is published on `127.0.0.1` only: reachable from the machine itself (for a quick check), never from the internet. Docker's published ports bypass the host firewall (ufw, firewalld), so keep it that way.
+- The two containers share a network, `172.30.84.0/24`, where Caddy always has `172.30.84.2`, and `WIREBENDER_TRUST_PROXY` is set to that address (see Behind a reverse proxy, above). If that range clashes with a network on the machine, change the range and both addresses in `compose.yaml`.
+- **On your own computer**, leave `COMPOSE_PROFILES` and `WIREBENDER_DOMAIN` out of `.env` and set `WIREBENDER_URL=http://localhost:3000`: only WireBender starts, on `http://localhost:3000`, with no ports 80 or 443. GitHub and Google accept `http://localhost` callbacks.
+- **With your own proxy** (a Caddy or nginx already on the machine, or a load balancer), leave `COMPOSE_PROFILES` out, point the proxy at `localhost:3000`, and set `WIREBENDER_TRUST_PROXY` in `.env` to the address its requests come from (as WireBender sees it inside Docker, usually the network's gateway, e.g. `172.30.84.1`).
 
 ## Pair a device
 

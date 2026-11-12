@@ -1,0 +1,5 @@
+# WireBender behind Caddy (compose.yaml, profile `https`). Caddy gets and renews the
+# certificate for WIREBENDER_DOMAIN, and passes the live-editing WebSockets through.
+{$WIREBENDER_DOMAIN} {
+	reverse_proxy wirebender:3000
+}
