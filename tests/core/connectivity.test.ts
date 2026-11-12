@@ -208,6 +208,24 @@ describe('buildConnectivity', () => {
     expect(c.contacts).toEqual([])
   })
 
+  it('netsAtHole lists both nets where insulated wires of two nets cross; netAtHole gives none', () => {
+    const c = buildConnectivity(mk({
+      parts: [axial('R1', 'A2', 'A5', 'X'), axial('R2', 'E9', 'H9', 'Y')],
+      wires: [
+        { id: 'W1', kind: 'laid', side: 'bottom', points: ['A2', 'J2'], bareSegments: [], joints: [] },
+        { id: 'W2', kind: 'laid', side: 'bottom', points: ['E9', 'E1'], bareSegments: [], joints: [] }
+      ]
+    }))
+    const e2 = parseHole('E2')
+    expect(c.netsAtHole(e2, 'bottom')).toEqual(['X', 'Y'])
+    expect(c.netAtHole(e2, 'bottom')).toBeNull()
+    expect(c.netsAtHole(parseHole('C2'), 'bottom')).toEqual(['X'])
+    expect(c.netsAtHole(parseHole('J9'), 'bottom')).toEqual([])
+    // A shorted group gives none: the short is its own finding.
+    const shorted = buildConnectivity(mk({ parts: [axial('R1', 'C2', 'F2', 'X'), axial('R2', 'C5', 'F5', 'Y')], trails: [trail('T1', ['C2', 'C5'])] }))
+    expect(shorted.netsAtHole(parseHole('C3'), 'bottom')).toEqual([])
+  })
+
   it('bare wire segment behaves like a trail', () => {
     const c = buildConnectivity(mk({
       parts: rowC(true),

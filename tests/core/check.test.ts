@@ -205,6 +205,24 @@ describe('runCheck', () => {
     expect(ka[0]!.message).toContain('V12')
   })
 
+  it('keepAway still sees a net where insulated wires of two nets overlap', () => {
+    // W1 (IN_A, LOGIC) turns at E2; W2 (GND) lies over the turn. The V12 pad at F1 is within
+    // one hole of E2 only, so the overlap hole is the only place the rule can see it.
+    const laid = (id: string, points: string[]) => ({ id, kind: 'laid' as const, side: 'bottom' as const, points, bareSegments: [], joints: [] })
+    const base = {
+      ...classes,
+      rules: { keepAway: [{ a: 'LOGIC', b: 'HV12', holes: 1 }], adjacency: [] },
+      parts: [axial('R1', 'A2', 'A5', 'IN_A'), axial('R2', 'F1', 'I1', 'V12'), axial('R3', 'E5', 'H5', 'GND')],
+      wires: [laid('W1', ['A2', 'E2', 'E9'])]
+    }
+    const alone = only(check(base).findings, 'keepAway')
+    expect(alone).toHaveLength(1)
+    expect(alone[0]!.holes).toEqual(expect.arrayContaining(['E2', 'F1']))
+    // The GND wire over the turn must not hide it.
+    const overlapped = only(check({ ...base, wires: [...base.wires, laid('W2', ['E1', 'E5'])] }).findings, 'keepAway')
+    expect(overlapped).toEqual(alone)
+  })
+
   it('NC pin never warns', () => {
     const { findings } = check({
       parts: [{

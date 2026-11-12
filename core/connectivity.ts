@@ -40,6 +40,12 @@ export interface Connectivity {
   groupAtHole(h: Hole, side: Side): number | null
   /** The single net at that hole on that side; null when none or when it is shorted. */
   netAtHole(h: Hole, side: Side): string | null
+  /**
+   * Every net at that hole on that side (same tier as groupAtHole), sorted: two insulated
+   * wires of different nets lying over one hole give both. A shorted group (more than one
+   * net) gives none: the short is reported on its own.
+   */
+  netsAtHole(h: Hole, side: Side): string[]
 }
 
 class UnionFind {
@@ -327,5 +333,10 @@ export function buildConnectivity(board: BoardFile): Connectivity {
     return nets.size === 1 ? [...nets][0]! : null
   }
 
-  return { groups, groupOfLead, contacts, proposedJoints, groupAtHole, netAtHole }
+  const netsAtHole = (h: Hole, side: Side): string[] => {
+    const gs = groupsAtHole(h, side).map(gi => groups[gi]!).filter(g => g.nets.length === 1)
+    return [...new Set(gs.map(g => g.nets[0]!))].sort()
+  }
+
+  return { groups, groupOfLead, contacts, proposedJoints, groupAtHole, netAtHole, netsAtHole }
 }

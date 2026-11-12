@@ -18,8 +18,8 @@ export function spacingRules(ctx: CheckContext): Finding[] {
   const { board, conn } = ctx
   const classOf = (net: string) => board.nets[net]?.class
 
-  // Nets carried at each hole, per side with pads. Null (no net, or shorted) is skipped:
-  // a short is reported on its own.
+  // The one net carried at each hole, per side with pads, for adjacency. Null (no net, two
+  // nets, or shorted) is skipped: a short is reported on its own.
   const perSide = ctx.sides.map((side) => {
     const at = new Map<string, NetHole>()
     for (let row = 1; row <= board.board.rows; row++)
@@ -31,14 +31,26 @@ export function spacingRules(ctx: CheckContext): Finding[] {
     return at
   })
 
+  // Every net at each hole, per side, for keep-away: insulated wires of two nets lying over
+  // one hole are both there (netAtHole gives null for that hole, as for a short).
+  const allPerSide = ctx.sides.map((side) => {
+    const at: NetHole[] = []
+    for (let row = 1; row <= board.board.rows; row++)
+      for (let col = 1; col <= board.board.cols; col++) {
+        const hole = { col, row }
+        for (const net of conn.netsAtHole(hole, side)) at.push({ hole, net })
+      }
+    return at
+  })
+
   const out: Finding[] = []
 
   // ---- keepAway: one finding per rule and net pair, all sides merged -----------------
   board.rules.keepAway.forEach((rule, ri) => {
     const found = new Map<string, { na: string, nb: string, ha: Map<string, Hole>, hb: Map<string, Hole> }>()
-    for (const at of perSide) {
-      const as = [...at.values()].filter(x => classOf(x.net) === rule.a)
-      const bs = [...at.values()].filter(x => classOf(x.net) === rule.b)
+    for (const at of allPerSide) {
+      const as = at.filter(x => classOf(x.net) === rule.a)
+      const bs = at.filter(x => classOf(x.net) === rule.b)
       for (const a of as)
         for (const b of bs) {
           if (a.net === b.net) continue
