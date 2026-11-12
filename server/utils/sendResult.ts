@@ -1,7 +1,7 @@
 import type { H3Event } from 'h3'
 import { tooLarge, type ApiResult, type BoardRequest } from './api'
 import { TOKEN_REFUSED, bearerOf } from './access'
-import { MAX_BOARD_BYTES } from './boards'
+import { MAX_BODY_BYTES } from './boards'
 import { readCapped } from './readCapped'
 import { unlockedOf, type Who } from './who'
 
@@ -26,7 +26,7 @@ async function bodyText(event: H3Event, max: number): Promise<string | null> {
  * body; otherwise `write` gets the body, or the 413 is sent if it is over `max` bytes.
  */
 export async function sendWrite(
-  event: H3Event, refused: ApiResult | null, write: (text: string) => ApiResult | Promise<ApiResult>, max = MAX_BOARD_BYTES
+  event: H3Event, refused: ApiResult | null, write: (text: string) => ApiResult | Promise<ApiResult>, max = MAX_BODY_BYTES
 ): Promise<unknown> {
   if (refused) return sendResult(event, refused)
   const text = await bodyText(event, max)

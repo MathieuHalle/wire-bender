@@ -719,7 +719,7 @@ describe('PUT /api/boards/:key body', () => {
 
     // An editor gets 413, still without the body being read.
     const editor = put(linkId, { kind: 'user', userId: newUser('Bob'), author: 'Bob', isAdmin: false, isPremium: false }, huge)
-    expect(await putRoute(editor)).toEqual({ error: 'body is larger than 2000000 bytes' })
+    expect(await putRoute(editor)).toEqual({ error: 'body is larger than 4000000 bytes' })
     expect(editor.status).toBe(413)
     expect(editor.read()).toBe(false)
   })

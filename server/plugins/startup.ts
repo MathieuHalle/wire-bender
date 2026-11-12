@@ -2,6 +2,7 @@ import { closeDb, dataDir, useDb } from '../db'
 import { setupNotice } from '../utils/accounts'
 import { insecureCookieWarning } from '../utils/cookieSecure'
 import { schedulePurge } from '../utils/lifecycle'
+import { parseTrustProxy } from '../utils/clientAddress'
 import { checkMode, publicBase, startupSecretProblem } from '../utils/mode'
 
 // The mode is checked before the database is opened: a wrong mode creates nothing.
@@ -16,6 +17,8 @@ import { checkMode, publicBase, startupSecretProblem } from '../utils/mode'
 export default defineNitroPlugin((nitroApp) => {
   try {
     const mode = checkMode(process.env)
+    // A wrong WIREBENDER_TRUST_PROXY stops the server here, not at the first visitor.
+    if (mode === 'public') parseTrustProxy(process.env.WIREBENDER_TRUST_PROXY)
     useDb()
     const problem = startupSecretProblem(mode, useRuntimeConfig().appSecret, dataDir(), process.env)
     if (problem) throw new Error(problem)

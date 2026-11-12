@@ -1,7 +1,7 @@
 import { useDb } from '../../../db'
 import { unlockLink, withUnlocked } from '../../../utils/boardAccess'
 import { checkMode } from '../../../utils/mode'
-import { remoteOf } from '../../../utils/peerAddress'
+import { clientAddress } from '../../../utils/clientAddress'
 import { readCapped } from '../../../utils/readCapped'
 import { refuseToken } from '../../../utils/sendResult'
 
@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
     setResponseHeader(event, 'connection', 'close')
     return { error: 'body too large' }
   }
-  const r = await unlockLink(useDb(), linkId, parse(text)?.password, remoteOf(req).address, verifyPassword)
+  const r = await unlockLink(useDb(), linkId, parse(text)?.password, clientAddress(req), verifyPassword)
   setResponseStatus(event, r.status)
   if (r.status === 200 && r.entry !== null) {
     // Replaced, not merged: nuxt-auth-utils' merge would concatenate the list.

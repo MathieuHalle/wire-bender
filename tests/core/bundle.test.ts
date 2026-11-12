@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { zipSync, unzipSync, deflateSync, strToU8, strFromU8 } from 'fflate'
 import { parseBoard, type BoardFile } from '~core/schema'
 import { BUNDLE_FORMAT, MAX_BUNDLE_BYTES, MAX_BUNDLE_REVISIONS, encodeBundle, decodeBundle, type Bundle } from '~core/bundle'
+import { crc32 } from '~core/crc32'
 
 const spy = vi.hoisted(() => ({ inflated: 0 }))
 vi.mock('fflate', async (orig) => {
@@ -140,7 +141,7 @@ describe('board bundles', () => {
     throw new Error('no such entry')
   }
 
-  interface RawEntry { name: string, method: 0 | 8, data: Uint8Array, usize: number, csize?: number }
+  interface RawEntry { name: string, method: 0 | 8, data: Uint8Array, usize: number, csize?: number, crc?: number }
 
   /**
    * A hand-built zip. With `overlap`, only the first entry gets a local header and every central entry points at it.
@@ -162,14 +163,14 @@ describe('board bundles', () => {
       }
       offsets.push(at)
       const nb = strToU8(e.name)
-      emit([0x50, 0x4B, 3, 4, ...u16(20), ...u16(0), ...u16(e.method), ...u16(0), ...u16(0), ...u32(0), ...u32(e.csize ?? e.data.length), ...u32(e.usize), ...u16(nb.length), ...u16(0), ...nb])
+      emit([0x50, 0x4B, 3, 4, ...u16(20), ...u16(0), ...u16(e.method), ...u16(0), ...u16(0), ...u32(e.crc ?? 0), ...u32(e.csize ?? e.data.length), ...u32(e.usize), ...u16(nb.length), ...u16(0), ...nb])
       emit(e.data)
     }
     const cdStart = at
     let cdSize = 0
     for (const [i, e] of entries.slice(0, centralCount).entries()) {
       const nb = strToU8(e.name)
-      const rec = [0x50, 0x4B, 1, 2, ...u16(20), ...u16(20), ...u16(0), ...u16(e.method), ...u16(0), ...u16(0), ...u32(0), ...u32(e.csize ?? e.data.length), ...u32(e.usize), ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offsets[i]!), ...nb]
+      const rec = [0x50, 0x4B, 1, 2, ...u16(20), ...u16(20), ...u16(0), ...u16(e.method), ...u16(0), ...u16(0), ...u32(e.crc ?? 0), ...u32(e.csize ?? e.data.length), ...u32(e.usize), ...u16(nb.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offsets[i]!), ...nb]
       emit(rec)
       cdSize += rec.length
     }
@@ -427,8 +428,8 @@ describe('board bundles', () => {
     const b = board()
     const entries = [
       { name: 'revisions/', method: 0 as const, data: new Uint8Array(0), usize: 0 },
-      ...Object.entries(good(1)).map(([name, d]) => ({ name, method: 8 as const, data: deflateSync(d), usize: d.length })),
-      { name: 'revisions/000001.json', method: 8 as const, data: deflateSync(json(rev(1, b))), usize: json(rev(1, b)).length }
+      ...Object.entries(good(1)).map(([name, d]) => ({ name, method: 8 as const, data: deflateSync(d), usize: d.length, crc: crc32(d) })),
+      { name: 'revisions/000001.json', method: 8 as const, data: deflateSync(json(rev(1, b))), usize: json(rev(1, b)).length, crc: crc32(json(rev(1, b))) }
     ]
     expect(decodeBundle(buildZip(entries))).toMatchObject({ ok: true })
   })
@@ -489,8 +490,8 @@ describe('board bundles', () => {
     const b = board()
     const rv = json(rev(1, b))
     const entries = [
-      ...Object.entries(good(1)).map(([name, d]) => ({ name, method: 8 as const, data: deflateSync(d), usize: d.length })),
-      { name: 'revisions/000001.json', method: 8 as const, data: deflateSync(rv), usize: rv.length }
+      ...Object.entries(good(1)).map(([name, d]) => ({ name, method: 8 as const, data: deflateSync(d), usize: d.length, crc: crc32(d) })),
+      { name: 'revisions/000001.json', method: 8 as const, data: deflateSync(rv), usize: rv.length, crc: crc32(rv) }
     ]
     expect(decodeBundle(buildZip(entries))).toMatchObject({ ok: true })
     expect(decodeBundle(buildZip(entries, false, 2))).toEqual({ ok: false, status: 422, error: 'central directory does not match the entries' })
@@ -508,5 +509,27 @@ describe('board bundles', () => {
       { name: 'revisions/000001.json', method: 8 as const, data: new Uint8Array(20).fill(0xFF), usize: 500 }
     ]
     expect(decodeBundle(buildZip(entries))).toEqual({ ok: false, status: 422, error: 'revisions/000001.json: could not be unzipped' })
+  })
+})
+
+describe('checksums', () => {
+  it('crc32 is the zip CRC-32', () => {
+    expect(crc32(strToU8('123456789'))).toBe(0xCBF43926)
+    expect(crc32(new Uint8Array(0))).toBe(0)
+  })
+
+  it('a file changed inside the zip (still valid JSON) is refused, naming it', () => {
+    const b = board()
+    const zip = zipSync({ 'manifest.json': json({ format: BUNDLE_FORMAT, name: 'x', exportedAt: 1, revisions: 0 }), 'board.wirebender.json': json({ ...b, name: 'AAAA' }) }, { level: 0 })
+    expect(decodeBundle(zip)).toMatchObject({ ok: true })
+    const at = strFromU8(zip, true).indexOf('"AAAA"')
+    const damaged = zip.slice()
+    damaged[at + 1] = 'B'.charCodeAt(0)
+    expect(decodeBundle(damaged)).toEqual({ ok: false, status: 422, error: 'This bundle is damaged: board.wirebender.json does not match its checksum.' })
+  })
+
+  it('a bundle WireBender wrote passes', () => {
+    const b = board()
+    expect(decodeBundle(encodeBundle({ name: 'x', exportedAt: 1, board: b, revisions: [rev(1, b)] }))).toMatchObject({ ok: true })
   })
 })

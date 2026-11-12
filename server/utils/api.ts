@@ -8,7 +8,7 @@ import type { Db } from '../db'
 import { benchResponse, fileStem } from './bench'
 import { access, allows, ownerName, recordVisit, type Access, type Role } from './boardAccess'
 import { boardOverviewSvg } from '../../export/svg'
-import { MAX_BOARD_BYTES, createBoard, getBoard, getBoardRow, getRevision, listBoards, listRevisions, listShared } from './boards'
+import { MAX_BOARD_BYTES, MAX_BODY_BYTES, boardBytes, createBoard, getBoard, getBoardRow, getRevision, listBoards, listRevisions, listShared } from './boards'
 import { openRoom, type Room } from './rooms'
 import { authorIdOf, type Who } from './who'
 
@@ -29,14 +29,14 @@ const ok = (body: unknown, headers?: Record<string, string>): ApiResult => ({ st
 export const notFound = (): ApiResult => ({ status: 404, body: { error: 'not found' } })
 export const invalid = (...errors: string[]): ApiResult => ({ status: 422, body: { errors } })
 
-/** A body over `max` bytes (MAX_BOARD_BYTES unless a route caps it lower). */
-export const tooLarge = (max = MAX_BOARD_BYTES): ApiResult => ({ status: 413, body: { error: `body is larger than ${max} bytes` } })
+/** A body over `max` bytes (MAX_BODY_BYTES unless a route caps it otherwise). */
+export const tooLarge = (max = MAX_BODY_BYTES): ApiResult => ({ status: 413, body: { error: `body is larger than ${max} bytes` } })
 
 type Parsed = { ok: true, json: Record<string, unknown> } | { ok: false, result: ApiResult }
 
 /** A request body as a JSON object, or the 413 / 422 to answer with. The size is checked before parsing. */
 export function parseBody(text: string): Parsed {
-  if (Buffer.byteLength(text) > MAX_BOARD_BYTES) return { ok: false, result: tooLarge() }
+  if (Buffer.byteLength(text) > MAX_BODY_BYTES) return { ok: false, result: tooLarge() }
   let json: unknown
   try {
     json = JSON.parse(text)
@@ -45,6 +45,11 @@ export function parseBody(text: string): Parsed {
   }
   if (typeof json !== 'object' || json === null || Array.isArray(json)) return { ok: false, result: invalid('the body must be a JSON object') }
   return { ok: true, json: json as Record<string, unknown> }
+}
+
+/** The 413 for a board over MAX_BOARD_BYTES as stored, or null. */
+function boardTooLarge(board: BoardFile): ApiResult | null {
+  return boardBytes(board) > MAX_BOARD_BYTES ? { status: 413, body: { error: `the board is larger than ${MAX_BOARD_BYTES} bytes` } } : null
 }
 
 /** An empty `wirebender/1` board from `{ name, cols, rows, type }`; parseBoard rejects bad values. */
@@ -74,6 +79,8 @@ export function createOrImport(db: Db, text: string, author = AUTHOR, ownerId = 
   if (!importing && (typeof json.name !== 'string' || json.name.trim() === '')) return invalid('name: must be a non-empty string')
   const parsed = parseBoard(importing ? json.board : emptyBoard(json))
   if (!parsed.ok) return invalid(...parsed.errors)
+  const big = boardTooLarge(parsed.board)
+  if (big) return big
   return ok({ id: createBoard(db, parsed.board, importing ? 'import' : 'create', author, ownerId, ownerId, undefined, tokenId).id })
 }
 
@@ -200,6 +207,8 @@ export function putBoard(db: Db, req: BoardRequest, text: string): ApiResult {
     if (baseRevision !== undefined && !Number.isInteger(baseRevision)) return invalid('baseRevision must be an integer')
     const parsed = parseBoard(board)
     if (!parsed.ok) return invalid(...parsed.errors)
+    const big = boardTooLarge(parsed.board)
+    if (big) return big
     return withRoom(db, a.boardId, (room) => {
       // Commit live edits still grouping first: they are part of the board the base is checked against.
       const head = room.flush()

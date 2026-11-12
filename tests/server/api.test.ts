@@ -12,7 +12,7 @@ import { signIn } from '../../server/utils/accounts'
 import { deleteAccount, trashBoard } from '../../server/utils/lifecycle'
 import { regenerateLink } from '../../server/utils/sharing'
 import * as api from '../../server/utils/api'
-import { MAX_BOARD_BYTES, getBoard, getBoardRow, listBoards, listRevisions } from '../../server/utils/boards'
+import { MAX_BOARD_BYTES, MAX_BODY_BYTES, getBoard, getBoardRow, listBoards, listRevisions } from '../../server/utils/boards'
 import { openRoom } from '../../server/utils/rooms'
 import type { Who } from '../../server/utils/who'
 import { docToBoard, writeBoard } from '../../shared/yboard'
@@ -75,8 +75,43 @@ describe('create and import', () => {
     const schema = api.createOrImport(db, JSON.stringify({ board: { name: 'x' } }))
     expect(schema.status).toBe(422)
     expect((schema.body as { errors: string[] }).errors.length).toBeGreaterThan(0)
-    expect(api.createOrImport(db, 'x'.repeat(MAX_BOARD_BYTES + 1)).status).toBe(413)
+    expect(api.createOrImport(db, 'x'.repeat(MAX_BODY_BYTES + 1)).status).toBe(413)
     expect(listBoards(db, 'local', 'mine')).toEqual([])
+  })
+})
+
+/** The fixture with part JA's label padded so the board's compact JSON is `bytes` long. */
+function boardOfSize(bytes: number): BoardFile {
+  const base = { ...fixture, parts: fixture.parts.map(p => p.ref === 'JA' ? { ...p, label: '' } : p) }
+  const parsed = parseBoard(base)
+  if (!parsed.ok) throw new Error(parsed.errors.join('; '))
+  const pad = bytes - Buffer.byteLength(JSON.stringify(parsed.board))
+  return { ...parsed.board, parts: parsed.board.parts.map(p => p.ref === 'JA' ? { ...p, label: 'x'.repeat(pad) } : p) }
+}
+
+describe('board size', () => {
+  it('a board at the cap downloads and imports again (the cap is on the board, not the body)', () => {
+    const big = boardOfSize(MAX_BOARD_BYTES - 64)
+    const r = api.createOrImport(db, JSON.stringify({ board: big }))
+    expect(r.status).toBe(200)
+    const id = (r.body as { id: string }).id
+    const file = api.downloadBoard(db, own(id)).body as string
+    // Pretty-printed with the revision added: more than the cap as text.
+    expect(Buffer.byteLength(file)).toBeGreaterThan(MAX_BOARD_BYTES)
+    const again = api.createOrImport(db, `{ "board": ${file} }`)
+    expect(again.status).toBe(200)
+    expect(api.putBoard(db, own(id), `{ "board": ${file} }`).status).toBe(200)
+  })
+
+  it('a board over the cap is 413 even when its body is under the body cap', () => {
+    const over = JSON.stringify({ board: boardOfSize(MAX_BOARD_BYTES + 10) })
+    expect(Buffer.byteLength(over)).toBeLessThan(MAX_BODY_BYTES)
+    expect(api.createOrImport(db, over)).toEqual({ status: 413, body: { error: `the board is larger than ${MAX_BOARD_BYTES} bytes` } })
+    const id = importFixture()
+    expect(api.putBoard(db, own(id), over).status).toBe(413)
+    expect(listRevisions(db, id)).toHaveLength(1)
+    // The body cap still stops a huge body before it is parsed.
+    expect(api.createOrImport(db, 'x'.repeat(MAX_BODY_BYTES + 1)).status).toBe(413)
   })
 })
 
@@ -139,7 +174,7 @@ describe('put', () => {
     expect(api.putBoard(db, own(id), JSON.stringify({ board: { name: 'x' } })).status).toBe(422)
     expect(api.putBoard(db, own(id), JSON.stringify({ board: fixture, baseRevision: 'one' })).status).toBe(422)
     expect(api.putBoard(db, own('nope'), JSON.stringify({ board: fixture })).status).toBe(404)
-    expect(api.putBoard(db, own(id), 'x'.repeat(MAX_BOARD_BYTES + 1)).status).toBe(413)
+    expect(api.putBoard(db, own(id), 'x'.repeat(MAX_BODY_BYTES + 1)).status).toBe(413)
     expect(listRevisions(db, id)).toHaveLength(1)
   })
 })

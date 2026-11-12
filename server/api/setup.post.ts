@@ -1,7 +1,7 @@
 import { useDb } from '../db'
 import { SETUP_DONE, checkSetupCode, claimSetup } from '../utils/accounts'
 import { checkMode } from '../utils/mode'
-import { remoteOf } from '../utils/peerAddress'
+import { clientAddress } from '../utils/clientAddress'
 import { readCapped } from '../utils/readCapped'
 import { resolveSession } from '../utils/who'
 import { refuseToken } from '../utils/sendResult'
@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
     return { error: 'body too large' }
   }
   const db = useDb()
-  const r = checkSetupCode(db, parse(text)?.code, remoteOf(req).address)
+  const r = checkSetupCode(db, parse(text)?.code, clientAddress(req))
   if (r.status !== 200) {
     setResponseStatus(event, r.status)
     return r.body

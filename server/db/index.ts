@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import Database from 'better-sqlite3'
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3'
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator'
+import { spaceProblem } from '../utils/backups'
 import { lockDataDir } from './lock'
 import * as schema from './schema'
 
@@ -32,10 +33,10 @@ function hasTables(sqlite: Database.Database): boolean {
 
 /**
  * Open (creating if needed) `<dataDir>/wirebender.sqlite`, backing it up before any pending
- * migration. The folder is locked until the database is closed: a second server on the same
+ * migration (refused, so the server does not start, when the disk has too little room for it). The folder is locked until the database is closed: a second server on the same
  * folder is refused (see ./lock.ts).
  */
-export function openDb(dataDir: string, migrationsDir: string = defaultMigrationsDir()): Db {
+export function openDb(dataDir: string, migrationsDir: string = defaultMigrationsDir(), opts: { freeBytes?: (dir: string) => number | null } = {}): Db {
   mkdirSync(dataDir, { recursive: true })
   const unlock = lockDataDir(dataDir)
   let sqlite: Database.Database
@@ -56,6 +57,9 @@ export function openDb(dataDir: string, migrationsDir: string = defaultMigration
   try {
     sqlite.pragma('journal_mode = WAL')
     if (hasTables(sqlite) && hasPendingMigration(sqlite, migrationsDir)) {
+      // Never upgrade without the backup: with too little room the server does not start.
+      const space = spaceProblem(sqlite.name, 'to back up the database before upgrading it', opts.freeBytes)
+      if (space) throw new Error(space)
       const backups = path.join(dataDir, 'backups')
       mkdirSync(backups, { recursive: true })
       const stamp = new Date().toISOString().replace(/:/g, '-')

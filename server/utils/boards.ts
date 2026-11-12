@@ -6,8 +6,17 @@ import { sameItems } from '#shared/yboard'
 import type { Db } from '../db'
 import { boards, linkVisits, revisions, users, type BoardVisibility, type RevisionHow } from '../db/schema'
 
-/** The largest board, and API request body, in bytes (spec §13); the live socket keeps to it too. */
+/** The largest board, as stored (compact JSON, defaults filled in), in bytes (spec §13); the live socket keeps to it too. */
 export const MAX_BOARD_BYTES = 2_000_000
+/**
+ * The largest board write body (POST/PUT/PATCH) as sent. Larger than the board cap, so a
+ * board's own download (pretty-printed, with defaults) imports again; the board inside is
+ * then held to MAX_BOARD_BYTES.
+ */
+export const MAX_BODY_BYTES = 2 * MAX_BOARD_BYTES
+
+/** A board's size as stored: its compact JSON. */
+export const boardBytes = (board: BoardFile): number => Buffer.byteLength(JSON.stringify(board))
 
 /** A board in the owner's list; `author` made its head revision. */
 export interface BoardInfo {

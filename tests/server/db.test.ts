@@ -62,6 +62,18 @@ describe('openDb', () => {
     backup.close()
   })
 
+  it('a pending migration with too little free space: the server does not start, and nothing changes', () => {
+    const data = path.join(dir, 'data')
+    openDb(data).$client.close()
+    const migrations = migrationsWith('9999_extra', 'CREATE TABLE extra (id integer);')
+    expect(() => openDb(data, migrations, { freeBytes: () => 0 })).toThrow(/^not enough free disk space to back up the database before upgrading it: 0\.0 MB free, \d+\.\d MB needed$/)
+    expect(existsSync(path.join(data, 'backups'))).toBe(false)
+    // The folder is unlocked, and the next start with room migrates as usual.
+    const db = openDb(data, migrations)
+    expect(tableNames(db)).toContain('extra')
+    db.$client.close()
+  })
+
   it('reopening with nothing pending makes no backup', () => {
     openDb(dir).$client.close()
     openDb(dir).$client.close()

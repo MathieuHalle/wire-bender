@@ -1,4 +1,5 @@
 import { Unzip, UnzipInflate, UnzipPassThrough, unzipSync, zipSync, strToU8, strFromU8 } from 'fflate'
+import { crc32 } from './crc32'
 import { parseBoard, type BoardFile } from './schema'
 
 export const BUNDLE_FORMAT = 'wirebender-bundle/1'
@@ -178,7 +179,43 @@ function inflateAll(zip: Uint8Array, maxEntryBytes: number, maxUnzipped: number)
   }
   const local = [...seen].filter(n => !n.endsWith('/')).sort()
   if (central.sort().join('\n') !== local.join('\n')) throw new Refused(422, 'central directory does not match the entries')
+  // fflate checks no checksum: each file's CRC-32 must match the one the central directory holds.
+  const crcs = centralCrcs(zip, seen.size)
+  for (const [name, bytes] of files) {
+    if (crcs.get(name) !== crc32(bytes)) throw new Refused(422, `This bundle is damaged: ${shown(name)} does not match its checksum.`)
+  }
   return files
+}
+
+const u16At = (b: Uint8Array, at: number) => b[at]! | (b[at + 1]! << 8)
+const u32At = (b: Uint8Array, at: number) => (b[at]! | (b[at + 1]! << 8) | (b[at + 2]! << 16) | (b[at + 3]! << 24)) >>> 0
+
+/**
+ * Each entry's CRC-32 from the central directory, by name. Called after fflate read the same
+ * directory, so the end record exists; at most `max` entries are read. A record that does
+ * not fit is a truncated bundle.
+ */
+function centralCrcs(zip: Uint8Array, max: number): Map<string, number> {
+  let end = -1
+  for (let at = zip.length - 22; at >= Math.max(0, zip.length - 22 - 0xFFFF); at--) {
+    if (u32At(zip, at) === 0x06054B50) {
+      end = at
+      break
+    }
+  }
+  if (end < 0) throw new Refused(422, 'truncated bundle')
+  const count = Math.min(u16At(zip, end + 10), max)
+  const crcs = new Map<string, number>()
+  let at = u32At(zip, end + 16)
+  for (let i = 0; i < count; i++) {
+    if (at + 46 > zip.length || u32At(zip, at) !== 0x02014B50) throw new Refused(422, 'truncated bundle')
+    const nameLength = u16At(zip, at + 28)
+    const next = at + 46 + nameLength + u16At(zip, at + 30) + u16At(zip, at + 32)
+    if (next > zip.length) throw new Refused(422, 'truncated bundle')
+    crcs.set(strFromU8(zip.subarray(at + 46, at + 46 + nameLength)), u32At(zip, at + 16))
+    at = next
+  }
+  return crcs
 }
 
 /**

@@ -8,7 +8,7 @@ import { RECORDS, SECTION_NAMES, boardToDoc, docToBoard, itemKey, sameItems, unk
 import type { Db } from '../db'
 import { onTokensRevoked } from './tokenEvents'
 import type { Role } from './boardAccess'
-import { MAX_BOARD_BYTES, boardBefore, commitRevision, getBoard, getRevision, listRevisions, recover, saveCurrent } from './boards'
+import { MAX_BOARD_BYTES, boardBefore, boardBytes, commitRevision, getBoard, getRevision, listRevisions, recover, saveCurrent } from './boards'
 
 /** Live updates from one author join one revision until that author has been idle this long. */
 export const GROUP_IDLE_MS = 2000
@@ -547,7 +547,7 @@ export class Room {
       const parsed = docToBoard(copy, this.head)
       if (!parsed.ok) return { ok: false, reason: parsed.errors.join('; ') }
       // The API's cap: live edits may not grow a board past what a PUT may send.
-      if (Buffer.byteLength(JSON.stringify(parsed.board)) > MAX_BOARD_BYTES) return { ok: false, reason: `the board would be larger than ${MAX_BOARD_BYTES} bytes` }
+      if (boardBytes(parsed.board) > MAX_BOARD_BYTES) return { ok: false, reason: `the board would be larger than ${MAX_BOARD_BYTES} bytes` }
       if (role !== 'owner' && parsed.board.name !== this.board.name) return { ok: false, reason: OWNER_RENAMES }
       return { ok: true, board: parsed.board, keys }
     } catch (e) {

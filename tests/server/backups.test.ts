@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { BACKUP_EVERY_MS, BACKUP_KEEP, backupDue, runBackup } from '../../server/utils/backups'
+import { BACKUP_EVERY_MS, BACKUP_KEEP, backupDue, runBackup, spaceProblem } from '../../server/utils/backups'
 
 let dir: string
 let db: Database.Database
@@ -89,6 +89,27 @@ describe('backups', () => {
     expect(r.error).toContain('malformed')
     expect(existsSync(path.join(backups, 'daily-2026-11-09T00-00-00.000Z.sqlite'))).toBe(false)
     expect(names()).toHaveLength(16)
+  })
+
+  it('too little free space: no snapshot, older ones kept, and it says how much is free and needed', async () => {
+    const backups = path.join(dir, 'backups')
+    mkdirSync(backups)
+    writeFileSync(path.join(backups, 'daily-2026-10-01T00-00-00.000Z.sqlite'), 'old')
+    const r = await runBackup(db, dir, { now: Date.parse('2026-11-09T00:00:00.000Z'), freeBytes: () => 1000 })
+    expect(r.ok).toBe(false)
+    if (r.ok) return
+    expect(r.error).toMatch(/^not enough free disk space for a backup: 0\.0 MB free, \d+\.\d MB needed$/)
+    expect(names()).toEqual(['daily-2026-10-01T00-00-00.000Z.sqlite'])
+  })
+
+  it('spaceProblem asks for twice the database and its WAL', () => {
+    writeFileSync(path.join(dir, 'x.sqlite'), Buffer.alloc(3_000_000))
+    writeFileSync(path.join(dir, 'x.sqlite-wal'), Buffer.alloc(1_000_000))
+    const file = path.join(dir, 'x.sqlite')
+    expect(spaceProblem(file, 'for a backup', () => 8_000_000)).toBeNull()
+    expect(spaceProblem(file, 'for a backup', () => 7_999_999)).toBe('not enough free disk space for a backup: 8.0 MB free, 8.0 MB needed')
+    // When the free space can't be read, nothing is refused.
+    expect(spaceProblem(file, 'for a backup', () => null)).toBeNull()
   })
 
   it('a throwing check does not throw out of runBackup', async () => {
