@@ -72,6 +72,19 @@ describe('signIn', () => {
     expect(signIn(db, 'github', { id: '42', name: 'Ada' })).toEqual({ ok: true, userId: a, deleted: true })
   })
 
+  it('an identity whose user is gone signs in as no one, and says so (gone)', () => {
+    const a = userId(signIn(db, 'github', { id: '42', name: 'Ada' }))
+    db.$client.pragma('foreign_keys = OFF')
+    db.delete(users).where(eq(users.id, a)).run()
+    const before = userCount()
+    expect(signIn(db, 'github', { id: '42', name: 'Ada' })).toEqual({ ok: false, reason: 'gone' })
+    expect(userCount()).toBe(before)
+  })
+
+  it('linking from a session whose user is gone says so (gone)', () => {
+    expect(signIn(db, 'github', { id: '42', name: 'Ada' }, 'no-such-user')).toEqual({ ok: false, reason: 'gone' })
+  })
+
   it('a suspended user can\'t link either', () => {
     const a = userId(signIn(db, 'github', { id: '42', name: 'Ada' }))
     db.update(users).set({ suspendedAt: Date.now() }).where(eq(users.id, a)).run()
@@ -119,7 +132,7 @@ describe('names', () => {
   it('rename sets the name', () => {
     const a = userId(signIn(db, 'github', { id: '42', name: 'Ada' }))
     expect(rename(db, a, 'Ada L.')).toBe(true)
-    expect(me(db, a)).toEqual({ id: a, name: 'Ada L.', avatar: null, isAdmin: false, isPremium: false, providers: ['github'], deletedAt: null })
+    expect(me(db, a)).toEqual({ id: a, name: 'Ada L.', avatar: null, isAdmin: false, isPremium: false, providers: ['github'], deletedAt: null, isOnlyAdmin: false })
     expect(rename(db, a, '​')).toBe(false)
     expect(me(db, a)?.name).toBe('Ada L.')
   })
@@ -132,7 +145,7 @@ describe('GET /api/me body', () => {
     const local = { who: { kind: 'local' as const, userId: 'local' as const, author: 'Local · This computer' }, account: null, pendingDeletion: false }
     expect(meBody(db, 'local', local, ['github'])).toEqual({
       mode: 'local',
-      user: { id: 'local', name: 'Local', avatar: null, isAdmin: true, isPremium: true, providers: [], deletedAt: null },
+      user: { id: 'local', name: 'Local', avatar: null, isAdmin: true, isPremium: true, providers: [], deletedAt: null, isOnlyAdmin: false },
       providers: []
     })
   })
@@ -142,6 +155,16 @@ describe('GET /api/me body', () => {
     const signedIn = { who: { kind: 'user' as const, userId: a, author: 'Ada', isAdmin: false, isPremium: false }, account: null, pendingDeletion: false }
     expect(meBody(db, 'public', signedIn, ['github', 'google'])).toMatchObject({ mode: 'public', user: { id: a, name: 'Ada', providers: ['github'] }, providers: ['github', 'google'] })
     expect(meBody(db, 'public', anonymous, ['google'])).toEqual({ mode: 'public', user: null, providers: ['google'] })
+  })
+
+  it('isOnlyAdmin is true for the one active admin only (R13)', () => {
+    const a = userId(signIn(db, 'github', { id: '42', name: 'Ada' }))
+    const b = userId(signIn(db, 'github', { id: '7', name: 'Bob' }))
+    db.update(users).set({ isAdmin: 1 }).where(eq(users.id, a)).run()
+    expect(me(db, a)?.isOnlyAdmin).toBe(true)
+    expect(me(db, b)?.isOnlyAdmin).toBe(false)
+    db.update(users).set({ isAdmin: 1 }).where(eq(users.id, b)).run()
+    expect(me(db, a)?.isOnlyAdmin).toBe(false)
   })
 
   it('a pendingDeletion session sees its user with deletedAt (R1)', () => {

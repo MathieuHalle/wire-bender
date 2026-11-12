@@ -26,7 +26,7 @@ export interface Profile { id: string, name: string, avatar?: string }
  * `deleted`: the account is deleted but not yet purged; the session may only reach
  * /account to restore it or sign out (ruling R1).
  */
-export type SignInResult = { ok: true, userId: string, deleted?: true } | { ok: false, reason: 'suspended' | 'taken' }
+export type SignInResult = { ok: true, userId: string, deleted?: true } | { ok: false, reason: 'suspended' | 'taken' | 'gone' }
 
 export const MAX_NAME = 60
 const PLACEHOLDER_NAME = 'New user'
@@ -79,14 +79,14 @@ export function signIn(db: Db, provider: Provider, profile: Profile, current?: s
       if (current !== undefined && current !== known.userId) return { ok: false, reason: 'taken' }
       const user = userRow(tx, known.userId)
       // An identity whose user is gone (never expected: purge removes both) signs in as no one.
-      if (!user) return { ok: false, reason: 'taken' }
+      if (!user) return { ok: false, reason: 'gone' }
       if (user.suspendedAt !== null) return { ok: false, reason: 'suspended' }
       if (user.deletedAt !== null) return { ok: true, userId: user.id, deleted: true }
       return { ok: true, userId: user.id }
     }
     if (current !== undefined) {
       const user = userRow(tx, current)
-      if (!user) return { ok: false, reason: 'taken' }
+      if (!user) return { ok: false, reason: 'gone' }
       if (user.suspendedAt !== null) return { ok: false, reason: 'suspended' }
       if (user.deletedAt !== null) return { ok: true, userId: user.id, deleted: true }
       tx.insert(identities).values({ provider, providerId: profile.id, userId: current }).run()
@@ -113,6 +113,8 @@ export interface Me {
   isPremium: boolean
   providers: Provider[]
   deletedAt: number | null
+  /** The only active admin (R13): they may not delete their account. */
+  isOnlyAdmin: boolean
 }
 
 /** A user as `GET /api/me` shows them; null if there is no such user. */
@@ -126,7 +128,8 @@ export function me(db: Db, userId: string): Me | null {
     isAdmin: row.isAdmin === 1,
     isPremium: row.isPremium === 1,
     providers: providersOf(db, row.id),
-    deletedAt: row.deletedAt
+    deletedAt: row.deletedAt,
+    isOnlyAdmin: isOnlyAdmin(db, row.id)
   }
 }
 

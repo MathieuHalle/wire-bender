@@ -106,6 +106,15 @@ describe('finishSignIn', () => {
     expect(replaced).not.toHaveBeenCalled()
   })
 
+  it('an identity whose user is gone goes to /login?error=gone', async () => {
+    const a = existing('42')
+    useDb().$client.pragma('foreign_keys = OFF')
+    useDb().delete(users).where(eq(users.id, a)).run()
+    useDb().$client.pragma('foreign_keys = ON')
+    expect(await finishSignIn(callback(), 'github', { id: '42', name: 'Ada' })).toEqual({ redirect: '/login?error=gone', status: 302 })
+    expect(replaced).not.toHaveBeenCalled()
+  })
+
   it('a suspended account goes to /login?error=suspended', async () => {
     const a = existing('42')
     useDb().update(users).set({ suspendedAt: Date.now() }).where(eq(users.id, a)).run()

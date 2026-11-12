@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { Me } from '../../app/composables/useMe'
-import { SIGN_IN_ERRORS, boardLists, homeTarget, menuUser, needsLogin, settingsTabs, signInError } from '../../app/utils/nav'
+import { SIGN_IN_ERRORS, boardLists, homeStep, homeTarget, listFailureTarget, menuUser, needsLogin, pendingDeletionTarget, settingsTabs, signInError } from '../../app/utils/nav'
 
 const local: Me = { mode: 'local', user: null, providers: [] }
 const anon: Me = { mode: 'public', user: null, providers: ['github'] }
-const ada: Me = { mode: 'public', providers: ['github'], user: { id: 'u1', name: 'Ada', avatar: null, isAdmin: false, isPremium: false, providers: ['github'], deletedAt: null } }
+const ada: Me = { mode: 'public', providers: ['github'], user: { id: 'u1', name: 'Ada', avatar: null, isAdmin: false, isPremium: false, providers: ['github'], deletedAt: null, isOnlyAdmin: false } }
 const admin: Me = { ...ada, user: { ...ada.user!, isAdmin: true } }
 
 describe('navigation rules', () => {
@@ -43,9 +43,46 @@ describe('navigation rules', () => {
     expect(homeTarget(anon, '/b/abc')).toBeNull()
   })
 
+  it('/ uses up the return path once signed in, and keeps it while signed out', () => {
+    expect(homeStep(ada, '/b/abc')).toEqual({ to: '/b/abc', clearStored: true })
+    expect(homeStep(local, '/settings/devices')).toEqual({ to: '/settings/devices', clearStored: true })
+    expect(homeStep(ada, null)).toEqual({ to: '/boards', clearStored: true })
+    // Signed out: the intro, and the path stays for the sign-in that follows.
+    expect(homeStep(anon, '/b/abc')).toEqual({ to: null, clearStored: false })
+  })
+
+  it('a board list 401 goes to /login only when nobody is signed in any more', async () => {
+    const reload = (now: Me | null) => async () => now
+    // Signed out in another tab.
+    expect(await listFailureTarget(401, ada, reload(anon))).toBe('/login')
+    // Still signed in, or /api/me unreachable: the list shows its error.
+    expect(await listFailureTarget(401, ada, reload(ada))).toBeNull()
+    expect(await listFailureTarget(401, ada, reload(null))).toBeNull()
+    // Not a 401, or local mode: no reload at all.
+    let reloaded = false
+    const spy = async () => {
+      reloaded = true
+      return anon
+    }
+    expect(await listFailureTarget(500, ada, spy)).toBeNull()
+    expect(await listFailureTarget(401, local, spy)).toBeNull()
+    expect(reloaded).toBe(false)
+  })
+
+  it('a deleted account\'s session only follows links to /account/deleted and /logout (R1)', () => {
+    const deleted: Me = { ...ada, user: { ...ada.user!, deletedAt: 1234 } }
+    expect(pendingDeletionTarget(deleted, '/boards')).toBe('/account/deleted')
+    expect(pendingDeletionTarget(deleted, '/settings/account')).toBe('/account/deleted')
+    expect(pendingDeletionTarget(deleted, '/account/deleted')).toBeNull()
+    expect(pendingDeletionTarget(deleted, '/logout')).toBeNull()
+    expect(pendingDeletionTarget(ada, '/boards')).toBeNull()
+    expect(pendingDeletionTarget(null, '/boards')).toBeNull()
+  })
+
   it('words sign-in errors', () => {
     expect(signInError(null)).toBeNull()
     expect(signInError('suspended')).toBe(SIGN_IN_ERRORS.suspended)
     expect(signInError('nonsense')).toBe(SIGN_IN_ERRORS.oauth)
+    expect(signInError('gone')).toBe(SIGN_IN_ERRORS.gone)
   })
 })

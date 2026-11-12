@@ -352,13 +352,21 @@ export function lanAddress(interfaces: ReturnType<typeof networkInterfaces> = ne
   return (usable.find(i => LAN_NAMES.test(i.name)) ?? usable[0] ?? all[0])?.address
 }
 
-/** A new single-use code (replacing any pending one). Call only for a trusted request. */
-export function startPairing(port?: number): { code: string, expiresAt: number, url: string } {
-  const code = String(randomInt(0, 1_000_000)).padStart(6, '0')
-  const expiresAt = Date.now() + PAIR_TTL_MS
-  current = { code, expiresAt, wrong: 0 }
+/** With `keep`, a pending code with less than this left is replaced anyway. */
+const KEEP_MIN_MS = 60_000
+
+/**
+ * A new single-use code (replacing any pending one). With `keep` (opening Settings ›
+ * Devices again), the pending code comes back instead while it has a minute left, so a
+ * pairing in progress is not cancelled. Call only for a trusted request.
+ */
+export function startPairing(port?: number, opts: { keep?: boolean } = {}): { code: string, expiresAt: number, url: string } {
+  const now = Date.now()
+  if (!opts.keep || !current || current.expiresAt - now < KEEP_MIN_MS) {
+    current = { code: String(randomInt(0, 1_000_000)).padStart(6, '0'), expiresAt: now + PAIR_TTL_MS, wrong: 0 }
+  }
   const host = lanAddress() ?? 'localhost'
-  return { code, expiresAt, url: `http://${host}${port ? `:${port}` : ''}/pair` }
+  return { code: current.code, expiresAt: current.expiresAt, url: `http://${host}${port ? `:${port}` : ''}/pair` }
 }
 
 export type PairResult = { ok: true, cookie: string, name: string } | { ok: false, status: 400 | 429 }

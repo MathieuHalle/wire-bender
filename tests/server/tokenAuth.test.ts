@@ -553,6 +553,23 @@ describe('pairing and devices (R4)', () => {
     // The pending code was never used up by the token.
     expect(completePairing(pending.code, 'Phone', '192.168.1.31').ok).toBe(true)
   })
+
+  it('local mode: POST /api/pair/start keeps the pending code with { keep: true } only', async () => {
+    vi.stubEnv('WIREBENDER_MODE', 'local')
+    vi.stubEnv('WIREBENDER_URL', '')
+    const { resetPairing } = await import('../../server/utils/access')
+    resetPairing()
+    const start = (await import('../../server/api/pair/start.post')).default as unknown as Handler
+    const headers = { host: 'localhost:3002' }
+    const address = '127.0.0.1'
+    const first = await call(start, 'POST', '/api/pair/start', { headers, address })
+    const kept = await call(start, 'POST', '/api/pair/start', { headers, address, body: { keep: true } })
+    expect((kept.body as { code: string }).code).toBe((first.body as { code: string }).code)
+    expect((kept.body as { expiresAt: number }).expiresAt).toBe((first.body as { expiresAt: number }).expiresAt)
+    const fresh = await call(start, 'POST', '/api/pair/start', { headers, address, body: { keep: 'yes' } })
+    expect((fresh.body as { expiresAt: number }).expiresAt).toBeGreaterThanOrEqual((first.body as { expiresAt: number }).expiresAt)
+    expect(fresh.body).not.toEqual(kept.body)
+  })
 })
 
 describe('local mode', () => {

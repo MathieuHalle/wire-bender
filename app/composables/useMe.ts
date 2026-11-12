@@ -2,7 +2,7 @@
 // none, and the sign-in providers. Loaded on the client only: who is signed in is per browser.
 
 export type Provider = 'github' | 'google'
-export interface MeUser { id: string, name: string, avatar: string | null, isAdmin: boolean, isPremium: boolean, providers: Provider[], deletedAt: number | null }
+export interface MeUser { id: string, name: string, avatar: string | null, isAdmin: boolean, isPremium: boolean, providers: Provider[], deletedAt: number | null, isOnlyAdmin: boolean }
 export interface Me { mode: 'local' | 'public', user: MeUser | null, providers: Provider[] }
 
 /** Hosts the sign-in providers serve avatars from; any other avatar URL (a peer can claim one) is not loaded. */

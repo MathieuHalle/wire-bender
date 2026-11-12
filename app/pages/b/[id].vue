@@ -318,6 +318,11 @@ watch([canShare, loaded], ([can, ok]) => {
   if (!wantsSharing.value || !can || !ok) return
   wantsSharing.value = false
   openSharing()
+  // Done with it: a reload or a copied address should not open Sharing again. Same history
+  // entry and state, so the router does not see a navigation.
+  if (import.meta.client && window.location.hash === '#sharing') {
+    window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search)
+  }
 }, { immediate: true })
 // A stored Sharing tab on a board that has none (not the owner, local mode) falls back.
 // Waits for both reads (the account and the board's role), or a slow one would reset it.

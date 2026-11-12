@@ -6,6 +6,9 @@ const { me } = useMe()
 watch(me, (m) => {
   if (m && m.mode !== 'local') void navigateTo('/settings/account', { replace: true })
 }, { immediate: true })
+
+// A device just used the code shown: it is spent, so show a fresh one for the next device.
+const pair = ref<{ newCode: () => Promise<void> } | null>(null)
 </script>
 
 <template>
@@ -13,7 +16,7 @@ watch(me, (m) => {
     v-if="me?.mode === 'local'"
     class="flex max-w-md flex-col gap-8"
   >
-    <PairPanel />
-    <DevicesPanel />
+    <PairPanel ref="pair" />
+    <DevicesPanel @paired="pair?.newCode()" />
   </div>
 </template>

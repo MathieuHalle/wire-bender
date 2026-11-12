@@ -5,17 +5,26 @@ useHead({ title: 'Signed out · WireBender' })
 
 const { me, failed, load, signOut } = useMe()
 const done = ref(false)
+const error = ref<string | null>(null)
 
-onMounted(async () => {
+async function run() {
+  error.value = null
   const now = await load()
   if (!now) return
   if (now.mode === 'local') {
     await navigateTo('/boards', { replace: true })
     return
   }
-  await signOut()
-  done.value = true
-})
+  try {
+    await signOut()
+    done.value = true
+  } catch (e) {
+    // Never "Signing out…" for ever: say why, and offer another try.
+    error.value = `Could not sign out: ${errorsOf(e).join(' ')}`
+  }
+}
+
+onMounted(run)
 </script>
 
 <template>
@@ -26,6 +35,19 @@ onMounted(async () => {
     >
       Cannot reach the WireBender server.
     </p>
+    <template v-else-if="error">
+      <p
+        class="text-sm text-error"
+        role="alert"
+      >
+        {{ error }}
+      </p>
+      <UButton
+        label="Try again"
+        class="self-start"
+        @click="run"
+      />
+    </template>
     <p
       v-else-if="!done"
       class="text-sm text-muted"

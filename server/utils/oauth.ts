@@ -22,7 +22,8 @@ export function redirectUrl(provider: Provider): string {
 
 /**
  * Signs in (or, from a signed-in session, links) with the provider's profile. Refusals go
- * to /login with the reason (a taken profile, from a signed-in session, to /settings/account);
+ * to /login with the reason (a taken profile, from a signed-in session, to /settings/account;
+ * an identity whose user is gone, `gone`);
  * a deleted, not yet purged account gets a session that only reaches /account/deleted
  * (ruling R1).
  */

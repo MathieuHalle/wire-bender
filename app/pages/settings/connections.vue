@@ -28,7 +28,7 @@ const ROUTES: [string, string][] = [
   ['PATCH /api/boards/:id/sharing', '`{ "visibility"?: "view"|"edit"|"private", "password"?: string|null }`; answers like the GET (owner, public mode)'],
   ['POST /api/boards/:id/sharing/regenerate', 'a new share link, `{ link }`; the old one stops working (owner, public mode)'],
   ['POST /api/links/:linkId/unlock', '`{ "password" }` opens a password link for this session (public mode; 5 wrong tries per address per 10 minutes, then `429`)'],
-  ['GET /api/me', '`{ mode, user, providers }`: who is signed in (`id`, `name`, `avatar`, `isAdmin`, `isPremium`, `providers`, `deletedAt`), or `user: null`'],
+  ['GET /api/me', '`{ mode, user, providers }`: who is signed in (`id`, `name`, `avatar`, `isAdmin`, `isPremium`, `providers`, `deletedAt`, `isOnlyAdmin`), or `user: null`'],
   ['PATCH /api/me', '`{ "name" }` sets your display name (1 to 60 characters)'],
   ['DELETE /api/me', 'deletes your account, restorable for 30 days, and signs you out (public mode; `409` for the only admin)'],
   ['POST /api/me/restore', 'restores your deleted account after signing in again (public mode)'],

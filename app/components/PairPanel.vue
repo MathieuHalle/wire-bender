@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // "Pair a device": a single-use code (10 minutes) and a QR code of the address to open on
-// the device. Asks the server for a new code when it appears.
+// the device. Opening it again shows the code already pending, if still good; "New code"
+// (or a device just paired with it, see the Devices tab) asks for a new one.
 import { renderSVG } from 'uqr'
 
 interface Pairing { code: string, expiresAt: number, url: string }
@@ -9,10 +10,10 @@ const error = ref<string | null>(null)
 const now = ref(Date.now())
 let tick: ReturnType<typeof setInterval> | null = null
 
-async function newCode() {
+async function getCode(keep: boolean) {
   error.value = null
   try {
-    pairing.value = await $fetch<Pairing>('/api/pair/start', { method: 'POST' })
+    pairing.value = await $fetch<Pairing>('/api/pair/start', { method: 'POST', body: { keep } })
     now.value = Date.now()
   } catch (e) {
     pairing.value = null
@@ -20,8 +21,11 @@ async function newCode() {
   }
 }
 
+const newCode = () => getCode(false)
+defineExpose({ newCode })
+
 onMounted(() => {
-  void newCode()
+  void getCode(true)
   tick = setInterval(() => (now.value = Date.now()), 1000)
 })
 onBeforeUnmount(() => tick && clearInterval(tick))

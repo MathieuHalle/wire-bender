@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { RETURN_KEY, returnPath } from '~/utils/boardView'
-import { homeTarget, needsLogin } from '~/utils/nav'
+import { homeStep } from '~/utils/nav'
 
 // `/` sends a signed-in user (or local mode) on: back to the page a sign-in started from,
 // else the boards. Signed out in public mode: a short intro with the sign-in buttons.
@@ -15,16 +15,20 @@ onMounted(async () => {
   const now = await loadMe()
   if (!now) return
   let stored: string | null = null
+  try {
+    stored = sessionStorage.getItem(RETURN_KEY)
+  } catch {
+    // No storage: go to the boards.
+  }
   // Signed out, the stored return path stays: the sign-in that follows still needs it.
-  if (!needsLogin(now)) {
+  const { to, clearStored } = homeStep(now, returnPath(stored))
+  if (clearStored) {
     try {
-      stored = sessionStorage.getItem(RETURN_KEY)
       sessionStorage.removeItem(RETURN_KEY)
     } catch {
-      // No storage: go to the boards.
+      // No storage: nothing to clear.
     }
   }
-  const to = homeTarget(now, returnPath(stored))
   if (to) {
     await navigateTo(to, { replace: true })
     return

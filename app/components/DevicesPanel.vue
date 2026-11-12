@@ -1,20 +1,38 @@
 <script setup lang="ts">
-// "Paired devices": each device's name and when it was last seen, with Unpair.
+// "Paired devices": each device's name and when it was last seen, with Unpair. Checked
+// again every few seconds while open, so a tablet that just paired shows up ('paired').
 interface Device { id: string, name: string, createdAt: number, lastSeen: number }
 
+const POLL_MS = 4000
+const emit = defineEmits<{ paired: [name: string] }>()
 const devices = ref<Device[] | null>(null)
 const error = ref<string | null>(null)
 const toast = useToast()
 
 async function load() {
-  error.value = null
   try {
-    devices.value = await $fetch<Device[]>('/api/devices')
+    const next = await $fetch<Device[]>('/api/devices')
+    const known = devices.value && new Set(devices.value.map(d => d.id))
+    const added = known ? next.filter(d => !known.has(d.id)) : []
+    devices.value = next
+    error.value = null
+    for (const d of added) {
+      toast.add({ title: `${d.name} is paired`, color: 'success', icon: 'i-lucide-check' })
+      emit('paired', d.name)
+    }
   } catch (e) {
     error.value = `Could not list the devices: ${(e as Error).message}`
   }
 }
-onMounted(load)
+
+let poll: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  void load()
+  poll = setInterval(() => {
+    if (document.visibilityState === 'visible') void load()
+  }, POLL_MS)
+})
+onBeforeUnmount(() => poll && clearInterval(poll))
 
 const when = (ms: number) => new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 

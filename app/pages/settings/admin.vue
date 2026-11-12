@@ -24,12 +24,15 @@ interface Account {
 const LABEL: Record<Provider, string> = { github: 'GitHub', google: 'Google' }
 
 const { me } = useMe()
+
+// Loaded on the client only (who is asking is per browser), and only in public mode: local
+// mode leaves this tab before asking.
+const { data: accounts, error, status, execute } = useFetch<Account[]>('/api/admin/users', { server: false, immediate: false })
+
 watch(me, (m) => {
   if (m?.mode === 'local') void navigateTo('/settings/account', { replace: true })
+  else if (m && status.value === 'idle') void execute()
 }, { immediate: true })
-
-// Loaded on the client only: who is asking is per browser.
-const { data: accounts, error, status } = useFetch<Account[]>('/api/admin/users', { server: false })
 const notFound = computed(() => error.value?.statusCode === 404)
 
 const busy = ref<string | null>(null)
@@ -53,9 +56,7 @@ async function change(a: Account, body: { premium?: boolean, suspended?: boolean
     const updated = await $fetch<Account>(`/api/admin/users/${encodeURIComponent(a.id)}`, { method: 'PATCH', body })
     if (accounts.value) accounts.value = accounts.value.map(x => x.id === updated.id ? updated : x)
   } catch (e) {
-    const data = (e as { data?: { error?: unknown, errors?: unknown } }).data
-    const message = typeof data?.error === 'string' ? data.error : Array.isArray(data?.errors) ? data.errors.map(String).join(' ') : (e as Error).message
-    toast.add({ title: 'Not changed', description: message, color: 'error' })
+    toast.add({ title: 'Not changed', description: errorsOf(e).join(' '), color: 'error' })
   } finally {
     busy.value = null
   }

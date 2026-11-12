@@ -113,6 +113,21 @@ describe('pairing', () => {
     expect(listDevices(db)).toHaveLength(1)
   })
 
+  it('keep: the pending code comes back while it has a minute left; else, or once used, a new one', () => {
+    vi.useFakeTimers({ now: 5_000_000 })
+    const first = startPairing(3002)
+    expect(startPairing(3002, { keep: true })).toEqual(first)
+    vi.advanceTimersByTime(PAIR_TTL_MS - 30_000)
+    const late = startPairing(3002, { keep: true })
+    expect(late.code === first.code && late.expiresAt === first.expiresAt).toBe(false)
+    expect(completePairing(late.code, 'iPad', '192.168.1.20', db)).toMatchObject({ ok: true })
+    const after = startPairing(3002, { keep: true })
+    expect(after.expiresAt).toBe(Date.now() + PAIR_TTL_MS)
+    // Without keep, a new code every time (the "New code" button).
+    expect(startPairing(3002).expiresAt).toBe(after.expiresAt)
+    expect(completePairing(after.code, 'iPad 2', '192.168.1.21', db)).toEqual({ ok: false, status: 400 })
+  })
+
   it('five wrong codes then 429', () => {
     vi.useFakeTimers({ now: 5_000_000 })
     const { code } = startPairing(3002)

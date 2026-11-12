@@ -4,17 +4,19 @@ definePageMeta({ layout: 'auth' })
 useHead({ title: 'Account deleted · WireBender' })
 
 const DAY_MS = 24 * 3600 * 1000
-const { me, failed, load } = useMe()
+const { me, failed, loading, load } = useMe()
 const user = computed(() => me.value?.user ?? null)
 const purgeOn = computed(() => user.value?.deletedAt
   ? new Date(user.value.deletedAt + 30 * DAY_MS).toLocaleDateString(undefined, { dateStyle: 'long' })
   : null)
 
-onMounted(async () => {
-  const now = await load()
+async function check() {
+  // Fresh, not the cached `me`: this page is about the session as it is now.
+  const now = await load(true)
   // Not a deleted account (signed out, local mode, or fine): nothing to restore.
-  if (now && !now.user?.deletedAt) await navigateTo('/boards', { replace: true })
-})
+  if (!failed.value && now && !now.user?.deletedAt) await navigateTo('/boards', { replace: true })
+}
+onMounted(check)
 
 const restoring = ref(false)
 const error = ref<string | null>(null)
@@ -37,12 +39,19 @@ async function restore() {
 
 <template>
   <div class="flex flex-col gap-4">
-    <p
-      v-if="!me && failed"
-      class="text-sm text-error"
-    >
-      Cannot reach the WireBender server.
-    </p>
+    <template v-if="failed && !loading">
+      <p
+        class="text-sm text-error"
+        role="alert"
+      >
+        Cannot reach the WireBender server.
+      </p>
+      <UButton
+        label="Try again"
+        class="self-start"
+        @click="check"
+      />
+    </template>
     <p
       v-else-if="!user?.deletedAt"
       class="text-sm text-muted"
