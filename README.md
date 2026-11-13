@@ -159,7 +159,7 @@ Settings › Account has **Download all my boards**: one zip with a bundle per b
 
 ## Self-host with Docker
 
-The image runs the server in public mode. You need Docker with Compose, and a sign-in provider (see Public mode above).
+The image runs the server in public mode. You need Docker with Compose, and a sign-in provider (see Public mode above). For a step-by-step setup on an AWS EC2 instance, see `docs/deploy/aws-ec2.md`.
 
 ```sh
 cp .env.example .env
@@ -192,6 +192,18 @@ git pull && docker compose up -d --build
 ```
 
 The server writes a `pre-migration-*` backup before it changes the database layout (see Data and backups).
+
+### CI and releases
+
+GitHub Actions runs `.github/workflows/ci.yml` on every push to `main` and every pull request: lint, typecheck, tests, the app build, and the Docker image build (not pushed).
+
+A version tag publishes the image, for amd64 and arm64, after the same checks (`.github/workflows/release.yml`):
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+The image is `ghcr.io/<owner>/wire-bender`, tagged `0.1.0`, `0.1` and `latest` (a pre-release tag such as `v0.2.0-rc.1` does not move `latest`). The release workflow deploys nothing and needs no secrets.
 
 ### HTTPS with Caddy
 
