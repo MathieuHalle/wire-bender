@@ -11,7 +11,7 @@ services:
     environment:
       # The rate limits read the visitor's address from Caddy's X-Forwarded-For, and only
       # from Caddy's own fixed address below. Set it in .env to trust another proxy instead.
-      WIREBENDER_TRUST_PROXY: ${WIREBENDER_TRUST_PROXY:-172.30.84.2}
+      WIREBENDER_TRUST_PROXY: ${WIREBENDER_TRUST_PROXY:-${WIREBENDER_NET:-192.168.213}.2}
     # This machine only, never the internet (Docker's published ports bypass the host firewall).
     ports:
       - "127.0.0.1:3000:3000"
@@ -39,18 +39,19 @@ services:
       - caddy-config:/config
     networks:
       wirebender:
-        ipv4_address: 172.30.84.2
+        ipv4_address: ${WIREBENDER_NET:-192.168.213}.2
     restart: unless-stopped
 
 networks:
   wirebender:
     ipam:
       config:
-        # Fixed, so Caddy's address (above) is known. If it clashes with a network on the
-        # host, change it here and in both Caddy lines (ipv4_address, WIREBENDER_TRUST_PROXY).
-        - subnet: 172.30.84.0/24
+        # Fixed, so Caddy's address (above) is known. WIREBENDER_NET in .env is its first
+        # three numbers: set it if 192.168.213.0/24 clashes with a network the host reaches
+        # (a VPC, a VPN, the office network). Everything else follows from it.
+        - subnet: ${WIREBENDER_NET:-192.168.213}.0/24
           # Containers without a fixed address get one from here, so none takes Caddy's.
-          ip_range: 172.30.84.128/25
+          ip_range: ${WIREBENDER_NET:-192.168.213}.128/25
 
 volumes:
   wirebender-data:

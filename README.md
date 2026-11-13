@@ -38,7 +38,7 @@ Set these before you start:
 | --- | --- |
 | `WIREBENDER_URL` | the address people use to reach this server, e.g. `https://wire.example.org`. Without it the server stops: `public mode needs WIREBENDER_URL, the address people use to reach this server` |
 | `WIREBENDER_DATA` | the data folder, as above |
-| `WIREBENDER_TRUST_PROXY` | behind a reverse proxy: its addresses or ranges, comma-separated (e.g. `172.30.84.2` or `10.0.0.0/8`). See below |
+| `WIREBENDER_TRUST_PROXY` | behind a reverse proxy: its addresses or ranges, comma-separated (e.g. `192.168.213.2` or `10.0.0.0/8`). See below |
 | `NUXT_OAUTH_GITHUB_CLIENT_ID`, `NUXT_OAUTH_GITHUB_CLIENT_SECRET` | the GitHub sign-in |
 | `NUXT_OAUTH_GOOGLE_CLIENT_ID`, `NUXT_OAUTH_GOOGLE_CLIENT_SECRET` | the Google sign-in |
 
@@ -198,9 +198,9 @@ The server writes a `pre-migration-*` backup before it changes the database layo
 Sign-in needs `https` in front of the server. `compose.yaml` runs Caddy for that, when `.env` has `COMPOSE_PROFILES=https` (as `.env.example` does). Caddy reads `Caddyfile` (one site, `WIREBENDER_DOMAIN`), gets and renews the certificate, and passes the live-editing WebSockets through. Its certificates are kept in the `caddy-data` volume.
 
 - WireBender's port 3000 is published on `127.0.0.1` only: reachable from the machine itself (for a quick check), never from the internet. Docker's published ports bypass the host firewall (ufw, firewalld), so keep it that way.
-- The two containers share a network, `172.30.84.0/24`, where Caddy always has `172.30.84.2`, and `WIREBENDER_TRUST_PROXY` is set to that address (see Behind a reverse proxy, above). If that range clashes with a network on the machine, change the range and both addresses in `compose.yaml`.
+- The two containers share a network, `192.168.213.0/24`, where Caddy always has `192.168.213.2`, and `WIREBENDER_TRUST_PROXY` is set to that address (see Behind a reverse proxy, above). If that range clashes with a network the machine reaches (a cloud VPC, a VPN, the office network), set `WIREBENDER_NET` in `.env` to other first three numbers, e.g. `WIREBENDER_NET=10.213.84`: the range and both addresses follow.
 - **On your own computer**, leave `COMPOSE_PROFILES` and `WIREBENDER_DOMAIN` out of `.env` and set `WIREBENDER_URL=http://localhost:3000`: only WireBender starts, on `http://localhost:3000`, with no ports 80 or 443. GitHub and Google accept `http://localhost` callbacks.
-- **With your own proxy** (a Caddy or nginx already on the machine, or a load balancer), leave `COMPOSE_PROFILES` out, point the proxy at `localhost:3000`, and set `WIREBENDER_TRUST_PROXY` in `.env` to the address its requests come from (as WireBender sees it inside Docker, usually the network's gateway, e.g. `172.30.84.1`).
+- **With your own proxy** (a Caddy or nginx already on the machine, or a load balancer), leave `COMPOSE_PROFILES` out, point the proxy at `localhost:3000`, and set `WIREBENDER_TRUST_PROXY` in `.env` to the address its requests come from (as WireBender sees it inside Docker, usually the network's gateway, e.g. `192.168.213.1`).
 
 ## Pair a device
 
