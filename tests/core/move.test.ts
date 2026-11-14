@@ -253,4 +253,24 @@ describe('moveWireEnd', () => {
     expect(r.reason).toBe('No wire W9.')
     expect(r.board).toEqual(b)
   })
+
+  it('refuses a target above row A or left of column 1 without throwing', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'])] })
+    for (const t of [{ col: 3, row: 0 }, { col: 0, row: 3 }]) {
+      const r = moveWireEnd(b, 'W1', 'last', t, 'row-first')
+      expect(r.reason).toBe('Wire W1 would be off the board.')
+      expect(r.board).toEqual(b)
+    }
+  })
+
+  it('refuses a new corner on a blocked hole', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'])], board: { blocked: [{ holes: ['B7'], reason: 'screw' }] } })
+    expect(moveWireEnd(b, 'W1', 'last', H('E7'), 'row-first').reason).toBe('Hole B7 is blocked: screw')
+    expect(moveWireEnd(b, 'W1', 'last', H('E7'), 'col-first').reason).toBeNull()
+  })
+
+  it('writes a joint once when the end lands on an existing joint', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B8'], { joints: ['B8', 'B4'] })] })
+    expect(moveWireEnd(b, 'W1', 'last', H('B4'), 'row-first').board.wires[0]!.joints).toEqual(['B4'])
+  })
 })

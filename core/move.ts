@@ -155,8 +155,11 @@ export function moveWireEnd(board: BoardFile, id: string, end: WireEnd, target: 
   const oldEnd = wire.points[endIdx]!
   const targetName = holeName(target)
   const refuse = (reason: string): MoveResult => ({ board, reason })
+  // A hole left of column 1 or above row A has no name: check before naming it.
+  if (target.col < 1 || target.row < 1) return refuse(`Wire ${id} would be off the board.`)
 
   let points: string[]
+  let cornerHole: Hole | null = null
   let bare = wire.bareSegments
   if (wire.kind === 'flying') {
     if (holeKey(target) === holeKey(prev)) return refuse(`Both ends of wire ${id} would be in ${targetName}.`)
@@ -168,9 +171,10 @@ export function moveWireEnd(board: BoardFile, id: string, end: WireEnd, target: 
       points = wire.points.slice()
       points[endIdx] = targetName
     } else {
-      const corner = holeName(bend === 'row-first'
+      cornerHole = bend === 'row-first'
         ? { col: target.col, row: prev.row }
-        : { col: prev.col, row: target.row })
+        : { col: prev.col, row: target.row }
+      const corner = holeName(cornerHole)
       const old = first ? 0 : pts.length - 2
       const wasBare = wire.bareSegments.includes(old)
       if (first) {
@@ -191,12 +195,12 @@ export function moveWireEnd(board: BoardFile, id: string, end: WireEnd, target: 
     const reach = new Set(pathHoles(points.map(parseHole)).map(holeKey))
     joints = joints.filter(n => reach.has(holeKey(parseHole(n))))
   }
+  joints = [...new Set(joints)]
   const moved: BoardFile = {
     ...board,
     wires: board.wires.map((x, i) => (i === idx ? { ...x, points, bareSegments: bare, joints } : x))
   }
   const { cols, rows } = board.board
-  if (target.col < 1 || target.row < 1) return refuse(`Wire ${id} would be off the board.`)
   if (target.col > cols || target.row > rows) return { board: moved, reason: `Wire ${id} would be off the board.` }
-  return { board: moved, reason: blockedReason(board, target) }
+  return { board: moved, reason: blockedReason(board, target) ?? (cornerHole ? blockedReason(board, cornerHole) : null) }
 }
