@@ -1,6 +1,10 @@
 # WireBender
 
-WireBender is a local Nuxt app for planning hand-soldered perfboards: you draw wires and parts on a hole grid, and it checks the wiring with the same engine in the browser and on the command line. Findings are advisory only: check the board with a meter before powering it.
+WireBender is a Nuxt app for planning hand-soldered perfboards: parts, trails and wires on a hole grid, checked with the same engine in the browser and on the command line. Findings are advisory only: check the board with a meter before powering it.
+
+- **Design the board with your AI tool.** Connect Claude Code, or any AI tool that speaks MCP, to WireBender's MCP server (see MCP server below); any script can use the HTTP API with a token. The AI places parts and routes wires; you draw, fix and review alongside it.
+- **The board page is the live preview.** Every change, from the AI, from you, or from a tablet beside you, shows up at once in every open copy: both sides, a 3D view, and the check's findings as you go. Every change is a revision you can undo or restore.
+- **Then build it from the bench sheet.** One printable guide (true 1:1, or a single offline HTML file for a phone or iPad) takes you through the build: what to cut, strip, bend, place and solder, in order, with the meter test list to go through before you power it.
 
 ## Run it
 
