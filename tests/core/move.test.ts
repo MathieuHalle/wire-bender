@@ -74,17 +74,19 @@ describe('movePart', () => {
     expect(r.board.parts[0]!.at).toBe('B9')
   })
 
-  it('refuses a fold that would land off the board', () => {
+  it('refuses a fold that would land off the board, naming the folded leg (the pins are on it)', () => {
     const b = frozen({ parts: [axial('R1', 'B2', 'B5', 'N1')], legFolds: [{ lead: 'R1.a', to: 'A2' }] })
     // moving up one row puts the pins on row A but the fold on row 0, which has no name
     const r = movePart(b, 'R1', { from: H('B2'), to: H('A2'), turns: 0 })
-    expect(r.reason).toBe('R1 would be off the board.')
+    expect(r.reason).toBe('R1\'s folded leg would be off the board.')
     expect(r.board).toEqual(b)
     // a fold past the last row has a name, and the moved board shows it
     const f = frozen({ parts: [axial('R1', 'B2', 'B5', 'N1')], legFolds: [{ lead: 'R1.a', to: 'C2' }] })
     const g = movePart(f, 'R1', { from: H('B2'), to: H('J2'), turns: 0 })
-    expect(g.reason).toBe('R1 would be off the board.')
+    expect(g.reason).toBe('R1\'s folded leg would be off the board.')
     expect(g.board.legFolds[0]!.to).toBe('K2')
+    // pins off too: the part itself is off the board
+    expect(movePart(f, 'R1', { from: H('B2'), to: H('B9'), turns: 0 }).reason).toBe('R1 would be off the board.')
   })
 
   it('lets a body hang over the edge when every pin is on the board', () => {

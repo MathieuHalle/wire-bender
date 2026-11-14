@@ -551,11 +551,11 @@ describe('the Move tool', () => {
     t.onMoveClick('top', at('B3'))
     t.onMoveHover('top', h('E3'))
     paused = true
-    // Clicks, hovers and keys change nothing, and say nothing.
+    // Clicks, hovers, keys and Rotate change nothing, and say nothing (Esc is tested below).
     t.onMoveHover('top', h('G3'))
     t.onMoveClick('top', at('G3'))
     t.onKeydown(key('r'))
-    t.onKeydown(key('Escape'))
+    t.rotate(1) // the touch bar's Rotate
     expect(t.held.value).toMatchObject({ pick: { kind: 'part', ref: 'R1' }, target: h('E3'), turns: 0 })
     expect(t.preview.value!.reason).toBeNull()
     expect(f.notes).toEqual([])
@@ -580,6 +580,61 @@ describe('the Move tool', () => {
     locked = true
     t.place()
     expect(t.held.value).toBeNull()
+    expect(f.notes).toEqual([])
+  })
+
+  test('on a mirrored side, rotating turns the other way in board terms (clockwise on screen)', () => {
+    let mirror = true
+    t = createTools({ ...f.deps, mirrored: side => side === 'bottom' && mirror })
+    t.tool.value = 'move'
+    t.onMoveClick('bottom', at('B4')) // W1, by its line
+    expect(t.held.value!.pick).toMatchObject({ kind: 'wire', id: 'W1' })
+    t.onKeydown(key('r'))
+    expect(t.held.value!.turns).toBe(3)
+    t.onKeydown(key('ArrowLeft'))
+    expect(t.held.value!.turns).toBe(0)
+    t.rotate(1) // the touch bar's Rotate
+    expect(t.held.value!.turns).toBe(3)
+    // Not mirrored: as before.
+    mirror = false
+    t.rotate(1)
+    expect(t.held.value!.turns).toBe(0)
+    t.onKeydown(key('r'))
+    expect(t.held.value!.turns).toBe(1)
+    // The top side is never mirrored.
+    mirror = true
+    t.cancel()
+    t.onMoveClick('top', at('B3'))
+    t.onKeydown(key('r'))
+    expect(t.held.value!.turns).toBe(1)
+  })
+
+  test('picks only from what is drawn: a hidden wire over a part is never picked', () => {
+    t = createTools({ ...f.deps, pickable: b => ({ ...b, wires: [] }) })
+    t.tool.value = 'move'
+    t.onMoveClick('bottom', at('B2')) // W1's end, and R1's pin
+    expect(t.held.value?.pick.kind ?? null).not.toBe('wire-end')
+    expect(t.held.value?.pick.kind ?? null).not.toBe('wire')
+    t.cancel()
+    t.onMoveClick('bottom', at('B4')) // only W1's line
+    expect(t.held.value).toBeNull()
+    // Placing still works on the whole board.
+    t.onMoveClick('top', at('B3'))
+    t.onMoveClick('top', at('E3'))
+    t.onMoveClick('top', at('E3'))
+    expect(f.board.value!.parts[0]).toMatchObject({ at: 'E2', to: 'E5' })
+    expect(f.board.value!.wires).toHaveLength(2)
+  })
+
+  test('Esc puts back even while paused or locked (it changes nothing)', () => {
+    let paused = false
+    t = createTools({ ...f.deps, locked: () => paused, paused: () => paused })
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    paused = true
+    t.onKeydown(key('Escape'))
+    expect(t.held.value).toBeNull()
+    expect(f.applied).toHaveLength(0)
     expect(f.notes).toEqual([])
   })
 

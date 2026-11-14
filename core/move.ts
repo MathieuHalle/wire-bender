@@ -9,7 +9,13 @@ export type Turns = 0 | 1 | 2 | 3
 /** The grabbed hole `from` lands on `to`, then everything turns `turns` times about `to`. */
 export interface Placement { from: Hole, to: Hole, turns: Turns }
 
-/** `board` is always the moved board (the preview draws it, red when `reason` is set); only `reason === null` may be applied. */
+/**
+ * `board` is the moved board (the preview draws it, red when `reason` is set); only
+ * `reason === null` may be applied. A few refusals return the board unmoved, as the moved
+ * one cannot be written: a part or wire pushed past the top or left edge (its holes have
+ * no name), a laid wire's end onto the point before it, and both ends of a flying wire in
+ * one hole.
+ */
 export interface MoveResult { board: BoardFile, reason: string | null }
 
 export function mapHole(h: Hole, p: Placement): Hole {
@@ -80,12 +86,17 @@ export function movePart(board: BoardFile, ref: string, p: Placement): MoveResul
   const part = board.parts[idx]!
   const fp = FOOTPRINTS[part.footprint]!
   const origin = parseHole(part.at)
+  const offBoard = `${ref} would be off the board.`
+  // Only a fold off the board: its pins are on it, so say which.
+  const foldOff = `${ref}'s folded leg would be off the board.`
+  const nameless = (h: Hole) => h.col < 1 || h.row < 1
   const named = [
     origin,
-    ...(fp.twoLead ? [part.to !== undefined ? parseHole(part.to) : { col: origin.col + fp.twoLead.minSpan, row: origin.row }] : []),
-    ...board.legFolds.filter(f => f.lead.startsWith(prefix)).map(f => parseHole(f.to))
+    ...(fp.twoLead ? [part.to !== undefined ? parseHole(part.to) : { col: origin.col + fp.twoLead.minSpan, row: origin.row }] : [])
   ].map(h => mapHole(h, p))
-  if (named.some(h => h.col < 1 || h.row < 1)) return { board, reason: `${ref} would be off the board.` }
+  if (named.some(nameless)) return { board, reason: offBoard }
+  if (board.legFolds.some(f => f.lead.startsWith(prefix) && nameless(mapHole(parseHole(f.to), p))))
+    return { board, reason: foldOff }
 
   const moved: BoardFile = {
     ...board,
@@ -93,13 +104,13 @@ export function movePart(board: BoardFile, ref: string, p: Placement): MoveResul
     legFolds: board.legFolds.map(f => (f.lead.startsWith(prefix) ? { ...f, to: mapName(f.to, p) } : f))
   }
 
-  const holes: Hole[] = [
-    ...placePart(moved.parts[idx]!).pins.map(x => x.hole),
-    ...moved.legFolds.filter(f => f.lead.startsWith(prefix)).map(f => parseHole(f.to))
-  ]
+  const pins = placePart(moved.parts[idx]!).pins.map(x => x.hole)
+  const folds = moved.legFolds.filter(f => f.lead.startsWith(prefix)).map(f => parseHole(f.to))
+  const holes: Hole[] = [...pins, ...folds]
   const { cols, rows } = board.board
-  if (holes.some(h => h.col < 1 || h.row < 1 || h.col > cols || h.row > rows))
-    return { board: moved, reason: `${ref} would be off the board.` }
+  const off = (h: Hole) => h.col < 1 || h.row < 1 || h.col > cols || h.row > rows
+  if (pins.some(off)) return { board: moved, reason: offBoard }
+  if (folds.some(off)) return { board: moved, reason: foldOff }
 
   for (const h of holes)
     for (const b of board.board.blocked)

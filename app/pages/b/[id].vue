@@ -12,7 +12,7 @@ import { fallbackAlert } from '~/utils/board3dFallback'
 import { defaultPanel, loadPanel, savePanel, type PanelState, type PanelTab } from '~/utils/sidePanel'
 import { ALL_LAYERS } from '~/utils/layers'
 import {
-  boardItems, drawnBoard, editTarget, hiddenCount, isShown, itemLit, itemNets, itemsAtFinding, loadHidden, pruneHidden,
+  boardItems, drawnBoard, editTarget, hiddenCount, isShown, itemLit, itemNets, itemsAtFinding, loadHidden, pickableBoard, pruneHidden,
   saveHidden, setShown, type BoardItems, type ViewState
 } from '~/utils/hiddenItems'
 import { benchUrl, loadFlip, saveFlip } from '~/utils/bottomFlip'
@@ -87,18 +87,26 @@ const lockedTitle = computed(() => (previewing.value
 const {
   tool, drawing, onHoleClick, onSegmentClick, addJoint, endDrawing,
   held, preview, onMoveClick, onMoveHover, rotate, switchBend, place, cancel
-} = useTools(live, { locked: () => lockedTitle.value !== null, paused: () => lockedTitle.value === PAUSED_TITLE })
+} = useTools(live, {
+  locked: () => lockedTitle.value !== null,
+  paused: () => lockedTitle.value === PAUSED_TITLE,
+  // The bottom drawn mirrored turns the other way on screen.
+  mirrored: side => side === 'bottom' && bottomMirror.value !== 'none',
+  // Only what is drawn can be picked up.
+  pickable: b => pickableBoard(b, hiddenSet.value, layers.value)
+})
 // Nothing stays held once editing is off (a revision previewed, view only, 3D). A pause
 // (reconnecting) keeps the hold: placing waits for the board to be live again.
 watch(lockedTitle, t => t !== null && t !== PAUSED_TITLE && cancel())
 /** The 2D view the 3D one was entered from; key 3 goes back to it. */
 const last2d = ref<Exclude<View, '3d'>>('both')
-// The 3D view has no edit tools: a trail being drawn ends on the way in. Any view change
-// puts back what the Move tool holds.
+// The 3D view has no edit tools: a trail being drawn ends on the way in, and what the Move
+// tool holds is put back. A 2D framing only moves the camera: both sides stay drawn.
 watch(view, (v) => {
-  cancel()
-  if (v === '3d') endDrawing()
-  else last2d.value = v
+  if (v === '3d') {
+    endDrawing()
+    cancel()
+  } else last2d.value = v
 })
 
 const mirrorBottom = ref(true)
@@ -277,7 +285,7 @@ const drawFrom = computed(() => {
 })
 const hint = computed(() => (drawing.value
   ? `Drawing ${drawing.value.trailId} on ${drawing.value.side}: click the last hole again or press Esc to end`
-  : moveHint(held.value, preview.value)))
+  : moveHint(held.value, preview.value, lockedTitle.value === PAUSED_TITLE)))
 
 /** What the Move tool holds, as each side draws it: only the side it was picked on shows the copy. */
 const moving = computed(() => {
@@ -858,8 +866,8 @@ const sideTitle = (s: Side) => (s === 'top'
             :locked="lockedTitle !== null"
             :locked-title="lockedTitle ?? undefined"
             :view-only="viewOnly"
-            @undo="undo"
-            @redo="redo"
+            @undo="cancel(); undo()"
+            @redo="cancel(); redo()"
           />
         </template>
         <template #layers>

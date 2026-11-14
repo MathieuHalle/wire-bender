@@ -185,6 +185,16 @@ export function drawnBoard(board: BoardFile, hidden: ReadonlySet<string>): Board
   return { ...board, parts, wires, trails, legFolds }
 }
 
+/**
+ * What the Move tool may pick up: the board as drawn, without the hidden items and without
+ * the parts or wires whose layer is off. The board itself when everything is drawn.
+ */
+export function pickableBoard(board: BoardFile, hidden: ReadonlySet<string>, layers: Layers): BoardFile {
+  const d = drawnBoard(board, hidden)
+  if (layers.components && layers.wires) return d
+  return { ...d, parts: layers.components ? d.parts : [], wires: layers.wires ? d.wires : [] }
+}
+
 /** The placed parts the 2D view draws; the list itself when none is hidden. */
 export function drawnPlaced(placed: PlacedPart[], hidden: ReadonlySet<string>): PlacedPart[] {
   if (!hidden.size) return placed

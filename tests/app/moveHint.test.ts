@@ -40,6 +40,16 @@ describe('moveHint', () => {
       .toBe('Moving the end of wire W4: click to place, Esc to put back')
   })
 
+  it('while paused (reconnecting), says placing waits', () => {
+    expect(moveHint(held({ kind: 'part', ref: 'R3', at: h('C3') }), ok, true))
+      .toBe('Moving R3: reconnecting, placing waits · Esc to put back')
+    expect(moveHint(held({ kind: 'wire', id: 'W2', at: h('B3') }), ok, true))
+      .toBe('Moving wire W2: reconnecting, placing waits · Esc to put back')
+    expect(moveHint(held({ kind: 'wire-end', id: 'W2', end: 'first', at: h('B2') }), ok, true))
+      .toBe('Moving the end of wire W2: reconnecting, placing waits · Esc to put back')
+    expect(moveHint(null, null, true)).toBeNull()
+  })
+
   it('gives the reason when it cannot be placed there', () => {
     const reason = 'R3 would overlap R1.'
     expect(moveHint(held({ kind: 'part', ref: 'R3', at: h('C3') }), { board, reason }))
