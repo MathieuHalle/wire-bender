@@ -8,7 +8,7 @@ import { buildConnectivity } from '~core/connectivity'
 import { ALL_LAYERS, type Layers } from '../../app/utils/layers'
 import {
   boardItems, drawnBoard, drawnPlaced, editTarget, groupState, hiddenCount, HIDDEN_PREFIX, hiddenKey, itemKey,
-  itemLit, itemNets, itemsAtFinding, loadHidden, matchItems, parseHidden, pruneHidden, saveHidden, setShown, showAll, toggleGroup,
+  itemLit, itemNets, itemsAtFinding, loadHidden, matchItems, parseHidden, pickableBoard, pruneHidden, saveHidden, setShown, showAll, toggleGroup,
   type ViewState
 } from '../../app/utils/hiddenItems'
 
@@ -168,6 +168,22 @@ describe('pruneHidden: stale ids', () => {
   it('keeps the same array when nothing is stale', () => {
     const h = ['trail:T1']
     expect(pruneHidden(h, b)).toBe(h)
+  })
+})
+
+describe('pickableBoard: what the Move tool may pick up', () => {
+  const b = board2()
+
+  it('leaves out hidden items, and every part or wire whose layer is off', () => {
+    const d = pickableBoard(b, new Set(['wire:W1']), { ...ALL_LAYERS })
+    expect(d.wires.map(w => w.id)).not.toContain('W1')
+    expect(d.parts).toHaveLength(b.parts.length)
+    expect(pickableBoard(b, new Set(), { ...ALL_LAYERS, wires: false }).wires).toEqual([])
+    expect(pickableBoard(b, new Set(), { ...ALL_LAYERS, components: false }).parts).toEqual([])
+  })
+
+  it('is the board itself when everything is drawn', () => {
+    expect(pickableBoard(b, new Set(), { ...ALL_LAYERS })).toBe(b)
   })
 })
 

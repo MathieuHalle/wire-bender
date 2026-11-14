@@ -42,12 +42,21 @@ const props = withDefaults(defineProps<{
   hidden?: ReadonlySet<string>
   /** What to light instead of `highlightNet`: one item, hovered in the Layers tab. */
   highlightLit?: Lit | null
-}>(), { layers: () => ({ ...ALL_LAYERS }), hidden: () => new Set<string>(), highlightLit: null, mirror: 'none', highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
+  /**
+   * What the Move tool holds, on this side: the item `key` (`part:<ref>` or `wire:<id>`) is
+   * drawn faded, and over it that item as it is on `board` (where it would land), in red
+   * when it cannot go there (`ok` false).
+   */
+  moving?: { board: BoardFile, key: string, ok: boolean } | null
+}>(), { layers: () => ({ ...ALL_LAYERS }), hidden: () => new Set<string>(), highlightLit: null, moving: null, mirror: 'none', highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
 
 const emit = defineEmits<{
   'hole-click': [hole: Hole]
   'segment-click': [a: Hole, b: Hole]
-  'hover': [hole: Hole | null]
+  /** The hole under the pointer, and the kind of pointer it is (`PointerEvent.pointerType`; null before any). */
+  'hover': [hole: Hole | null, pointerType: string | null]
+  /** A click with the Move tool, in fractional hole coordinates: it picks up by a wire's line too. */
+  'point-click': [point: { col: number, row: number }]
 }>()
 
 const MARGIN = SIDE_MARGIN
@@ -66,6 +75,21 @@ const lit = computed(() => props.highlightLit ?? litOf(props.highlightNet))
 /** What is drawn: the board without its hidden items (connectivity stays the whole board's). */
 const drawn = computed(() => drawnBoard(props.board, props.hidden))
 const drawnParts = computed(() => drawnPlaced(placedParts.value, props.hidden))
+
+/** The Move copy's colour where it cannot go. */
+const REFUSED = '#e5484d'
+/** The held item alone, as it would land: a board with just that part or wire. */
+const copy = computed(() => {
+  const m = props.moving
+  if (!m) return null
+  const at = m.key.indexOf(':')
+  const kind = m.key.slice(0, at)
+  const id = m.key.slice(at + 1)
+  const parts = kind === 'part' ? m.board.parts.filter(p => p.ref === id) : []
+  const wires = kind === 'wire' ? m.board.wires.filter(w => w.id === id) : []
+  const board: BoardFile = { ...m.board, parts, wires, trails: [] }
+  return { board, placed: parts.map(placePart), tint: m.ok ? null : REFUSED }
+})
 
 /** Board outline (half a pitch past the outer holes) and everything that overhangs it. */
 const extent = computed(() => sideExtent(geo.value, placedParts.value))
@@ -96,6 +120,8 @@ const pointer = ref<{ fc: number, fr: number } | null>(null)
 const canvas = inject(CANVAS_CONTEXT, null)
 /** Where the pointer last was over this side, in client px. */
 let lastClient: { x: number, y: number } | null = null
+/** The kind of pointer that last moved over this side (mouse, touch, pen). */
+let pointerType: string | null = null
 
 function boardPoint(ev: { clientX: number, clientY: number }) {
   const svg = svgEl.value
@@ -119,6 +145,7 @@ function holeAt(fc: number, fr: number): Hole | null {
 function onMove(ev: PointerEvent) {
   // While the canvas pans, the board moves with the pointer: nothing to update.
   if (canvas?.panning.value) return
+  pointerType = ev.pointerType
   track(ev.clientX, ev.clientY)
 }
 
@@ -133,7 +160,7 @@ function track(cx: number, cy: number) {
   tipAt.value = h && box ? { x: cx - box.left, y: cy - box.top, w: box.width, h: box.height } : null
   if (h?.col === hovered.value?.col && h?.row === hovered.value?.row) return
   hovered.value = h
-  emit('hover', h)
+  emit('hover', h, pointerType)
 }
 
 // A zoom or pan moves the board under a resting pointer: once it is drawn (and the pan
@@ -154,13 +181,14 @@ function onLeave() {
   lastClient = null
   tipAt.value = null
   pointer.value = null
-  if (hovered.value) emit('hover', null)
+  if (hovered.value) emit('hover', null, pointerType)
   hovered.value = null
 }
 
 function onClick(ev: MouseEvent) {
   const p = boardPoint(ev)
   if (!p) return
+  if (props.tool === 'move') return emit('point-click', { col: p.fc, row: p.fr })
   if (props.tool === 'erase') {
     // Between two neighbouring holes along a row or column: that segment.
     const c = Math.round(p.fc)
@@ -297,6 +325,7 @@ const ringed = computed(() => {
           :geo="geo"
           :lit="lit"
           :placed="drawnParts"
+          :dim-key="moving?.key"
         />
         <BoardWires
           v-if="layers.wires"
@@ -304,7 +333,29 @@ const ringed = computed(() => {
           :side="side"
           :geo="geo"
           :lit="lit"
+          :dim-key="moving?.key"
         />
+        <!-- the Move copy, over everything of the board, layers or not: it is what the hand holds -->
+        <g
+          v-if="copy"
+          pointer-events="none"
+        >
+          <BoardParts
+            :board="copy.board"
+            :side="side"
+            :geo="geo"
+            :lit="null"
+            :placed="copy.placed"
+            :tint="copy.tint"
+          />
+          <BoardWires
+            :board="copy.board"
+            :side="side"
+            :geo="geo"
+            :lit="null"
+            :tint="copy.tint"
+          />
+        </g>
 
         <!-- edge labels: columns top and bottom, rows left and right -->
         <g

@@ -6,7 +6,7 @@ import { holeKey, holeMm, holeName, parseHole, type Hole } from '../holes'
 import { joinAnd, names, type CheckContext, type Finding, type Run } from './context'
 
 /** Bodies may touch: only an overlap beyond this in both axes is a collision. */
-const OVERLAP_TOLERANCE_MM = 0.2
+export const OVERLAP_TOLERANCE_MM = 0.2
 
 /** What occupies each hole, as readable labels, from the given sources. */
 class Occupancy {

@@ -1,13 +1,29 @@
 <script setup lang="ts">
 // Part bodies at real size (solid on top, dashed ghost on the bottom), leads on both
 // sides, and orientation marks (pin 1, TO-220 tab, diode stripe). A part lit as a whole
-// (`part:<ref>`, hovered in the Layers tab) is ringed.
+// (`part:<ref>`, hovered in the Layers tab) is ringed. The Move tool dims the held part
+// (`dimKey`) and draws its copy in a single colour when it cannot go there (`tint`).
 import { holeMm } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
 import type { PlacedPart } from '~core/footprints'
 import { netColor, type Geo, type Lit } from '~/utils/boardView'
 
-const props = defineProps<{ board: BoardFile, side: Side, geo: Geo, lit: Lit | null, placed: PlacedPart[] }>()
+const props = defineProps<{
+  board: BoardFile
+  side: Side
+  geo: Geo
+  lit: Lit | null
+  placed: PlacedPart[]
+  /** The one part (`part:<ref>`) drawn faded: the one the Move tool holds. */
+  dimKey?: string | null
+  /** Draws every part in this colour (the Move copy where it cannot go). */
+  tint?: string | null
+}>()
+
+/** How faded the part held by the Move tool is drawn. */
+const HELD_OPACITY = 0.35
+/** A colour, or the tint over it. */
+const ink = (c: string) => props.tint ?? c
 
 type Pt = { x: number, y: number }
 
@@ -26,7 +42,7 @@ const parts = computed(() => props.placed.map((p) => {
   const line = (a: Pt, b: Pt, w: number, color: string) => {
     const A = v(a)
     const B = v(b)
-    marks.push({ d: `M${A.x} ${A.y}L${B.x} ${B.y}`, w, color })
+    marks.push({ d: `M${A.x} ${A.y}L${B.x} ${B.y}`, w, color: ink(color) })
   }
 
   const pinPts = p.pins.map(pin => mm(pin.hole))
@@ -36,7 +52,7 @@ const parts = computed(() => props.placed.map((p) => {
     const dy = centre.y - p1.y
     const len = Math.hypot(dx, dy) || 1
     const q = { x: p1.x + (dx / len) * 1.6, y: p1.y + (dy / len) * 1.6 }
-    marks.push({ d: `M${v(q).x - 0.01} ${v(q).y}l0.02 0`, w: 0.9, color: '#16201b' }) // a dot
+    marks.push({ d: `M${v(q).x - 0.01} ${v(q).y}l0.02 0`, w: 0.9, color: ink('#16201b') }) // a dot
   } else if ((p.fp.mark === 'tab' || p.fp.mark === 'flat') && !round) {
     // The body edge on the tab side; without an explicit tab, the edge farthest from the leads.
     const cx = pinPts.reduce((s, q) => s + q.x, 0) / pinPts.length
@@ -93,6 +109,8 @@ const parts = computed(() => props.placed.map((p) => {
   const two = p.fp.twoLead && pinPts.length === 2
   return {
     ref: p.part.ref,
+    /** 1, or faded while the Move tool holds it. */
+    op: props.dimKey === `part:${p.part.ref}` ? HELD_OPACITY : 1,
     /** Lit as a whole: the part hovered in the Layers tab. */
     lit: props.lit?.ids.has(`part:${p.part.ref}`) ?? false,
     body,
@@ -106,7 +124,7 @@ const parts = computed(() => props.placed.map((p) => {
       id: `lead:${p.part.ref}.${pin.name}`,
       ...g.pt(pin.hole),
       square: p.fp.mark === 'pin1' && pin.name === '1',
-      color: pin.net ? netColor(props.board, pin.net) : '#ffffff',
+      color: ink(pin.net ? netColor(props.board, pin.net) : '#ffffff'),
       nc: !pin.net
     }))
   }
@@ -148,11 +166,12 @@ const dim = (id: string) => (props.lit && !props.lit.ids.has(id) ? 0.45 : 1)
       <g
         v-for="p in parts"
         :key="p.ref"
+        :opacity="p.op"
       >
         <path
           v-if="p.lead"
           :d="p.lead"
-          stroke="#8d969b"
+          :stroke="ink('#8d969b')"
           stroke-width="0.55"
           stroke-linecap="round"
         />
@@ -163,7 +182,7 @@ const dim = (id: string) => (props.lit && !props.lit.ids.has(id) ? 0.45 : 1)
           :r="p.body.w / 2"
           fill="#ffffff"
           fill-opacity="0.85"
-          stroke="#16201b"
+          :stroke="ink('#16201b')"
           stroke-width="0.2"
         />
         <rect
@@ -175,7 +194,7 @@ const dim = (id: string) => (props.lit && !props.lit.ids.has(id) ? 0.45 : 1)
           rx="0.4"
           fill="#ffffff"
           fill-opacity="0.8"
-          stroke="#16201b"
+          :stroke="ink('#16201b')"
           stroke-width="0.2"
         />
         <path
@@ -192,8 +211,9 @@ const dim = (id: string) => (props.lit && !props.lit.ids.has(id) ? 0.45 : 1)
       <g
         v-for="p in parts"
         :key="p.ref"
+        :opacity="p.op"
         fill="none"
-        stroke="#16201b"
+        :stroke="ink('#16201b')"
         stroke-opacity="0.55"
         stroke-width="0.18"
         stroke-dasharray="0.7 0.45"
@@ -240,9 +260,9 @@ const dim = (id: string) => (props.lit && !props.lit.ids.has(id) ? 0.45 : 1)
           width="1.1"
           height="1.1"
           :fill="pin.color"
-          stroke="#16201b"
+          :stroke="ink('#16201b')"
           stroke-width="0.15"
-          :opacity="dim(pin.id)"
+          :opacity="dim(pin.id) * p.op"
         />
         <circle
           v-else
@@ -250,9 +270,9 @@ const dim = (id: string) => (props.lit && !props.lit.ids.has(id) ? 0.45 : 1)
           :cy="pin.y"
           :r="top ? 0.55 : 0.38"
           :fill="pin.color"
-          :stroke="top ? '#16201b' : '#eef3ef'"
+          :stroke="top ? ink('#16201b') : '#eef3ef'"
           :stroke-width="top ? 0.15 : 0.14"
-          :opacity="dim(pin.id)"
+          :opacity="dim(pin.id) * p.op"
         />
       </template>
     </template>
@@ -266,11 +286,11 @@ const dim = (id: string) => (props.lit && !props.lit.ids.has(id) ? 0.45 : 1)
       text-anchor="middle"
       dominant-baseline="central"
       font-weight="600"
-      :fill="top ? '#16201b' : '#5b6a62'"
-      :fill-opacity="top ? 1 : 0.8"
+      :fill="ink(top ? '#16201b' : '#5b6a62')"
+      :fill-opacity="(top ? 1 : 0.8) * p.op"
       stroke="#ffffff"
       stroke-width="0.35"
-      stroke-opacity="0.85"
+      :stroke-opacity="0.85 * p.op"
       paint-order="stroke"
     >
       {{ p.ref }}

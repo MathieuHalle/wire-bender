@@ -15,8 +15,12 @@ describe('pageKey', () => {
     expect(pageKey('Escape', 'bottom', 'bottom')).toBeNull()
   })
 
-  it('tool keys (H I P E J) are not page keys', () => {
-    for (const k of ['h', 'H', 'i', 'p', 'e', 'j']) expect(pageKey(k, 'both', 'both'), k).toBeNull()
+  it('tool keys (H I P E J M) are not page keys', () => {
+    for (const k of ['h', 'H', 'i', 'p', 'e', 'j', 'm', 'M']) expect(pageKey(k, 'both', 'both'), k).toBeNull()
+  })
+
+  it('the Move keys (R ← → Tab) are not page keys', () => {
+    for (const k of ['r', 'ArrowLeft', 'ArrowRight', 'Tab']) expect(pageKey(k, 'both', 'both'), k).toBeNull()
   })
 
   it('F flips between framing the top and the bottom side, not in 3D', () => {

@@ -26,7 +26,8 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
   { id: 'inspect', label: 'Inspect', icon: 'i-lucide-mouse-pointer-2', key: 'I' },
   { id: 'pencil', label: 'Pencil', icon: 'i-lucide-pencil', key: 'P' },
   { id: 'erase', label: 'Erase', icon: 'i-lucide-eraser', key: 'E' },
-  { id: 'joint', label: 'Joint', icon: 'i-lucide-circle-dot', key: 'J' }
+  { id: 'joint', label: 'Joint', icon: 'i-lucide-circle-dot', key: 'J' },
+  { id: 'move', label: 'Move', icon: 'i-lucide-move', key: 'M' }
 ]
 
 const lockTitle = computed(() => props.lockedTitle ?? LOCKED_TITLE)

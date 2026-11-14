@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import { shallowRef } from 'vue'
 import { parseHole } from '~core/holes'
 import type { BoardFile } from '~core/schema'
+import { stable } from '#shared/yboard'
 import { createTools } from '../../app/composables/useTools'
-import { mk, trail } from '../core/helpers'
+import { axial, mk, trail } from '../core/helpers'
 
 const h = parseHole
 
@@ -43,6 +44,23 @@ function fakeBoard(start: BoardFile) {
 
 const key = (k: string, extra: Partial<KeyboardEvent> & { target?: unknown } = {}) =>
   ({ key: k, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, target: null, preventDefault() {}, ...extra }) as unknown as KeyboardEvent
+
+/** A key event that records whether preventDefault was called. */
+function spyKey(k: string) {
+  const ev = {
+    prevented: false,
+    ...key(k),
+    preventDefault() {
+      ev.prevented = true
+    }
+  }
+  return ev as typeof ev & KeyboardEvent
+}
+
+const laid = (id: string, points: string[], side: 'top' | 'bottom' = 'bottom') =>
+  ({ id, kind: 'laid' as const, side, points, bareSegments: [] as number[], joints: [] as string[] })
+const flying = (id: string, points: string[], side: 'top' | 'bottom' = 'bottom') =>
+  ({ ...laid(id, points, side), kind: 'flying' as const })
 
 let f: ReturnType<typeof fakeBoard>
 let t: ReturnType<typeof createTools>
@@ -252,5 +270,389 @@ describe('useTools', () => {
     expect(t.tool.value).toBe('navigate')
     t.onKeydown(key('h', { target: { tagName: 'INPUT', isContentEditable: false } }))
     expect(t.tool.value).toBe('navigate')
+  })
+})
+
+describe('the Move tool', () => {
+  const at = (s: string) => ({ col: h(s).col, row: h(s).row })
+  beforeEach(() => {
+    f = fakeBoard(mk({ parts: [axial('R1', 'B2', 'B5', null)], wires: [laid('W1', ['B2', 'B6']), flying('W2', ['H2', 'H9'])] }))
+    t = createTools(f.deps)
+  })
+
+  test('M picks the Move tool; a click picks up, a second click on the same hole places', () => {
+    t.onKeydown(key('M'))
+    expect(t.tool.value).toBe('move')
+    t.onMoveClick('top', { col: 3, row: 2 })
+    expect(t.held.value).toMatchObject({ pick: { kind: 'part', ref: 'R1', at: h('B3') }, side: 'top', target: h('B3'), turns: 0, bend: 'row-first' })
+    expect(t.held.value!.snapshot).toBe(stable(f.board.value!.parts[0]))
+    // Touch: the first tap on another hole previews there, the second places.
+    t.onMoveClick('top', { col: 3.2, row: 4.9 })
+    expect(t.held.value!.target).toEqual(h('E3'))
+    expect(t.preview.value!.reason).toBeNull()
+    expect(t.preview.value!.board.parts[0]).toMatchObject({ at: 'E2', to: 'E5' })
+    expect(f.applied).toHaveLength(0)
+    t.onMoveClick('top', at('E3'))
+    expect(f.applied).toHaveLength(1)
+    expect(f.board.value!.parts[0]).toMatchObject({ at: 'E2', to: 'E5' })
+    expect(t.held.value).toBeNull()
+    expect(t.preview.value).toBeNull()
+    expect(f.notes).toEqual([])
+  })
+
+  test('a click on empty board picks up nothing', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('J9'))
+    expect(t.held.value).toBeNull()
+    // Not in the Move tool: no pick-up.
+    t.tool.value = 'inspect'
+    t.onMoveClick('top', at('B3'))
+    expect(t.held.value).toBeNull()
+  })
+
+  test('hover moves the target; the click there places in one apply', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('bottom', at('B6'))
+    expect(t.held.value!.pick).toEqual({ kind: 'wire-end', id: 'W1', end: 'last', at: h('B6') })
+    t.onMoveHover('top', h('C8')) // the other side: ignored
+    t.onMoveHover('bottom', null) // off the board: the target stays
+    expect(t.held.value!.target).toEqual(h('B6'))
+    t.onMoveHover('bottom', h('B8'))
+    expect(t.held.value!.target).toEqual(h('B8'))
+    t.onMoveClick('top', at('B8')) // the other side: nothing
+    expect(f.applied).toHaveLength(0)
+    t.onMoveClick('bottom', { col: 7.8, row: 2.1 })
+    expect(f.applied).toHaveLength(1)
+    expect(f.board.value!.wires[0]!.points).toEqual(['B2', 'B8'])
+    expect(t.held.value).toBeNull()
+  })
+
+  test('R and → turn clockwise, ← counter-clockwise; ignored for a wire end', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B2'))
+    t.onKeydown(key('r'))
+    expect(t.held.value!.turns).toBe(1)
+    t.onKeydown(key('ArrowRight'))
+    expect(t.held.value!.turns).toBe(2)
+    t.onKeydown(key('ArrowLeft'))
+    t.onKeydown(key('ArrowLeft'))
+    t.onKeydown(key('ArrowLeft'))
+    expect(t.held.value!.turns).toBe(3)
+    t.rotate(1)
+    expect(t.held.value!.turns).toBe(0)
+    t.onKeydown(key('R'))
+    expect(t.preview.value!.board.parts[0]).toMatchObject({ at: 'B2', to: 'E2' })
+    t.place()
+    expect(f.board.value!.parts[0]).toMatchObject({ at: 'B2', to: 'E2' })
+    // A whole wire turns too.
+    t.onMoveClick('bottom', at('B4'))
+    expect(t.held.value!.pick.kind).toBe('wire')
+    t.onKeydown(key('r'))
+    expect(t.held.value!.turns).toBe(1)
+    t.cancel()
+    // A wire end does not.
+    t.onMoveClick('bottom', at('B2'))
+    expect(t.held.value!.pick.kind).toBe('wire-end')
+    t.onKeydown(key('r'))
+    t.onKeydown(key('ArrowLeft'))
+    t.rotate(1)
+    expect(t.held.value!.turns).toBe(0)
+  })
+
+  test('Tab flips the bend only for a held laid-wire end, and only then prevents default', () => {
+    t.tool.value = 'move'
+    let ev = spyKey('Tab')
+    t.onKeydown(ev)
+    expect(ev.prevented).toBe(false)
+    // A whole wire: no bend.
+    t.onMoveClick('bottom', at('B4'))
+    ev = spyKey('Tab')
+    t.onKeydown(ev)
+    expect(ev.prevented).toBe(false)
+    expect(t.held.value!.bend).toBe('row-first')
+    t.cancel()
+    // A flying wire end: no bend.
+    t.onMoveClick('bottom', at('H9'))
+    expect(t.held.value!.pick).toMatchObject({ kind: 'wire-end', id: 'W2' })
+    ev = spyKey('Tab')
+    t.onKeydown(ev)
+    expect(ev.prevented).toBe(false)
+    expect(t.held.value!.bend).toBe('row-first')
+    t.cancel()
+    // A laid wire end: Tab switches, and so does switchBend.
+    t.onMoveClick('bottom', at('B6'))
+    t.onMoveHover('bottom', h('D8'))
+    expect(t.preview.value!.board.wires[0]!.points).toEqual(['B2', 'B8', 'D8'])
+    ev = spyKey('Tab')
+    t.onKeydown(ev)
+    expect(ev.prevented).toBe(true)
+    expect(t.held.value!.bend).toBe('col-first')
+    expect(t.preview.value!.board.wires[0]!.points).toEqual(['B2', 'D2', 'D8'])
+    t.switchBend()
+    expect(t.held.value!.bend).toBe('row-first')
+  })
+
+  test('a refused spot notifies the reason and keeps holding; nothing is applied', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B2'))
+    t.onMoveHover('top', h('B8')) // the far lead lands on column 11
+    const reason = t.preview.value!.reason
+    expect(reason).toEqual(expect.any(String))
+    t.onMoveClick('top', at('B8'))
+    expect(f.notes).toEqual([reason])
+    expect(f.applied).toHaveLength(0)
+    expect(t.held.value).not.toBeNull()
+    t.place()
+    expect(f.notes).toEqual([reason, reason])
+    expect(f.applied).toHaveLength(0)
+  })
+
+  test('Esc puts it back: no apply, held is null', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    t.onMoveHover('top', h('E3'))
+    t.onKeydown(key('Escape'))
+    expect(t.held.value).toBeNull()
+    expect(f.applied).toHaveLength(0)
+    expect(t.tool.value).toBe('move')
+  })
+
+  test('a remote change to the held item drops it with "<ref> was changed on another device; pick it up again."', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    // A change elsewhere keeps the hold.
+    f.board.value = { ...f.board.value!, trails: [trail('T1', ['J2', 'J5'])] }
+    expect(t.held.value).not.toBeNull()
+    f.board.value = { ...f.board.value!, parts: [{ ...f.board.value!.parts[0]!, at: 'C2', to: 'C5' }] }
+    expect(t.held.value).toBeNull()
+    expect(f.notes).toEqual(['R1 was changed on another device; pick it up again.'])
+    // A wire, by its end.
+    t.onMoveClick('bottom', at('B6'))
+    f.board.value = { ...f.board.value!, wires: [laid('W1', ['B2', 'B7']), flying('W2', ['H2', 'H9'])] }
+    expect(t.held.value).toBeNull()
+    expect(f.notes[1]).toBe('Wire W1 was changed on another device; pick it up again.')
+    expect(f.applied).toHaveLength(0)
+  })
+
+  test('a remote deletion of the held item drops it too', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('bottom', at('B4'))
+    expect(t.held.value!.pick).toMatchObject({ kind: 'wire', id: 'W1' })
+    f.board.value = { ...f.board.value!, wires: [flying('W2', ['H2', 'H9'])] }
+    expect(t.held.value).toBeNull()
+    expect(f.notes).toEqual(['Wire W1 was changed on another device; pick it up again.'])
+  })
+
+  test('Ctrl/Cmd+Z while holding drops the pick, then undoes', () => {
+    t.tool.value = 'move'
+    const start = f.board.value
+    t.onMoveClick('top', at('B3'))
+    t.onMoveClick('top', at('E3'))
+    t.onMoveClick('top', at('E3'))
+    const moved = f.board.value
+    t.onMoveClick('top', at('E3'))
+    expect(t.held.value).not.toBeNull()
+    t.onKeydown(key('z', { ctrlKey: true }))
+    expect(t.held.value).toBeNull()
+    expect(f.board.value).toBe(start)
+    t.onMoveClick('top', at('B3'))
+    t.onKeydown(key('Z', { metaKey: true, shiftKey: true }))
+    expect(t.held.value).toBeNull()
+    expect(f.board.value).toBe(moved)
+    expect(f.notes).toEqual([])
+  })
+
+  test('switching tool drops the pick without applying', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    t.onMoveHover('top', h('E3'))
+    t.onKeydown(key('p'))
+    expect(t.tool.value).toBe('pencil')
+    expect(t.held.value).toBeNull()
+    expect(f.applied).toHaveLength(0)
+    expect(f.notes).toEqual([])
+  })
+
+  test('locked: no pick-up, and M does not select Move', () => {
+    let locked = true
+    t = createTools({ ...f.deps, locked: () => locked })
+    t.onKeydown(key('m'))
+    expect(t.tool.value).toBe('inspect')
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    expect(t.held.value).toBeNull()
+    // Held, then locked: placing applies nothing.
+    locked = false
+    t.onMoveClick('top', at('B3'))
+    t.onMoveHover('top', h('E3'))
+    locked = true
+    t.place()
+    t.onMoveClick('top', at('E3'))
+    expect(f.applied).toHaveLength(0)
+  })
+  test('a remote copy of the held item with its keys reordered keeps the hold', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    const p = f.board.value!.parts[0]!
+    const reordered = Object.fromEntries(Object.entries(p).reverse()) as typeof p
+    expect(JSON.stringify(reordered)).not.toBe(JSON.stringify(p))
+    f.board.value = { ...f.board.value!, parts: [reordered], trails: [trail('T1', ['J2', 'J5'])] }
+    expect(t.held.value).not.toBeNull()
+    expect(f.notes).toEqual([])
+  })
+
+  test('a placement the live board refuses keeps holding and says why', () => {
+    t = createTools({ ...f.deps, apply: () => false })
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    t.onMoveHover('top', h('E3'))
+    t.place()
+    expect(t.held.value).toMatchObject({ pick: { kind: 'part', ref: 'R1' }, target: h('E3') })
+    expect(f.notes).toEqual(['Could not place R1: the board is read-only right now.'])
+    t.onMoveClick('bottom', at('B4')) // the other side: still holding R1
+    t.cancel()
+    t.onMoveClick('bottom', at('B4'))
+    t.onMoveHover('bottom', h('C4'))
+    t.place()
+    expect(f.notes[1]).toBe('Could not place wire W1: the board is read-only right now.')
+    expect(t.held.value).not.toBeNull()
+  })
+
+  test('locked while holding: the next action or key drops the pick quietly', () => {
+    let locked = false
+    t = createTools({ ...f.deps, locked: () => locked })
+    t.tool.value = 'move'
+    const hold = () => {
+      locked = false
+      t.onMoveClick('top', at('B3'))
+      expect(t.held.value).not.toBeNull()
+      locked = true
+    }
+    hold()
+    t.onKeydown(key('r'))
+    expect(t.held.value).toBeNull()
+    hold()
+    t.onMoveHover('top', h('E3'))
+    expect(t.held.value).toBeNull()
+    hold()
+    t.onMoveClick('top', at('E3'))
+    expect(t.held.value).toBeNull()
+    hold()
+    t.place()
+    expect(t.held.value).toBeNull()
+    expect(f.notes).toEqual([])
+    expect(f.applied).toHaveLength(0)
+  })
+
+  test('paused (reconnecting) while holding: the hold stays, moves are ignored, place refuses; resumed, place works', () => {
+    let paused = false
+    t = createTools({ ...f.deps, locked: () => paused, paused: () => paused })
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    t.onMoveHover('top', h('E3'))
+    paused = true
+    // Clicks, hovers, keys and Rotate change nothing, and say nothing (Esc is tested below).
+    t.onMoveHover('top', h('G3'))
+    t.onMoveClick('top', at('G3'))
+    t.onKeydown(key('r'))
+    t.rotate(1) // the touch bar's Rotate
+    expect(t.held.value).toMatchObject({ pick: { kind: 'part', ref: 'R1' }, target: h('E3'), turns: 0 })
+    expect(t.preview.value!.reason).toBeNull()
+    expect(f.notes).toEqual([])
+    // Placing refuses and keeps holding.
+    t.place()
+    expect(t.held.value).toMatchObject({ target: h('E3') })
+    expect(f.notes).toEqual(['Could not place R1: the board is read-only right now.'])
+    expect(f.applied).toHaveLength(0)
+    // Back live: the same hold places.
+    paused = false
+    t.onMoveClick('top', at('E3'))
+    expect(f.applied).toHaveLength(1)
+    expect(f.board.value!.parts[0]).toMatchObject({ at: 'E2', to: 'E5' })
+    expect(t.held.value).toBeNull()
+  })
+
+  test('locked but not paused (3D, view only, a revision): still drops the hold quietly', () => {
+    let locked = false
+    t = createTools({ ...f.deps, locked: () => locked, paused: () => false })
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    locked = true
+    t.place()
+    expect(t.held.value).toBeNull()
+    expect(f.notes).toEqual([])
+  })
+
+  test('on a mirrored side, rotating turns the other way in board terms (clockwise on screen)', () => {
+    let mirror = true
+    t = createTools({ ...f.deps, mirrored: side => side === 'bottom' && mirror })
+    t.tool.value = 'move'
+    t.onMoveClick('bottom', at('B4')) // W1, by its line
+    expect(t.held.value!.pick).toMatchObject({ kind: 'wire', id: 'W1' })
+    t.onKeydown(key('r'))
+    expect(t.held.value!.turns).toBe(3)
+    t.onKeydown(key('ArrowLeft'))
+    expect(t.held.value!.turns).toBe(0)
+    t.rotate(1) // the touch bar's Rotate
+    expect(t.held.value!.turns).toBe(3)
+    // Not mirrored: as before.
+    mirror = false
+    t.rotate(1)
+    expect(t.held.value!.turns).toBe(0)
+    t.onKeydown(key('r'))
+    expect(t.held.value!.turns).toBe(1)
+    // The top side is never mirrored.
+    mirror = true
+    t.cancel()
+    t.onMoveClick('top', at('B3'))
+    t.onKeydown(key('r'))
+    expect(t.held.value!.turns).toBe(1)
+  })
+
+  test('picks only from what is drawn: a hidden wire over a part is never picked', () => {
+    t = createTools({ ...f.deps, pickable: b => ({ ...b, wires: [] }) })
+    t.tool.value = 'move'
+    t.onMoveClick('bottom', at('B2')) // W1's end, and R1's pin
+    expect(t.held.value?.pick.kind ?? null).not.toBe('wire-end')
+    expect(t.held.value?.pick.kind ?? null).not.toBe('wire')
+    t.cancel()
+    t.onMoveClick('bottom', at('B4')) // only W1's line
+    expect(t.held.value).toBeNull()
+    // Placing still works on the whole board.
+    t.onMoveClick('top', at('B3'))
+    t.onMoveClick('top', at('E3'))
+    t.onMoveClick('top', at('E3'))
+    expect(f.board.value!.parts[0]).toMatchObject({ at: 'E2', to: 'E5' })
+    expect(f.board.value!.wires).toHaveLength(2)
+  })
+
+  test('Esc puts back even while paused or locked (it changes nothing)', () => {
+    let paused = false
+    t = createTools({ ...f.deps, locked: () => paused, paused: () => paused })
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    paused = true
+    t.onKeydown(key('Escape'))
+    expect(t.held.value).toBeNull()
+    expect(f.applied).toHaveLength(0)
+    expect(f.notes).toEqual([])
+  })
+
+  test('← → prevent default (no page scroll) while turning; R does not need to', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    for (const k of ['ArrowLeft', 'ArrowRight']) {
+      const ev = spyKey(k)
+      t.onKeydown(ev)
+      expect(ev.prevented, k).toBe(true)
+    }
+    const r = spyKey('r')
+    t.onKeydown(r)
+    expect(r.prevented).toBe(false)
+    // Not holding: the arrows are left alone.
+    t.cancel()
+    const ev = spyKey('ArrowLeft')
+    t.onKeydown(ev)
+    expect(ev.prevented).toBe(false)
   })
 })
