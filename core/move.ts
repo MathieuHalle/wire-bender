@@ -1,5 +1,5 @@
 import type { BoardFile, Part } from './schema'
-import { holeKey, holeName, parseHole, type Hole } from './holes'
+import { holeKey, holeName, parseHole, pathHoles, type Hole } from './holes'
 import { FOOTPRINTS, placePart, rotateOffset } from './footprints'
 import { OVERLAP_TOLERANCE_MM } from './check/placement'
 
@@ -110,4 +110,93 @@ export function movePart(board: BoardFile, ref: string, p: Placement): MoveResul
   for (const key of partConflicts(moved, ref))
     if (!before.has(key)) return { board: moved, reason: message(moved, ref, key) }
   return { board: moved, reason: null }
+}
+
+const blockedReason = (board: BoardFile, h: Hole): string | null => {
+  for (const b of board.board.blocked)
+    if (b.holes.some(n => holeKey(parseHole(n)) === holeKey(h))) return `Hole ${holeName(h)} is blocked: ${b.reason}`
+  return null
+}
+
+export function moveWire(board: BoardFile, id: string, p: Placement): MoveResult {
+  const idx = board.wires.findIndex(x => x.id === id)
+  if (idx < 0) return { board, reason: `No wire ${id}.` }
+  const wire = board.wires[idx]!
+  const off = `Wire ${id} would be off the board.`
+  const mapped = wire.points.map(n => mapHole(parseHole(n), p))
+  // A hole left of column 1 or above row A has no name: the board comes back unmoved.
+  if (mapped.some(h => h.col < 1 || h.row < 1)) return { board, reason: off }
+  const moved: BoardFile = {
+    ...board,
+    wires: board.wires.map((x, i) => (i === idx
+      ? { ...x, points: mapped.map(holeName), joints: x.joints.map(n => mapName(n, p)) }
+      : x))
+  }
+  const { cols, rows } = board.board
+  if (mapped.some(h => h.col > cols || h.row > rows)) return { board: moved, reason: off }
+  for (const h of mapped) {
+    const reason = blockedReason(board, h)
+    if (reason) return { board: moved, reason }
+  }
+  return { board: moved, reason: null }
+}
+
+export type WireEnd = 'first' | 'last'
+export type Bend = 'row-first' | 'col-first'
+
+export function moveWireEnd(board: BoardFile, id: string, end: WireEnd, target: Hole, bend: Bend): MoveResult {
+  const idx = board.wires.findIndex(x => x.id === id)
+  if (idx < 0) return { board, reason: `No wire ${id}.` }
+  const wire = board.wires[idx]!
+  const pts = wire.points.map(parseHole)
+  const first = end === 'first'
+  const endIdx = first ? 0 : pts.length - 1
+  const prev = pts[first ? 1 : endIdx - 1]!
+  const oldEnd = wire.points[endIdx]!
+  const targetName = holeName(target)
+  const refuse = (reason: string): MoveResult => ({ board, reason })
+
+  let points: string[]
+  let bare = wire.bareSegments
+  if (wire.kind === 'flying') {
+    if (holeKey(target) === holeKey(prev)) return refuse(`Both ends of wire ${id} would be in ${targetName}.`)
+    points = first ? [targetName, wire.points[1]!] : [wire.points[0]!, targetName]
+  } else {
+    if (holeKey(target) === holeKey(prev)) return refuse('The end can\'t land on the point before it.')
+    const inLine = target.row === prev.row || target.col === prev.col
+    if (inLine) {
+      points = wire.points.slice()
+      points[endIdx] = targetName
+    } else {
+      const corner = holeName(bend === 'row-first'
+        ? { col: target.col, row: prev.row }
+        : { col: prev.col, row: target.row })
+      const old = first ? 0 : pts.length - 2
+      const wasBare = wire.bareSegments.includes(old)
+      if (first) {
+        points = [targetName, corner, ...wire.points.slice(1)]
+        bare = wire.bareSegments.filter(i => i !== 0).map(i => i + 1)
+        if (wasBare) bare = [0, 1, ...bare]
+      } else {
+        points = [...wire.points.slice(0, -1), corner, targetName]
+        bare = wire.bareSegments.filter(i => i !== old)
+        if (wasBare) bare = [...bare, old, old + 1]
+      }
+      bare = bare.slice().sort((a, b) => a - b)
+    }
+  }
+
+  let joints = wire.joints.map(n => (n === oldEnd ? targetName : n))
+  if (wire.kind === 'laid') {
+    const reach = new Set(pathHoles(points.map(parseHole)).map(holeKey))
+    joints = joints.filter(n => reach.has(holeKey(parseHole(n))))
+  }
+  const moved: BoardFile = {
+    ...board,
+    wires: board.wires.map((x, i) => (i === idx ? { ...x, points, bareSegments: bare, joints } : x))
+  }
+  const { cols, rows } = board.board
+  if (target.col < 1 || target.row < 1) return refuse(`Wire ${id} would be off the board.`)
+  if (target.col > cols || target.row > rows) return { board: moved, reason: `Wire ${id} would be off the board.` }
+  return { board: moved, reason: blockedReason(board, target) }
 }

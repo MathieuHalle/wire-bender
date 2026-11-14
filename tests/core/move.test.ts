@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapHole, movePart } from '~core/move'
+import { mapHole, movePart, moveWire, moveWireEnd } from '~core/move'
 import { parseBoard, type BoardFile, type Part } from '~core/schema'
 import { holeName, parseHole } from '~core/holes'
 import { mk, axial, trail } from './helpers'
@@ -147,6 +147,110 @@ describe('movePart', () => {
     const b = frozen({ parts: [axial('R1', 'B2', 'B5', 'N1')] })
     const r = movePart(b, 'R9', { from: H('B2'), to: H('E3'), turns: 0 })
     expect(r.reason).toBe('No part R9.')
+    expect(r.board).toEqual(b)
+  })
+})
+
+const wire = (id: string, points: string[], opts: Partial<{ kind: 'laid' | 'flying', side: 'top' | 'bottom', bareSegments: number[], joints: string[] }> = {}) =>
+  ({ id, kind: 'laid' as const, side: 'bottom' as const, points, bareSegments: [] as number[], joints: [] as string[], ...opts })
+const flying = (id: string, points: string[]) => wire(id, points, { kind: 'flying' })
+
+describe('moveWire', () => {
+  it('moves a whole laid wire with its shape, joints and bare stretches', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5', 'D5'], { joints: ['B5'], bareSegments: [1] })] })
+    const r = moveWire(b, 'W1', { from: H('B2'), to: H('C3'), turns: 0 })
+    expect(r.reason).toBeNull()
+    expect(r.board.wires[0]).toMatchObject({ points: ['C3', 'C6', 'E6'], joints: ['C6'], bareSegments: [1] })
+  })
+
+  it('turns a whole wire about the grabbed hole and keeps it straight', () => {
+    const b = frozen({ wires: [wire('W1', ['B5', 'B8', 'D8'])] })
+    const r = moveWire(b, 'W1', { from: H('B5'), to: H('B5'), turns: 1 })
+    expect(r.reason).toBeNull()
+    expect(r.board.wires[0]!.points).toEqual(['B5', 'E5', 'E3'])
+    expect(parseBoard(r.board).ok).toBe(true)
+  })
+
+  it('refuses a wire point off the board or on a blocked hole', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'])] })
+    expect(moveWire(b, 'W1', { from: H('B2'), to: H('B8'), turns: 0 }).reason).toBe('Wire W1 would be off the board.')
+    const up = moveWire(b, 'W1', { from: H('B2'), to: H('A2'), turns: 3 })
+    expect(up.reason).toBe('Wire W1 would be off the board.')
+    expect(up.board).toEqual(b)
+    const blocked = frozen({ wires: [wire('W1', ['B2', 'B5'])], board: { blocked: [{ holes: ['E6'], reason: 'screw' }] } })
+    expect(moveWire(blocked, 'W1', { from: H('B2'), to: H('E3'), turns: 0 }).reason).toBe('Hole E6 is blocked: screw')
+  })
+
+  it('answers "No wire X." for an unknown id', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'])] })
+    const r = moveWire(b, 'W9', { from: H('B2'), to: H('C3'), turns: 0 })
+    expect(r.reason).toBe('No wire W9.')
+    expect(r.board).toEqual(b)
+  })
+})
+
+describe('moveWireEnd', () => {
+  it('lengthens or shortens a laid wire when the new end is in line', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'])] })
+    const r = moveWireEnd(b, 'W1', 'last', H('B7'), 'row-first')
+    expect(r.reason).toBeNull()
+    expect(r.board.wires[0]!.points).toEqual(['B2', 'B7'])
+    expect(moveWireEnd(b, 'W1', 'last', H('B3'), 'row-first').board.wires[0]!.points).toEqual(['B2', 'B3'])
+  })
+
+  it('adds one corner, row first, then column first with Tab', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'])] })
+    const row = moveWireEnd(b, 'W1', 'last', H('E7'), 'row-first')
+    expect(row.reason).toBeNull()
+    expect(row.board.wires[0]!.points).toEqual(['B2', 'B7', 'E7'])
+    expect(moveWireEnd(b, 'W1', 'last', H('E7'), 'col-first').board.wires[0]!.points).toEqual(['B2', 'E2', 'E7'])
+    expect(parseBoard(row.board).ok).toBe(true)
+  })
+
+  it('moves the first end too, shifting bare segment numbers', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5', 'E5'], { bareSegments: [1] })] })
+    const r = moveWireEnd(b, 'W1', 'first', H('D3'), 'row-first')
+    expect(r.board.wires[0]).toMatchObject({ points: ['D3', 'B3', 'B5', 'E5'], bareSegments: [2] })
+    expect(parseBoard(r.board).ok).toBe(true)
+  })
+
+  it('the two runs of the L are bare when the run they replace was bare', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'], { bareSegments: [0] })] })
+    expect(moveWireEnd(b, 'W1', 'last', H('E7'), 'row-first').board.wires[0]!.bareSegments).toEqual([0, 1])
+    const c = frozen({ wires: [wire('W1', ['B2', 'B5'])] })
+    expect(moveWireEnd(c, 'W1', 'last', H('E7'), 'row-first').board.wires[0]!.bareSegments).toEqual([])
+  })
+
+  it('the end joint moves with the end; joints the wire no longer reaches are dropped', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B8'], { joints: ['B8', 'B6'] })] })
+    const r = moveWireEnd(b, 'W1', 'last', H('B4'), 'row-first')
+    expect(r.reason).toBeNull()
+    expect(r.board.wires[0]!.joints).toEqual(['B4'])
+  })
+
+  it('refuses an end landing on the point before it', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'])] })
+    const r = moveWireEnd(b, 'W1', 'last', H('B2'), 'row-first')
+    expect(r.reason).toBe('The end can\'t land on the point before it.')
+  })
+
+  it('moves a flying wire end anywhere, but not onto its other end', () => {
+    const b = frozen({ wires: [flying('W1', ['B2', 'H9'])] })
+    const r = moveWireEnd(b, 'W1', 'last', H('C4'), 'row-first')
+    expect(r.reason).toBeNull()
+    expect(r.board.wires[0]!.points).toEqual(['B2', 'C4'])
+    expect(moveWireEnd(b, 'W1', 'last', H('B2'), 'row-first').reason).toBe('Both ends of wire W1 would be in B2.')
+  })
+
+  it('refuses a new end on a blocked hole', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'])], board: { blocked: [{ holes: ['E7'], reason: 'screw' }] } })
+    expect(moveWireEnd(b, 'W1', 'last', H('E7'), 'row-first').reason).toBe('Hole E7 is blocked: screw')
+  })
+
+  it('answers "No wire X." for an unknown id', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'])] })
+    const r = moveWireEnd(b, 'W9', 'last', H('E7'), 'row-first')
+    expect(r.reason).toBe('No wire W9.')
     expect(r.board).toEqual(b)
   })
 })
