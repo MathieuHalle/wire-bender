@@ -16,6 +16,7 @@ import {
   saveHidden, setShown, type BoardItems, type ViewState
 } from '~/utils/hiddenItems'
 import { benchUrl, loadFlip, saveFlip } from '~/utils/bottomFlip'
+import { moveHint } from '~/utils/moveHint'
 import type { Flip, Mirror } from '~core/sideView'
 
 // `id` is the key the board was opened by: its board id (the owner) or its share link id
@@ -82,11 +83,18 @@ const lockedTitle = computed(() => (previewing.value
   : viewOnly.value
     ? (meta.value?.signInToEdit ? SIGN_IN_TITLE : VIEW_TITLE)
     : readOnly.value ? PAUSED_TITLE : view.value === '3d' ? LOCKED_TITLE : null))
-const { tool, drawing, onHoleClick, onSegmentClick, addJoint, endDrawing } = useTools(live, { locked: () => lockedTitle.value !== null })
+const {
+  tool, drawing, onHoleClick, onSegmentClick, addJoint, endDrawing,
+  held, preview, onMoveClick, onMoveHover, rotate, switchBend, place, cancel
+} = useTools(live, { locked: () => lockedTitle.value !== null })
+// Nothing stays held once editing is off (a revision previewed, the board paused, 3D).
+watch(lockedTitle, t => t !== null && cancel())
 /** The 2D view the 3D one was entered from; key 3 goes back to it. */
 const last2d = ref<Exclude<View, '3d'>>('both')
-// The 3D view has no edit tools: a trail being drawn ends on the way in.
+// The 3D view has no edit tools: a trail being drawn ends on the way in. Any view change
+// puts back what the Move tool holds.
 watch(view, (v) => {
+  cancel()
   if (v === '3d') endDrawing()
   else last2d.value = v
 })
@@ -267,7 +275,40 @@ const drawFrom = computed(() => {
 })
 const hint = computed(() => (drawing.value
   ? `Drawing ${drawing.value.trailId} on ${drawing.value.side}: click the last hole again or press Esc to end`
-  : null))
+  : moveHint(held.value, preview.value)))
+
+/** What the Move tool holds, as each side draws it: only the side it was picked on shows the copy. */
+const moving = computed(() => {
+  const h = held.value
+  const r = preview.value
+  const none = { top: null, bottom: null }
+  if (!h || !r) return none
+  const key = h.pick.kind === 'part' ? `part:${h.pick.ref}` : `wire:${h.pick.id}`
+  return { ...none, [h.side]: { board: r.board, key, ok: r.reason === null } }
+})
+
+/** A touch screen (no hover, no keys): the Move tool gets a bar of buttons while holding. */
+const coarse = ref(false)
+onMounted(() => {
+  const mq = window.matchMedia?.('(pointer: coarse)')
+  if (!mq) return
+  coarse.value = mq.matches
+  const update = (e: MediaQueryListEvent) => (coarse.value = e.matches)
+  mq.addEventListener?.('change', update)
+  onBeforeUnmount(() => mq.removeEventListener?.('change', update))
+})
+/** The touch bar's buttons for what is held: Rotate (a part, a whole wire), Switch bend (a laid-wire end). */
+const moveBar = computed(() => {
+  const h = held.value
+  if (!coarse.value || !h || lockedTitle.value) return null
+  const pick = h.pick
+  const end = pick.kind === 'wire-end'
+  return {
+    rotate: !end,
+    bend: end && live.board.value?.wires.find(w => w.id === pick.id)?.kind === 'laid',
+    canPlace: preview.value?.reason === null
+  }
+})
 
 function onHover(side: Side, hole: Hole | null) {
   hover.value = hole ? { side, hole } : null
@@ -287,10 +328,14 @@ function editsHidden(side: Side, a: Hole, b?: Hole): boolean {
   return t !== null
 }
 const sideEvents = Object.fromEntries((['top', 'bottom'] as const).map(s => [s, {
-  hover: (h: Hole | null) => onHover(s, h),
+  hover: (h: Hole | null) => {
+    onHover(s, h)
+    if (tool.value === 'move') onMoveHover(s, h)
+  },
+  point: (p: { col: number, row: number }) => onMoveClick(s, p),
   hole: (h: Hole) => (tool.value === 'joint' && editsHidden(s, h)) || onHoleClick(s, h),
   segment: (a: Hole, b: Hole) => (tool.value === 'erase' && editsHidden(s, a, b)) || onSegmentClick(s, a, b)
-}])) as Record<Side, { hover(h: Hole | null): void, hole(h: Hole): void, segment(a: Hole, b: Hole): void }>
+}])) as Record<Side, { hover(h: Hole | null): void, point(p: { col: number, row: number }): void, hole(h: Hole): void, segment(a: Hole, b: Hole): void }>
 
 /** The two sides as frames on the canvas, in mm: the bottom beside the top or below it (the flip). */
 const frames = computed(() => {
@@ -654,73 +699,118 @@ const sideTitle = (s: Side) => (s === 'top'
           v-else
           class="flex min-h-0 flex-1 flex-col"
         >
-          <BoardCanvas
-            ref="canvas"
-            class="min-h-0 flex-1"
-            :frames="frames"
-            :persist-key="board.name"
-            :tool="tool"
-            @zoom="(p: number) => zoomPct = p"
-          >
-            <template #overlay>
-              <!-- The 2D / 3D switch, then the framings: the same place as in the 3D view. -->
-              <div class="flex items-center gap-3">
-                <Toolbar
-                  :view="view"
-                  @mode="pickMode"
-                />
-                <div
-                  class="flex gap-1"
-                  role="group"
-                  aria-label="Frame"
-                >
-                  <UButton
-                    v-for="v in FRAMINGS"
-                    :key="v.id"
-                    size="xs"
-                    class="w-20 justify-center"
-                    color="neutral"
-                    :variant="view === v.id ? 'subtle' : 'soft'"
-                    :label="v.label"
-                    :title="`${v.label} (${v.key})`"
-                    :aria-pressed="view === v.id"
-                    @click="pickView(v.id)"
+          <div class="relative flex min-h-0 flex-1 flex-col">
+            <BoardCanvas
+              ref="canvas"
+              class="min-h-0 flex-1"
+              :frames="frames"
+              :persist-key="board.name"
+              :tool="tool"
+              @zoom="(p: number) => zoomPct = p"
+            >
+              <template #overlay>
+                <!-- The 2D / 3D switch, then the framings: the same place as in the 3D view. -->
+                <div class="flex items-center gap-3">
+                  <Toolbar
+                    :view="view"
+                    @mode="pickMode"
                   />
+                  <div
+                    class="flex gap-1"
+                    role="group"
+                    aria-label="Frame"
+                  >
+                    <UButton
+                      v-for="v in FRAMINGS"
+                      :key="v.id"
+                      size="xs"
+                      class="w-20 justify-center"
+                      color="neutral"
+                      :variant="view === v.id ? 'subtle' : 'soft'"
+                      :label="v.label"
+                      :title="`${v.label} (${v.key})`"
+                      :aria-pressed="view === v.id"
+                      @click="pickView(v.id)"
+                    />
+                  </div>
                 </div>
-              </div>
-            </template>
-            <template #overlay-end>
-              <CanvasControls
-                v-model:mirror-bottom="mirrorBottom"
-                v-model:flip="bottomFlip"
-                :zoom="zoomPct"
-                @zoom-in="canvas?.zoomStep(1)"
-                @zoom-out="canvas?.zoomStep(-1)"
-                @fit="pickView('both')"
+              </template>
+              <template #overlay-end>
+                <CanvasControls
+                  v-model:mirror-bottom="mirrorBottom"
+                  v-model:flip="bottomFlip"
+                  :zoom="zoomPct"
+                  @zoom-in="canvas?.zoomStep(1)"
+                  @zoom-out="canvas?.zoomStep(-1)"
+                  @fit="pickView('both')"
+                />
+              </template>
+              <template #frame="{ frame: f }">
+                <BoardSide
+                  :board="board"
+                  :side="f.id"
+                  :mirror="f.id === 'bottom' ? bottomMirror : 'none'"
+                  :highlight-net="highlight"
+                  :hover-hole="hover?.hole ?? null"
+                  :tool="tool"
+                  :conn="conn ?? undefined"
+                  :placed="placed"
+                  :draw-from="drawFrom?.side === f.id ? drawFrom.hole : null"
+                  :mark-holes="markHoles"
+                  :layers="layers"
+                  :hidden="hiddenSet"
+                  :highlight-lit="litItem"
+                  :moving="moving[f.id]"
+                  @hover="sideEvents[f.id].hover"
+                  @point-click="sideEvents[f.id].point"
+                  @hole-click="sideEvents[f.id].hole"
+                  @segment-click="sideEvents[f.id].segment"
+                />
+              </template>
+            </BoardCanvas>
+            <!-- Holding with the Move tool on a touch screen: the keys as buttons, over the canvas's bottom edge. -->
+            <div
+              v-if="moveBar"
+              class="absolute inset-x-0 bottom-2 z-10 flex justify-center gap-2"
+              role="toolbar"
+              aria-label="Move"
+            >
+              <UButton
+                v-if="moveBar.rotate"
+                size="sm"
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-rotate-cw"
+                label="Rotate"
+                @click="rotate(1)"
               />
-            </template>
-            <template #frame="{ frame: f }">
-              <BoardSide
-                :board="board"
-                :side="f.id"
-                :mirror="f.id === 'bottom' ? bottomMirror : 'none'"
-                :highlight-net="highlight"
-                :hover-hole="hover?.hole ?? null"
-                :tool="tool"
-                :conn="conn ?? undefined"
-                :placed="placed"
-                :draw-from="drawFrom?.side === f.id ? drawFrom.hole : null"
-                :mark-holes="markHoles"
-                :layers="layers"
-                :hidden="hiddenSet"
-                :highlight-lit="litItem"
-                @hover="sideEvents[f.id].hover"
-                @hole-click="sideEvents[f.id].hole"
-                @segment-click="sideEvents[f.id].segment"
+              <UButton
+                v-if="moveBar.bend"
+                size="sm"
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-corner-down-right"
+                label="Switch bend"
+                @click="switchBend()"
               />
-            </template>
-          </BoardCanvas>
-          <!-- While drawing, the hint takes the keys' place (one line either way: no jump). -->
+              <UButton
+                size="sm"
+                icon="i-lucide-check"
+                label="Place"
+                :disabled="!moveBar.canPlace"
+                @click="place()"
+              />
+              <UButton
+                size="sm"
+                color="neutral"
+                variant="outline"
+                icon="i-lucide-x"
+                label="Cancel"
+                @click="cancel()"
+              />
+            </div>
+          </div>
+          <!-- While drawing or moving, the hint takes the keys' place (one line either way: no jump). -->
           <p
             v-if="hint"
             class="truncate border-t border-default px-4 py-1 font-mono text-xs"

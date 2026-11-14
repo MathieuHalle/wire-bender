@@ -1,11 +1,24 @@
 <script setup lang="ts">
 // Insulated wires on one side: laid wires along their path in their colour (bare
-// stretches thinner), flying wires as coloured end dots labelled with the wire id.
+// stretches thinner), flying wires as coloured end dots labelled with the wire id. The
+// Move tool dims the held wire (`dimKey`) and draws its copy in one colour when it cannot go there (`tint`).
 import { parseHole } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
 import { FALLBACK_NET, type Geo, type Lit } from '~/utils/boardView'
 
-const props = defineProps<{ board: BoardFile, side: Side, geo: Geo, lit: Lit | null }>()
+const props = defineProps<{
+  board: BoardFile
+  side: Side
+  geo: Geo
+  lit: Lit | null
+  /** The one wire (`wire:<id>`) drawn faded: the one the Move tool holds. */
+  dimKey?: string | null
+  /** Draws every wire in this colour (the Move copy where it cannot go). */
+  tint?: string | null
+}>()
+
+/** How faded the wire held by the Move tool is drawn. */
+const HELD_OPACITY = 0.35
 
 const wires = computed(() => props.board.wires.filter(w => w.side === props.side).map((w) => {
   const pts = w.points.map(h => props.geo.pt(parseHole(h)))
@@ -14,7 +27,8 @@ const wires = computed(() => props.board.wires.filter(w => w.side === props.side
   return {
     id: w.id,
     flying: w.kind === 'flying',
-    color: w.color ?? FALLBACK_NET,
+    color: props.tint ?? w.color ?? FALLBACK_NET,
+    op: props.dimKey === `wire:${w.id}` ? HELD_OPACITY : 1,
     segs,
     ends: [pts[0]!, pts[pts.length - 1]!],
     joints: w.joints.map(h => props.geo.pt(parseHole(h))),
@@ -30,7 +44,7 @@ const dim = (lit: boolean) => (props.lit && !lit ? 0.35 : 1)
     <g
       v-for="w in wires"
       :key="w.id"
-      :opacity="dim(w.lit)"
+      :opacity="dim(w.lit) * w.op"
     >
       <template v-if="!w.flying">
         <template
@@ -55,7 +69,7 @@ const dim = (lit: boolean) => (props.lit && !lit ? 0.35 : 1)
           />
           <path
             :d="s.d"
-            :stroke="s.bare ? '#b0b8bc' : w.color"
+            :stroke="s.bare ? (tint ?? '#b0b8bc') : w.color"
             :stroke-width="s.bare ? 0.6 : 1.2"
             stroke-linecap="round"
           />
@@ -66,7 +80,7 @@ const dim = (lit: boolean) => (props.lit && !lit ? 0.35 : 1)
           :cx="p.x"
           :cy="p.y"
           r="0.95"
-          fill="#c3cacf"
+          :fill="tint ?? '#c3cacf'"
           stroke="#7c868c"
           stroke-width="0.15"
         />
