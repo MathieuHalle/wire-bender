@@ -291,8 +291,9 @@ describe('board bundles', () => {
     const files: Record<string, Uint8Array> = { ...good(MAX_BUNDLE_REVISIONS) }
     const empty = new Uint8Array(0)
     for (let i = 1; i <= MAX_BUNDLE_REVISIONS; i++) files[`revisions/${String(i).padStart(6, '0')}.json`] = empty
+    const zip = zipSync(files, { level: 0 }) // the test's own work, not timed
     const t0 = performance.now()
-    const res = decodeBundle(zipSync(files, { level: 0 }))
+    const res = decodeBundle(zip)
     expect(performance.now() - t0).toBeLessThan(1000)
     expect(res).toMatchObject({ ok: false, status: 422 })
   })
@@ -417,8 +418,10 @@ describe('board bundles', () => {
 
   it('many directory entries are refused fast (C3)', () => {
     const dirs = Array.from({ length: 150_000 }, (_, i) => ({ name: `d${i}/`, method: 0 as const, data: new Uint8Array(0), usize: 0 }))
+    // Only the refusal is timed: building 150 000 entries here is the test's own work.
+    const zip = buildZip(dirs)
     const t0 = performance.now()
-    const res = decodeBundle(buildZip(dirs))
+    const res = decodeBundle(zip)
     expect(performance.now() - t0).toBeLessThan(1000)
     expect(res).toMatchObject({ ok: false, status: 422 })
     if (!res.ok) expect(res.error).toBe('d0/: not part of a bundle')
