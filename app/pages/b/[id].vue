@@ -289,14 +289,14 @@ const moving = computed(() => {
 
 /** A touch screen (no hover, no keys): the Move tool gets a bar of buttons while holding. */
 const coarse = ref(false)
+let coarseQuery: MediaQueryList | null = null
+const onCoarse = (e: MediaQueryListEvent) => (coarse.value = e.matches)
 onMounted(() => {
-  const mq = window.matchMedia?.('(pointer: coarse)')
-  if (!mq) return
-  coarse.value = mq.matches
-  const update = (e: MediaQueryListEvent) => (coarse.value = e.matches)
-  mq.addEventListener?.('change', update)
-  onBeforeUnmount(() => mq.removeEventListener?.('change', update))
+  coarseQuery = window.matchMedia?.('(pointer: coarse)') ?? null
+  coarse.value = coarseQuery?.matches ?? false
+  coarseQuery?.addEventListener?.('change', onCoarse)
 })
+onBeforeUnmount(() => coarseQuery?.removeEventListener?.('change', onCoarse))
 /** The touch bar's buttons for what is held: Rotate (a part, a whole wire), Switch bend (a laid-wire end). */
 const moveBar = computed(() => {
   const h = held.value
