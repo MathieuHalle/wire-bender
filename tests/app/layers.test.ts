@@ -123,8 +123,9 @@ describe('blindHint', () => {
     for (const t of ['pencil', 'erase', 'joint'] as const)
       expect(blindHint(t, only('trails')), t).toBe('Trails are hidden: you\'re drawing blind.')
   })
-  it('says nothing for Inspect, or with Trails shown', () => {
+  it('says nothing for Inspect or Move, or with Trails shown', () => {
     expect(blindHint('inspect', only('trails'))).toBeNull()
+    expect(blindHint('move', only('trails'))).toBeNull()
     expect(blindHint('pencil', ALL_LAYERS)).toBeNull()
     expect(blindHint('pencil', only('wires'))).toBeNull()
   })

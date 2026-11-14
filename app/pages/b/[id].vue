@@ -107,7 +107,7 @@ function pickMode(m: '2d' | '3d') {
 }
 
 /** The keys, under the 2D canvas (the full line in its tooltip when it is cut). */
-const KEYS = 'H: navigate (drag pans) · I P E J: tools · Ctrl/Cmd+Z: undo · Esc: end trail · scroll: zoom · drag, right-drag or Space+drag: pan · F: frame top/bottom · 0: fit both · + −: zoom · 3: 3D view · [: side panel'
+const KEYS = 'H: navigate (drag pans) · I P E J M: tools · M then click: pick up, R ← →: rotate, Tab: bend, Esc: put back · Ctrl/Cmd+Z: undo · Esc: end trail · scroll: zoom · drag, right-drag or Space+drag: pan · F: frame top/bottom · 0: fit both · + −: zoom · 3: 3D view · [: side panel'
 
 /** What the 2D canvas frames, from the buttons on it. */
 const FRAMINGS = [

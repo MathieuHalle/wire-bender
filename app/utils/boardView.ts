@@ -7,8 +7,8 @@ import type { BoardFile, Side } from '~core/schema'
 import type { Conductor, Connectivity } from '~core/connectivity'
 import type { PlacedPart } from '~core/footprints'
 
-/** `navigate` only pans (any left-drag) and never edits; the others click to act. */
-export type Tool = 'navigate' | 'inspect' | 'pencil' | 'erase' | 'joint'
+/** `navigate` only pans (any left-drag) and never edits; the others click to act (`move` picks up, then places). */
+export type Tool = 'navigate' | 'inspect' | 'pencil' | 'erase' | 'joint' | 'move'
 /** Frame both sides on the canvas, frame one side, or the 3D view. */
 export type View = 'both' | Side | '3d'
 export type Group = Connectivity['groups'][number]
@@ -172,7 +172,7 @@ export type KeyAction = { view: View } | { zoom: 1 | -1 | 0 } | { panel: 'toggle
  * The page's view and zoom keys. `3` toggles the 3D view (off goes back to `last2d`, the 2D
  * view it came from); Esc leaves 3D for both sides; F flips between framing the top and
  * the bottom side. F and the zoom keys do nothing in 3D, where the canvas is not shown.
- * `[` collapses or opens the side panel, in every view. Tool keys (H I P E J) are useTools'.
+ * `[` collapses or opens the side panel, in every view. Tool keys (H I P E J M, and R ← → Tab while moving) are useTools'.
  */
 export function pageKey(key: string, view: View, last2d: Exclude<View, '3d'>): KeyAction {
   if (key === '[') return { panel: 'toggle' }
