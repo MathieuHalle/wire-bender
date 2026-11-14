@@ -8,6 +8,7 @@ import { parseHole, type Hole } from '~core/holes'
 import { eraseSegment, pencilClick, toggleJoint, type Drawing, type EditResult } from '~core/edit'
 import { movePart, moveWire, moveWireEnd, pickAt, type Bend, type MoveResult, type Pick as MovePick, type Turns } from '~core/move'
 import type { Tool } from '~/utils/boardView'
+import { stable } from '#shared/yboard'
 import type { LiveBoard } from './useLiveBoard'
 
 export interface ToolDeps {
@@ -36,7 +37,7 @@ export interface Held {
   target: Hole
   turns: Turns
   bend: Bend
-  /** `JSON.stringify` of the held part or wire at pick-up: a remote change to it drops the pick. */
+  /** `stable` JSON (sorted keys) of the held part or wire at pick-up: a remote change to it drops the pick. */
   snapshot: string
 }
 
@@ -143,13 +144,14 @@ export function createTools(deps: ToolDeps) {
 
   /** Move tool: not holding, a click picks up what is there; holding, a click on the target places, elsewhere moves the target. */
   function onMoveClick(side: Side, point: { col: number, row: number }) {
+    if (dropIfLocked()) return
     const b = deps.board.value
-    if (!b || tool.value !== 'move' || locked()) return
+    if (!b || tool.value !== 'move') return
     const h = held.value
     if (!h) {
       const pick = pickAt(b, side, point)
       if (!pick) return
-      held.value = { pick, side, target: pick.at, turns: 0, bend: 'row-first', snapshot: JSON.stringify(pickedItem(b, pick)) }
+      held.value = { pick, side, target: pick.at, turns: 0, bend: 'row-first', snapshot: stable(pickedItem(b, pick)) }
       return
     }
     if (side !== h.side) return
@@ -160,6 +162,7 @@ export function createTools(deps: ToolDeps) {
 
   /** Move tool: the pointer over a hole of the held side moves the target there. */
   function onMoveHover(side: Side, hole: Hole | null) {
+    if (dropIfLocked()) return
     const h = held.value
     if (!h || side !== h.side || !hole) return
     if (hole.col !== h.target.col || hole.row !== h.target.row) held.value = { ...h, target: hole }
@@ -189,8 +192,10 @@ export function createTools(deps: ToolDeps) {
 
   /** Sets the held thing down at its target, if allowed; otherwise shows why and keeps holding. */
   function place() {
+    if (dropIfLocked()) return
+    const h = held.value
     const r = preview.value
-    if (!r || locked()) return
+    if (!h || !r) return
     if (r.reason !== null) {
       message.value = r.reason
       deps.notify(r.reason)
@@ -199,7 +204,14 @@ export function createTools(deps: ToolDeps) {
     message.value = null
     // Let go first: the apply changes the held item, which is not a remote change.
     held.value = null
-    deps.apply(r.board)
+    if (deps.apply(r.board) === false) {
+      // The live board refused the write (read-only now): keep holding, say why.
+      held.value = h
+      const name = h.pick.kind === 'part' ? h.pick.ref : `wire ${h.pick.id}`
+      const reason = `Could not place ${name}: the board is read-only right now.`
+      message.value = reason
+      deps.notify(reason)
+    }
   }
 
   /** Puts the held thing back: nothing changes. */
@@ -207,11 +219,18 @@ export function createTools(deps: ToolDeps) {
     held.value = null
   }
 
+  /** While editing is off nothing may be held: drops the pick quietly. True when locked. */
+  function dropIfLocked(): boolean {
+    if (!locked()) return false
+    cancel()
+    return true
+  }
+
   function onKeydown(e: KeyboardEvent) {
     if (isTyping(e.target)) return
     const key = e.key.toLowerCase()
     // Navigate edits nothing, so it may be picked in 3D too.
-    if (locked()) {
+    if (dropIfLocked()) {
       if (key === 'h' && !e.metaKey && !e.ctrlKey && !e.altKey) tool.value = 'navigate'
       return
     }
@@ -226,8 +245,12 @@ export function createTools(deps: ToolDeps) {
     if (held.value) {
       const turnable = held.value.pick.kind !== 'wire-end'
       if (e.key === 'Escape') return cancel()
-      if (turnable && (key === 'r' || e.key === 'ArrowRight')) return rotate(1)
-      if (turnable && e.key === 'ArrowLeft') return rotate(-1)
+      if (turnable && key === 'r') return rotate(1)
+      if (turnable && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+        // The arrows would scroll the page.
+        e.preventDefault()
+        return rotate(e.key === 'ArrowRight' ? 1 : -1)
+      }
       if (e.key === 'Tab') {
         if (holdsLaidEnd()) {
           e.preventDefault()
@@ -257,7 +280,7 @@ export function createTools(deps: ToolDeps) {
     const h = held.value
     if (!h) return
     const item = b ? pickedItem(b, h.pick) : undefined
-    if (item !== undefined && JSON.stringify(item) === h.snapshot) return
+    if (item !== undefined && stable(item) === h.snapshot) return
     held.value = null
     if (!b) return
     const name = h.pick.kind === 'part' ? h.pick.ref : `Wire ${h.pick.id}`

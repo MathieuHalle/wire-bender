@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, test } from 'vitest'
 import { shallowRef } from 'vue'
 import { parseHole } from '~core/holes'
 import type { BoardFile } from '~core/schema'
+import { stable } from '#shared/yboard'
 import { createTools } from '../../app/composables/useTools'
 import { axial, mk, trail } from '../core/helpers'
 
@@ -284,7 +285,7 @@ describe('the Move tool', () => {
     expect(t.tool.value).toBe('move')
     t.onMoveClick('top', { col: 3, row: 2 })
     expect(t.held.value).toMatchObject({ pick: { kind: 'part', ref: 'R1', at: h('B3') }, side: 'top', target: h('B3'), turns: 0, bend: 'row-first' })
-    expect(t.held.value!.snapshot).toBe(JSON.stringify(f.board.value!.parts[0]))
+    expect(t.held.value!.snapshot).toBe(stable(f.board.value!.parts[0]))
     // Touch: the first tap on another hole previews there, the second places.
     t.onMoveClick('top', { col: 3.2, row: 4.9 })
     expect(t.held.value!.target).toEqual(h('E3'))
@@ -488,5 +489,76 @@ describe('the Move tool', () => {
     t.place()
     t.onMoveClick('top', at('E3'))
     expect(f.applied).toHaveLength(0)
+  })
+  test('a remote copy of the held item with its keys reordered keeps the hold', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    const p = f.board.value!.parts[0]!
+    const reordered = Object.fromEntries(Object.entries(p).reverse()) as typeof p
+    expect(JSON.stringify(reordered)).not.toBe(JSON.stringify(p))
+    f.board.value = { ...f.board.value!, parts: [reordered], trails: [trail('T1', ['J2', 'J5'])] }
+    expect(t.held.value).not.toBeNull()
+    expect(f.notes).toEqual([])
+  })
+
+  test('a placement the live board refuses keeps holding and says why', () => {
+    t = createTools({ ...f.deps, apply: () => false })
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    t.onMoveHover('top', h('E3'))
+    t.place()
+    expect(t.held.value).toMatchObject({ pick: { kind: 'part', ref: 'R1' }, target: h('E3') })
+    expect(f.notes).toEqual(['Could not place R1: the board is read-only right now.'])
+    t.onMoveClick('bottom', at('B4')) // the other side: still holding R1
+    t.cancel()
+    t.onMoveClick('bottom', at('B4'))
+    t.onMoveHover('bottom', h('C4'))
+    t.place()
+    expect(f.notes[1]).toBe('Could not place wire W1: the board is read-only right now.')
+    expect(t.held.value).not.toBeNull()
+  })
+
+  test('locked while holding: the next action or key drops the pick quietly', () => {
+    let locked = false
+    t = createTools({ ...f.deps, locked: () => locked })
+    t.tool.value = 'move'
+    const hold = () => {
+      locked = false
+      t.onMoveClick('top', at('B3'))
+      expect(t.held.value).not.toBeNull()
+      locked = true
+    }
+    hold()
+    t.onKeydown(key('r'))
+    expect(t.held.value).toBeNull()
+    hold()
+    t.onMoveHover('top', h('E3'))
+    expect(t.held.value).toBeNull()
+    hold()
+    t.onMoveClick('top', at('E3'))
+    expect(t.held.value).toBeNull()
+    hold()
+    t.place()
+    expect(t.held.value).toBeNull()
+    expect(f.notes).toEqual([])
+    expect(f.applied).toHaveLength(0)
+  })
+
+  test('← → prevent default (no page scroll) while turning; R does not need to', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    for (const k of ['ArrowLeft', 'ArrowRight']) {
+      const ev = spyKey(k)
+      t.onKeydown(ev)
+      expect(ev.prevented, k).toBe(true)
+    }
+    const r = spyKey('r')
+    t.onKeydown(r)
+    expect(r.prevented).toBe(false)
+    // Not holding: the arrows are left alone.
+    t.cancel()
+    const ev = spyKey('ArrowLeft')
+    t.onKeydown(ev)
+    expect(ev.prevented).toBe(false)
   })
 })
