@@ -23,6 +23,11 @@ export interface ToolDeps {
   now?: () => number
   /** True while editing is off (the 3D view, or a board not live): no edits, no edit-tool keys, no undo (H for Navigate still works). */
   locked?: () => boolean
+  /**
+   * True while editing is only paused (the live board reconnecting): a lock that keeps what
+   * the Move tool holds. Moves are ignored and placing refuses until it is over.
+   */
+  paused?: () => boolean
 }
 
 /** A second click this soon on the hole where a drawing just ended is the rest of a double click. */
@@ -69,6 +74,7 @@ export function createTools(deps: ToolDeps) {
   const message = ref<string | null>(null)
   const now = deps.now ?? (() => Date.now())
   const locked = deps.locked ?? (() => false)
+  const paused = deps.paused ?? (() => false)
   /** Where and when a pencil click last ended a drawing. */
   let ended: { side: Side, col: number, row: number, at: number } | null = null
   /** What the Move tool holds, if anything. */
@@ -190,10 +196,19 @@ export function createTools(deps: ToolDeps) {
     held.value = { ...h, bend: h.bend === 'row-first' ? 'col-first' : 'row-first' }
   }
 
+  /** Says the held thing cannot be set down while the board is read-only (it stays held). */
+  function refuseReadOnly(h: Held) {
+    const name = h.pick.kind === 'part' ? h.pick.ref : `wire ${h.pick.id}`
+    const reason = `Could not place ${name}: the board is read-only right now.`
+    message.value = reason
+    deps.notify(reason)
+  }
+
   /** Sets the held thing down at its target, if allowed; otherwise shows why and keeps holding. */
   function place() {
-    if (dropIfLocked()) return
     const h = held.value
+    if (h && locked() && paused()) return refuseReadOnly(h)
+    if (dropIfLocked()) return
     const r = preview.value
     if (!h || !r) return
     if (r.reason !== null) {
@@ -207,10 +222,7 @@ export function createTools(deps: ToolDeps) {
     if (deps.apply(r.board) === false) {
       // The live board refused the write (read-only now): keep holding, say why.
       held.value = h
-      const name = h.pick.kind === 'part' ? h.pick.ref : `wire ${h.pick.id}`
-      const reason = `Could not place ${name}: the board is read-only right now.`
-      message.value = reason
-      deps.notify(reason)
+      refuseReadOnly(h)
     }
   }
 
@@ -219,10 +231,13 @@ export function createTools(deps: ToolDeps) {
     held.value = null
   }
 
-  /** While editing is off nothing may be held: drops the pick quietly. True when locked. */
+  /**
+   * While editing is off nothing may be held: drops the pick quietly. A pause (reconnecting)
+   * keeps it: the action is only ignored. True when locked.
+   */
   function dropIfLocked(): boolean {
     if (!locked()) return false
-    cancel()
+    if (!paused()) cancel()
     return true
   }
 
@@ -294,7 +309,7 @@ export function createTools(deps: ToolDeps) {
 }
 
 /** The tools for the page, on its live board; keys are listened to while mounted. */
-export function useTools(live: Pick<LiveBoard, 'board' | 'apply' | 'undo' | 'redo'>, opts: { locked?: () => boolean } = {}) {
+export function useTools(live: Pick<LiveBoard, 'board' | 'apply' | 'undo' | 'redo'>, opts: { locked?: () => boolean, paused?: () => boolean } = {}) {
   const { board, apply, undo, redo } = live
   const warn = useWarning()
   const tools = createTools({
@@ -303,6 +318,7 @@ export function useTools(live: Pick<LiveBoard, 'board' | 'apply' | 'undo' | 'red
     undo,
     redo,
     locked: opts.locked,
+    paused: opts.paused,
     notify: warn
   })
   onMounted(() => window.addEventListener('keydown', tools.onKeydown))

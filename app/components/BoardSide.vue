@@ -53,7 +53,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'hole-click': [hole: Hole]
   'segment-click': [a: Hole, b: Hole]
-  'hover': [hole: Hole | null]
+  /** The hole under the pointer, and the kind of pointer it is (`PointerEvent.pointerType`; null before any). */
+  'hover': [hole: Hole | null, pointerType: string | null]
   /** A click with the Move tool, in fractional hole coordinates: it picks up by a wire's line too. */
   'point-click': [point: { col: number, row: number }]
 }>()
@@ -119,6 +120,8 @@ const pointer = ref<{ fc: number, fr: number } | null>(null)
 const canvas = inject(CANVAS_CONTEXT, null)
 /** Where the pointer last was over this side, in client px. */
 let lastClient: { x: number, y: number } | null = null
+/** The kind of pointer that last moved over this side (mouse, touch, pen). */
+let pointerType: string | null = null
 
 function boardPoint(ev: { clientX: number, clientY: number }) {
   const svg = svgEl.value
@@ -142,6 +145,7 @@ function holeAt(fc: number, fr: number): Hole | null {
 function onMove(ev: PointerEvent) {
   // While the canvas pans, the board moves with the pointer: nothing to update.
   if (canvas?.panning.value) return
+  pointerType = ev.pointerType
   track(ev.clientX, ev.clientY)
 }
 
@@ -156,7 +160,7 @@ function track(cx: number, cy: number) {
   tipAt.value = h && box ? { x: cx - box.left, y: cy - box.top, w: box.width, h: box.height } : null
   if (h?.col === hovered.value?.col && h?.row === hovered.value?.row) return
   hovered.value = h
-  emit('hover', h)
+  emit('hover', h, pointerType)
 }
 
 // A zoom or pan moves the board under a resting pointer: once it is drawn (and the pan
@@ -177,7 +181,7 @@ function onLeave() {
   lastClient = null
   tipAt.value = null
   pointer.value = null
-  if (hovered.value) emit('hover', null)
+  if (hovered.value) emit('hover', null, pointerType)
   hovered.value = null
 }
 

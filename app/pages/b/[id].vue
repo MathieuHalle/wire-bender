@@ -17,6 +17,7 @@ import {
 } from '~/utils/hiddenItems'
 import { benchUrl, loadFlip, saveFlip } from '~/utils/bottomFlip'
 import { moveHint } from '~/utils/moveHint'
+import { hoverMovesTarget } from '~/utils/movePointer'
 import type { Flip, Mirror } from '~core/sideView'
 
 // `id` is the key the board was opened by: its board id (the owner) or its share link id
@@ -86,9 +87,10 @@ const lockedTitle = computed(() => (previewing.value
 const {
   tool, drawing, onHoleClick, onSegmentClick, addJoint, endDrawing,
   held, preview, onMoveClick, onMoveHover, rotate, switchBend, place, cancel
-} = useTools(live, { locked: () => lockedTitle.value !== null })
-// Nothing stays held once editing is off (a revision previewed, the board paused, 3D).
-watch(lockedTitle, t => t !== null && cancel())
+} = useTools(live, { locked: () => lockedTitle.value !== null, paused: () => lockedTitle.value === PAUSED_TITLE })
+// Nothing stays held once editing is off (a revision previewed, view only, 3D). A pause
+// (reconnecting) keeps the hold: placing waits for the board to be live again.
+watch(lockedTitle, t => t !== null && t !== PAUSED_TITLE && cancel())
 /** The 2D view the 3D one was entered from; key 3 goes back to it. */
 const last2d = ref<Exclude<View, '3d'>>('both')
 // The 3D view has no edit tools: a trail being drawn ends on the way in. Any view change
@@ -300,7 +302,7 @@ onBeforeUnmount(() => coarseQuery?.removeEventListener?.('change', onCoarse))
 /** The touch bar's buttons for what is held: Rotate (a part, a whole wire), Switch bend (a laid-wire end). */
 const moveBar = computed(() => {
   const h = held.value
-  if (!coarse.value || !h || lockedTitle.value) return null
+  if (!coarse.value || !h || (lockedTitle.value && lockedTitle.value !== PAUSED_TITLE)) return null
   const pick = h.pick
   const end = pick.kind === 'wire-end'
   return {
@@ -328,14 +330,15 @@ function editsHidden(side: Side, a: Hole, b?: Hole): boolean {
   return t !== null
 }
 const sideEvents = Object.fromEntries((['top', 'bottom'] as const).map(s => [s, {
-  hover: (h: Hole | null) => {
+  hover: (h: Hole | null, pointerType: string | null) => {
     onHover(s, h)
-    if (tool.value === 'move') onMoveHover(s, h)
+    // Only a mouse drags the target along; a tap previews first (a finger's jiggle must not place).
+    if (tool.value === 'move' && hoverMovesTarget(pointerType)) onMoveHover(s, h)
   },
   point: (p: { col: number, row: number }) => onMoveClick(s, p),
   hole: (h: Hole) => (tool.value === 'joint' && editsHidden(s, h)) || onHoleClick(s, h),
   segment: (a: Hole, b: Hole) => (tool.value === 'erase' && editsHidden(s, a, b)) || onSegmentClick(s, a, b)
-}])) as Record<Side, { hover(h: Hole | null): void, point(p: { col: number, row: number }): void, hole(h: Hole): void, segment(a: Hole, b: Hole): void }>
+}])) as Record<Side, { hover(h: Hole | null, pointerType: string | null): void, point(p: { col: number, row: number }): void, hole(h: Hole): void, segment(a: Hole, b: Hole): void }>
 
 /** The two sides as frames on the canvas, in mm: the bottom beside the top or below it (the flip). */
 const frames = computed(() => {

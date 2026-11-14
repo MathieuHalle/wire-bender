@@ -544,6 +544,45 @@ describe('the Move tool', () => {
     expect(f.applied).toHaveLength(0)
   })
 
+  test('paused (reconnecting) while holding: the hold stays, moves are ignored, place refuses; resumed, place works', () => {
+    let paused = false
+    t = createTools({ ...f.deps, locked: () => paused, paused: () => paused })
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    t.onMoveHover('top', h('E3'))
+    paused = true
+    // Clicks, hovers and keys change nothing, and say nothing.
+    t.onMoveHover('top', h('G3'))
+    t.onMoveClick('top', at('G3'))
+    t.onKeydown(key('r'))
+    t.onKeydown(key('Escape'))
+    expect(t.held.value).toMatchObject({ pick: { kind: 'part', ref: 'R1' }, target: h('E3'), turns: 0 })
+    expect(t.preview.value!.reason).toBeNull()
+    expect(f.notes).toEqual([])
+    // Placing refuses and keeps holding.
+    t.place()
+    expect(t.held.value).toMatchObject({ target: h('E3') })
+    expect(f.notes).toEqual(['Could not place R1: the board is read-only right now.'])
+    expect(f.applied).toHaveLength(0)
+    // Back live: the same hold places.
+    paused = false
+    t.onMoveClick('top', at('E3'))
+    expect(f.applied).toHaveLength(1)
+    expect(f.board.value!.parts[0]).toMatchObject({ at: 'E2', to: 'E5' })
+    expect(t.held.value).toBeNull()
+  })
+
+  test('locked but not paused (3D, view only, a revision): still drops the hold quietly', () => {
+    let locked = false
+    t = createTools({ ...f.deps, locked: () => locked, paused: () => false })
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('B3'))
+    locked = true
+    t.place()
+    expect(t.held.value).toBeNull()
+    expect(f.notes).toEqual([])
+  })
+
   test('← → prevent default (no page scroll) while turning; R does not need to', () => {
     t.tool.value = 'move'
     t.onMoveClick('top', at('B3'))
