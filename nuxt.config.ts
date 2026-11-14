@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import tres from '@tresjs/core/template-compiler-options'
+import { uiTheme } from './app/uiTheme'
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   modules: [
@@ -26,6 +27,11 @@ export default defineNuxtConfig({
   // TresJS elements (<TresMesh>, <primitive>) belong to its own renderer, not to Vue's.
   vue: {
     compilerOptions: tres.template.compilerOptions
+  },
+
+  // The Nuxt UI theme (colors, icons), from app/uiTheme.ts.
+  appConfig: {
+    ui: uiTheme
   },
 
   runtimeConfig: {
@@ -76,6 +82,15 @@ export default defineNuxtConfig({
         commaDangle: 'never',
         braceStyle: '1tbs'
       }
+    }
+  },
+
+  // Nuxt UI client-bundles only icons from the collections its defaults use (Lucide), so the
+  // theme's Material Symbols are listed here: they ship with the page instead of being fetched
+  // one by one from /api/_nuxt_icon.
+  icon: {
+    clientBundle: {
+      icons: Object.values(uiTheme.icons).map(name => name.replace(/^i-material-symbols-/, 'material-symbols:'))
     }
   }
 })
