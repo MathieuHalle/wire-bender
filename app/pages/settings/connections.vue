@@ -48,7 +48,13 @@ const ROUTES: [string, string][] = [
 // Backtick spans in the text become <code>.
 const parts = (text: string) => text.split('`').map((t, i) => ({ t, code: i % 2 === 1 }))
 
-const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localhost:3000 --env WIREBENDER_TOKEN=<your token> -- pnpm --silent --dir <path to wire-bender> wirebender mcp'
+// The examples name the server this page was opened on. On the server render the scheme comes
+// from the proxy's X-Forwarded-Proto (Caddy speaks http to us), so it matches the browser's and
+// hydration agrees; the host is the request's, which public mode checks against WIREBENDER_URL.
+// Display only: a forged header changes the sender's own page text, never what is trusted.
+const origin = serverOrigin(useRequestURL({ xForwardedProto: true }))
+const curlExample = curlBoards(origin)
+const mcpExample = mcpAdd(origin)
 </script>
 
 <template>
@@ -88,7 +94,7 @@ const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localh
           Make a token in the Tokens list above
           and send it as a bearer token:
         </p>
-        <pre class="overflow-x-auto rounded-md bg-elevated p-3 text-xs">curl -H "Authorization: Bearer $WIREBENDER_TOKEN" http://localhost:3000/api/boards</pre>
+        <pre class="overflow-x-auto rounded-md bg-elevated p-3 text-xs">{{ curlExample }}</pre>
         <p class="text-sm">
           A token acts as you, on the boards you can already open, and its writes are marked with its name in the history.
           While a token works on a board, it shows there with a robot icon. Revoke it in the Tokens list above: it stops working
@@ -197,10 +203,11 @@ const MCP_ADD = 'claude mcp add wirebender --env WIREBENDER_SERVER=http://localh
           An MCP server lets Claude and other AI tools read and edit your boards with a token. It reads
           <code>WIREBENDER_SERVER</code> (default <code>http://localhost:3000</code>) and <code>WIREBENDER_TOKEN</code>.
         </p>
-        <pre class="overflow-x-auto rounded-md bg-elevated p-3 text-xs">{{ MCP_ADD }}</pre>
+        <pre class="overflow-x-auto rounded-md bg-elevated p-3 text-xs">{{ mcpExample }}</pre>
         <p class="text-sm text-muted">
           Keep <code>--silent</code>: without it pnpm prints a line before the server starts, and the client cannot read it.
-          Add <code>--url</code> after <code>mcp</code>, or change <code>WIREBENDER_SERVER</code>, for a server on another port.
+          The command names the server this page is on. Add <code>--url</code> after <code>mcp</code>, or change
+          <code>WIREBENDER_SERVER</code>, for another one.
         </p>
       </section>
     </section>
