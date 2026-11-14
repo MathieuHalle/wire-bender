@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mapHole, movePart, moveWire, moveWireEnd } from '~core/move'
+import { mapHole, movePart, moveWire, moveWireEnd, pickAt } from '~core/move'
 import { parseBoard, type BoardFile, type Part } from '~core/schema'
 import { holeName, parseHole } from '~core/holes'
 import { mk, axial, trail } from './helpers'
@@ -272,5 +272,57 @@ describe('moveWireEnd', () => {
   it('writes a joint once when the end lands on an existing joint', () => {
     const b = frozen({ wires: [wire('W1', ['B2', 'B8'], { joints: ['B8', 'B4'] })] })
     expect(moveWireEnd(b, 'W1', 'last', H('B4'), 'row-first').board.wires[0]!.joints).toEqual(['B4'])
+  })
+})
+
+describe('pickAt', () => {
+  const flying = (id: string, points: string[], side: 'top' | 'bottom' = 'bottom') =>
+    ({ id, kind: 'flying' as const, side, points, bareSegments: [], joints: [] })
+  const laid = (id: string, points: string[], side: 'top' | 'bottom' = 'bottom') =>
+    ({ id, kind: 'laid' as const, side, points, bareSegments: [], joints: [] })
+
+  it('an end hole picks that end', () => {
+    const b = mk({ wires: [laid('W1', ['B2', 'B6'])] })
+    expect(pickAt(b, 'bottom', { col: 6, row: 2 })).toEqual({ kind: 'wire-end', id: 'W1', end: 'last', at: H('B6') })
+  })
+
+  it('a hole the wire passes picks the whole wire', () => {
+    const b = mk({ wires: [laid('W1', ['B2', 'B6'])] })
+    expect(pickAt(b, 'bottom', { col: 4, row: 2 })).toEqual({ kind: 'wire', id: 'W1', at: H('B4') })
+  })
+
+  it('the line of a 2-hole jumper picks the whole wire', () => {
+    const b = mk({ wires: [laid('W1', ['B2', 'B3'])] })
+    expect(pickAt(b, 'bottom', { col: 2.5, row: 2 })).toEqual({ kind: 'wire', id: 'W1', at: H('B2') })
+  })
+
+  it('a flying wire is picked by its ends only', () => {
+    const b = mk({ wires: [flying('W1', ['B2', 'H9'])] })
+    expect(pickAt(b, 'bottom', { col: 2, row: 2 })).toEqual({ kind: 'wire-end', id: 'W1', end: 'first', at: H('B2') })
+    expect(pickAt(b, 'bottom', { col: 5, row: 5 })).toBeNull()
+  })
+
+  it('parts are picked on the top side only', () => {
+    const b = mk({ parts: [axial('R1', 'B2', 'B5', null)] })
+    expect(pickAt(b, 'top', { col: 3, row: 2 })).toEqual({ kind: 'part', ref: 'R1', at: H('B3') })
+    expect(pickAt(b, 'bottom', { col: 3, row: 2 })).toBeNull()
+  })
+
+  it('a wire drawn over a part wins', () => {
+    const b = mk({
+      board: { type: 'two-sided' },
+      parts: [axial('R1', 'B2', 'B5', null)],
+      wires: [laid('W1', ['A3', 'D3'], 'top')]
+    })
+    expect(pickAt(b, 'top', { col: 3, row: 2 })).toMatchObject({ kind: 'wire', id: 'W1' })
+  })
+
+  it('only items of the given side', () => {
+    const b = mk({ board: { type: 'two-sided' }, wires: [laid('W1', ['B2', 'B6'])] })
+    expect(pickAt(b, 'top', { col: 4, row: 2 })).toBeNull()
+  })
+
+  it('empty board -> null', () => {
+    expect(pickAt(mk(), 'top', { col: 4, row: 4 })).toBeNull()
   })
 })

@@ -1,5 +1,5 @@
-import type { BoardFile, Part } from './schema'
-import { holeKey, holeName, parseHole, pathHoles, type Hole } from './holes'
+import type { BoardFile, Part, Side } from './schema'
+import { holeKey, holeMm, holeName, parseHole, pathHoles, type Hole } from './holes'
 import { FOOTPRINTS, placePart, rotateOffset } from './footprints'
 import { OVERLAP_TOLERANCE_MM } from './check/placement'
 
@@ -203,4 +203,63 @@ export function moveWireEnd(board: BoardFile, id: string, end: WireEnd, target: 
   const { cols, rows } = board.board
   if (target.col > cols || target.row > rows) return { board: moved, reason: `Wire ${id} would be off the board.` }
   return { board: moved, reason: blockedReason(board, target) ?? (cornerHole ? blockedReason(board, cornerHole) : null) }
+}
+
+/** What a Move click picks up; `at` is the grabbed hole, the `from` of the later `Placement`. */
+export type Pick
+  = { kind: 'part', ref: string, at: Hole }
+    | { kind: 'wire', id: string, at: Hole }
+    | { kind: 'wire-end', id: string, end: WireEnd, at: Hole }
+
+const END_REACH = 0.35
+const LINE_REACH = 0.3
+
+const dist = (a: { col: number, row: number }, b: { col: number, row: number }) => Math.hypot(a.col - b.col, a.row - b.row)
+
+function segmentDistance(p: { col: number, row: number }, a: Hole, b: Hole): number {
+  const dc = b.col - a.col
+  const dr = b.row - a.row
+  const len2 = dc * dc + dr * dr
+  const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.col - a.col) * dc + (p.row - a.row) * dr) / len2))
+  return dist(p, { col: a.col + t * dc, row: a.row + t * dr })
+}
+
+/** The hole nearest `point`; on a tie the earlier one in `holes` wins. */
+function nearest(holes: Hole[], point: { col: number, row: number }): Hole {
+  let best = holes[0]!
+  for (const h of holes) if (dist(h, point) < dist(best, point)) best = h
+  return best
+}
+
+/**
+ * What a click at `point` (fractional hole coordinates, holes at whole numbers) picks up on `side`:
+ * a wire end, else a laid wire's line, else (top only) a part. Later items are drawn last and win.
+ */
+export function pickAt(board: BoardFile, side: Side, point: { col: number, row: number }): Pick | null {
+  const wires = board.wires.filter(w => w.side === side)
+  for (const w of [...wires].reverse()) {
+    const ends: [WireEnd, Hole][] = [['first', parseHole(w.points[0]!)], ['last', parseHole(w.points[w.points.length - 1]!)]]
+    // Of two ends in reach, the nearer one.
+    const hit = ends.filter(([, h]) => dist(h, point) <= END_REACH).sort((x, y) => dist(x[1], point) - dist(y[1], point))[0]
+    if (hit) return { kind: 'wire-end', id: w.id, end: hit[0], at: hit[1] }
+  }
+  for (const w of [...wires].reverse()) {
+    if (w.kind !== 'laid') continue
+    const pts = w.points.map(parseHole)
+    if (pts.some((a, i) => i + 1 < pts.length && segmentDistance(point, a, pts[i + 1]!) <= LINE_REACH)) {
+      return { kind: 'wire', id: w.id, at: nearest(pathHoles(pts), point) }
+    }
+  }
+  if (side !== 'top') return null
+  const pitch = board.board.pitchMm
+  const mm = holeMm(point, pitch)
+  const near = { col: Math.round(point.col), row: Math.round(point.row) }
+  for (const part of [...board.parts].reverse()) {
+    const pp = placePart(part)
+    const r = pp.bodyRectMm
+    const onHole = [...pp.pins.map(x => x.hole), ...pp.bodyHoles].some(h => h.col === near.col && h.row === near.row)
+    const inBody = mm.x >= r.x && mm.x <= r.x + r.w && mm.y >= r.y && mm.y <= r.y + r.h
+    if (onHole || inBody) return { kind: 'part', ref: part.ref, at: near }
+  }
+  return null
 }
