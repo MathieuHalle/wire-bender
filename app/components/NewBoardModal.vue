@@ -1,8 +1,14 @@
 <script setup lang="ts">
-// The "New board" dialog: name, size and copper sides, then the new board's page opens.
+// The "New board" dialog: name, a preset or Custom (size and copper sides), then the new board's page opens.
+import { newBoardBody, PRESET_ITEMS, shownSize, type NewBoardDraft } from '~/utils/newBoard'
+import type { BoardSides } from '~core/boardPresets'
+
 const open = defineModel<boolean>('open', { default: false })
 
-const draft = ref({ name: '', cols: 30, rows: 20, type: 'one-sided' as 'one-sided' | 'two-sided' })
+const fresh = (): NewBoardDraft => ({ name: '', preset: 'custom', cols: 30, rows: 20, type: 'one-sided' })
+const draft = ref<NewBoardDraft>(fresh())
+/** A preset's size shows read-only; Custom shows (and edits) the draft's own. */
+const size = computed(() => shownSize(draft.value))
 const createErrors = ref<string[]>([])
 const SIDES = [
   { label: 'One-sided', value: 'one-sided' },
@@ -11,12 +17,12 @@ const SIDES = [
 // A fresh form each time it opens.
 watch(open, (o) => {
   if (!o) return
-  draft.value = { name: '', cols: 30, rows: 20, type: 'one-sided' }
+  draft.value = fresh()
   createErrors.value = []
 })
 async function create() {
   try {
-    const { id } = await $fetch<{ id: string }>('/api/boards', { method: 'POST', body: draft.value })
+    const { id } = await $fetch<{ id: string }>('/api/boards', { method: 'POST', body: newBoardBody(draft.value) })
     open.value = false
     await navigateTo(`/b/${id}`)
   } catch (e) {
@@ -46,25 +52,38 @@ async function create() {
             autofocus
           />
         </UFormField>
+        <UFormField label="Board">
+          <USelect
+            v-model="draft.preset"
+            :items="PRESET_ITEMS"
+            class="w-full"
+          />
+        </UFormField>
         <div class="flex gap-3">
           <UFormField label="Columns">
             <UInputNumber
-              v-model="draft.cols"
+              :model-value="size.cols"
+              :disabled="size.fixed"
               :min="1"
+              @update:model-value="(v: number | null) => (draft.cols = v ?? 1)"
             />
           </UFormField>
           <UFormField label="Rows">
             <UInputNumber
-              v-model="draft.rows"
+              :model-value="size.rows"
+              :disabled="size.fixed"
               :min="1"
+              @update:model-value="(v: number | null) => (draft.rows = v ?? 1)"
             />
           </UFormField>
         </div>
         <URadioGroup
-          v-model="draft.type"
+          :model-value="size.type"
+          :disabled="size.fixed"
           legend="Copper"
           orientation="horizontal"
           :items="SIDES"
+          @update:model-value="(v: string) => (draft.type = v as BoardSides)"
         />
         <ul
           v-if="createErrors.length"
