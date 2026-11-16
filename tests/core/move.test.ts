@@ -304,6 +304,45 @@ describe('moveWireEnd', () => {
   })
 })
 
+describe('where a refused copy is drawn', () => {
+  it('a part past the top or left edge: the board unmoved, the copy drawn through `ghost`', () => {
+    const b = frozen({ parts: [axial('R1', 'B2', 'B5', 'N1')] })
+    const p = { from: H('B2'), to: H('B1'), turns: 2 as const }
+    const r = movePart(b, 'R1', p)
+    expect(r.reason).toBe('R1 would be off the board.')
+    expect(r.board).toEqual(b)
+    expect(r.ghost).toEqual(p)
+  })
+
+  it('a whole wire past the top or left edge: the same', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'])] })
+    const p = { from: H('B2'), to: H('A2'), turns: 3 as const }
+    const r = moveWire(b, 'W1', p)
+    expect(r.reason).toBe('Wire W1 would be off the board.')
+    expect(r.board).toEqual(b)
+    expect(r.ghost).toEqual(p)
+  })
+
+  it('a laid end onto the point before it: the moved wire, no ghost', () => {
+    const r = moveWireEnd(frozen({ wires: [wire('W1', ['B2', 'B5'])] }), 'W1', 'last', H('B2'), 'row-first')
+    expect(r.reason).toBe('The end can\'t land on the point before it.')
+    expect(r.board.wires[0]!.points).toEqual(['B2', 'B2'])
+    expect(r.ghost).toBeUndefined()
+  })
+
+  it('both flying ends in one hole: the moved wire, no ghost', () => {
+    const r = moveWireEnd(frozen({ wires: [flying('W1', ['B2', 'H9'])] }), 'W1', 'last', H('B2'), 'row-first')
+    expect(r.reason).toBe('Both ends of wire W1 would be in B2.')
+    expect(r.board.wires[0]!.points).toEqual(['B2', 'B2'])
+    expect(r.ghost).toBeUndefined()
+  })
+
+  it('an allowed move has no ghost', () => {
+    const b = frozen({ parts: [axial('R1', 'B2', 'B5', 'N1')] })
+    expect(movePart(b, 'R1', { from: H('B2'), to: H('E3'), turns: 0 }).ghost).toBeUndefined()
+  })
+})
+
 describe('pickAt', () => {
   const flying = (id: string, points: string[], side: 'top' | 'bottom' = 'bottom') =>
     ({ id, kind: 'flying' as const, side, points, bareSegments: [], joints: [] })

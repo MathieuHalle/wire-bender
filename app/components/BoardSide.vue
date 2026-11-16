@@ -12,6 +12,7 @@ import { litOf, makeGeo, SIDE_MARGIN, sideBox, sideExtent, type Group, type Lit,
 import { drawnBoard, drawnPlaced } from '~/utils/hiddenItems'
 import { ALL_LAYERS, type Layers } from '~/utils/layers'
 import { CANVAS_CONTEXT } from '~/utils/canvasContext'
+import { ghostTransform, moveCopy, type Moving } from '~/utils/moveCopy'
 
 const props = withDefaults(defineProps<{
   board: BoardFile
@@ -45,9 +46,10 @@ const props = withDefaults(defineProps<{
   /**
    * What the Move tool holds, on this side: the item `key` (`part:<ref>` or `wire:<id>`) is
    * drawn faded, and over it that item as it is on `board` (where it would land), in red
-   * when it cannot go there (`ok` false).
+   * when it cannot go there (`ok` false); past the top or left edge, the original drawn through
+   * `ghost`.
    */
-  moving?: { board: BoardFile, key: string, ok: boolean } | null
+  moving?: Moving | null
 }>(), { layers: () => ({ ...ALL_LAYERS }), hidden: () => new Set<string>(), highlightLit: null, moving: null, mirror: 'none', highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
 
 const emit = defineEmits<{
@@ -76,20 +78,10 @@ const lit = computed(() => props.highlightLit ?? litOf(props.highlightNet))
 const drawn = computed(() => drawnBoard(props.board, props.hidden))
 const drawnParts = computed(() => drawnPlaced(placedParts.value, props.hidden))
 
-/** The Move copy's colour where it cannot go. */
-const REFUSED = '#e5484d'
 /** The held item alone, as it would land: a board with just that part or wire. */
-const copy = computed(() => {
-  const m = props.moving
-  if (!m) return null
-  const at = m.key.indexOf(':')
-  const kind = m.key.slice(0, at)
-  const id = m.key.slice(at + 1)
-  const parts = kind === 'part' ? m.board.parts.filter(p => p.ref === id) : []
-  const wires = kind === 'wire' ? m.board.wires.filter(w => w.id === id) : []
-  const board: BoardFile = { ...m.board, parts, wires, trails: [] }
-  return { board, placed: parts.map(placePart), tint: m.ok ? null : REFUSED }
-})
+const copy = computed(() => moveCopy(props.moving))
+/** Past the top or left edge the copy is the original, drawn where it would land. */
+const copyTransform = computed(() => (copy.value?.ghost ? ghostTransform(geo.value, copy.value.ghost) : undefined))
 
 /** Board outline (half a pitch past the outer holes) and everything that overhangs it. */
 const extent = computed(() => sideExtent(geo.value, placedParts.value))
@@ -339,6 +331,7 @@ const ringed = computed(() => {
         <g
           v-if="copy"
           pointer-events="none"
+          :transform="copyTransform"
         >
           <BoardParts
             :board="copy.board"

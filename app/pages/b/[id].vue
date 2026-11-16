@@ -294,7 +294,7 @@ const moving = computed(() => {
   const none = { top: null, bottom: null }
   if (!h || !r) return none
   const key = h.pick.kind === 'part' ? `part:${h.pick.ref}` : `wire:${h.pick.id}`
-  return { ...none, [h.side]: { board: r.board, key, ok: r.reason === null } }
+  return { ...none, [h.side]: { board: r.board, key, ok: r.reason === null, ghost: r.ghost } }
 })
 
 /** A touch screen (no hover, no keys): the Move tool gets a bar of buttons while holding. */

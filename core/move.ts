@@ -11,12 +11,12 @@ export interface Placement { from: Hole, to: Hole, turns: Turns }
 
 /**
  * `board` is the moved board (the preview draws it, red when `reason` is set); only
- * `reason === null` may be applied. A few refusals return the board unmoved, as the moved
- * one cannot be written: a part or wire pushed past the top or left edge (its holes have
- * no name), a laid wire's end onto the point before it, and both ends of a flying wire in
- * one hole.
+ * `reason === null` may be applied. One refusal cannot write the moved board: a part or a
+ * whole wire pushed past the top or left edge (those holes have no name). It returns the board
+ * unmoved and `ghost`, the placement to draw the original through, so the copy still shows
+ * where it would land. (A wire end aimed past that edge has no ghost: it stays unmoved.)
  */
-export interface MoveResult { board: BoardFile, reason: string | null }
+export interface MoveResult { board: BoardFile, reason: string | null, ghost?: Placement }
 
 export function mapHole(h: Hole, p: Placement): Hole {
   const r = rotateOffset(h.col - p.from.col, h.row - p.from.row, 90 * p.turns)
@@ -94,9 +94,9 @@ export function movePart(board: BoardFile, ref: string, p: Placement): MoveResul
     origin,
     ...(fp.twoLead ? [part.to !== undefined ? parseHole(part.to) : { col: origin.col + fp.twoLead.minSpan, row: origin.row }] : [])
   ].map(h => mapHole(h, p))
-  if (named.some(nameless)) return { board, reason: offBoard }
+  if (named.some(nameless)) return { board, reason: offBoard, ghost: p }
   if (board.legFolds.some(f => f.lead.startsWith(prefix) && nameless(mapHole(parseHole(f.to), p))))
-    return { board, reason: foldOff }
+    return { board, reason: foldOff, ghost: p }
 
   const moved: BoardFile = {
     ...board,
@@ -136,7 +136,7 @@ export function moveWire(board: BoardFile, id: string, p: Placement): MoveResult
   const off = `Wire ${id} would be off the board.`
   const mapped = wire.points.map(n => mapHole(parseHole(n), p))
   // A hole left of column 1 or above row A has no name: the board comes back unmoved.
-  if (mapped.some(h => h.col < 1 || h.row < 1)) return { board, reason: off }
+  if (mapped.some(h => h.col < 1 || h.row < 1)) return { board, reason: off, ghost: p }
   const moved: BoardFile = {
     ...board,
     wires: board.wires.map((x, i) => (i === idx
@@ -182,19 +182,17 @@ export function moveWireEnd(board: BoardFile, id: string, end: WireEnd, target: 
   const endIdx = first ? 0 : pts.length - 1
   const prev = pts[first ? 1 : endIdx - 1]!
   const oldEnd = wire.points[endIdx]!
-  const targetName = holeName(target)
-  const refuse = (reason: string): MoveResult => ({ board, reason })
   // A hole left of column 1 or above row A has no name: check before naming it.
-  if (target.col < 1 || target.row < 1) return refuse(`Wire ${id} would be off the board.`)
+  if (target.col < 1 || target.row < 1) return { board, reason: `Wire ${id} would be off the board.` }
+  const targetName = holeName(target)
 
   let points: string[]
   let cornerHole: Hole | null = null
   let bare = wire.bareSegments
   if (wire.kind === 'flying') {
-    if (holeKey(target) === holeKey(prev)) return refuse(`Both ends of wire ${id} would be in ${targetName}.`)
     points = first ? [targetName, wire.points[1]!] : [wire.points[0]!, targetName]
   } else {
-    if (holeKey(target) === holeKey(prev)) return refuse('The end can\'t land on the point before it.')
+    // Onto the point before it counts as in line: the moved wire has a run of length 0 (refused below).
     const inLine = target.row === prev.row || target.col === prev.col
     if (inLine) {
       points = wire.points.slice()
@@ -228,6 +226,10 @@ export function moveWireEnd(board: BoardFile, id: string, end: WireEnd, target: 
   const moved: BoardFile = {
     ...board,
     wires: board.wires.map((x, i) => (i === idx ? { ...x, points, bareSegments: bare, joints } : x))
+  }
+  if (holeKey(target) === holeKey(prev)) {
+    const reason = wire.kind === 'flying' ? `Both ends of wire ${id} would be in ${targetName}.` : 'The end can\'t land on the point before it.'
+    return { board: moved, reason }
   }
   const { cols, rows } = board.board
   if (target.col > cols || target.row > rows) return { board: moved, reason: `Wire ${id} would be off the board.` }
