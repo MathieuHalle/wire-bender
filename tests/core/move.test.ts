@@ -275,6 +275,33 @@ describe('moveWireEnd', () => {
     const b = frozen({ wires: [wire('W1', ['B2', 'B8'], { joints: ['B8', 'B4'] })] })
     expect(moveWireEnd(b, 'W1', 'last', H('B4'), 'row-first').board.wires[0]!.joints).toEqual(['B4'])
   })
+
+  it('refuses an end moved back along its own run, or a corner that retraces it', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5', 'E5'])] })
+    // Shortening the last run is not running back over the wire:
+    expect(moveWireEnd(b, 'W1', 'last', H('C5'), 'row-first').reason).toBeNull()
+    // In line with B5 but back over B2..B5:
+    const back = moveWireEnd(b, 'W1', 'last', H('B3'), 'row-first')
+    expect(back.reason).toBe('Wire W1 would run back over itself.')
+    expect(back.board.wires[0]!.points).toEqual(['B2', 'B5', 'B3'])
+    // A corner whose first run retraces B2..B5 (row first from B5 towards column 3):
+    expect(moveWireEnd(b, 'W1', 'last', H('D3'), 'row-first').reason).toBe('Wire W1 would run back over itself.')
+    // The same target, column first, does not retrace:
+    expect(moveWireEnd(b, 'W1', 'last', H('D3'), 'col-first').reason).toBeNull()
+  })
+
+  it('refuses the first end running back over the wire too', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5', 'E5'])] })
+    // D5 is in line with B5: the new first run D5..B5 lies on B5..E5.
+    expect(moveWireEnd(b, 'W1', 'first', H('D5'), 'row-first').reason).toBe('Wire W1 would run back over itself.')
+    expect(moveWireEnd(b, 'W1', 'first', H('B7'), 'row-first').reason).toBeNull()
+  })
+
+  it('a wire that already ran over itself can still be moved by its end', () => {
+    // B2..B6 then back to B4: an existing overlap (drawn through the API).
+    const b = frozen({ wires: [wire('W1', ['B2', 'B6', 'B4', 'E4'])] })
+    expect(moveWireEnd(b, 'W1', 'last', H('G4'), 'row-first').reason).toBeNull()
+  })
 })
 
 describe('pickAt', () => {

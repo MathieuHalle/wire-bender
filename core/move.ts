@@ -1,5 +1,5 @@
 import type { BoardFile, Part, Side } from './schema'
-import { holeKey, holeMm, holeName, parseHole, pathHoles, type Hole } from './holes'
+import { holeKey, holeMm, holeName, parseHole, pathHoles, walkHoles, type Hole } from './holes'
 import { FOOTPRINTS, placePart, rotateOffset } from './footprints'
 import { OVERLAP_TOLERANCE_MM } from './check/placement'
 
@@ -152,6 +152,24 @@ export function moveWire(board: BoardFile, id: string, p: Placement): MoveResult
   return { board: moved, reason: null }
 }
 
+/** How often a wire through `points` passes each hole-to-hole step, either way round. */
+function stepCounts(points: string[]): Map<string, number> {
+  const holes = walkHoles(points.map(parseHole))
+  const out = new Map<string, number>()
+  for (let i = 0; i + 1 < holes.length; i++) {
+    const k = [holeKey(holes[i]!), holeKey(holes[i + 1]!)].sort().join('~')
+    out.set(k, (out.get(k) ?? 0) + 1)
+  }
+  return out
+}
+
+/** True when `after` passes some step more often than `before`: the wire would lie on itself. */
+function runsOverItself(before: string[], after: string[]): boolean {
+  const old = stepCounts(before)
+  for (const [k, n] of stepCounts(after)) if (n > 1 && n > (old.get(k) ?? 0)) return true
+  return false
+}
+
 export type WireEnd = 'first' | 'last'
 export type Bend = 'row-first' | 'col-first'
 
@@ -213,6 +231,8 @@ export function moveWireEnd(board: BoardFile, id: string, end: WireEnd, target: 
   }
   const { cols, rows } = board.board
   if (target.col > cols || target.row > rows) return { board: moved, reason: `Wire ${id} would be off the board.` }
+  if (wire.kind === 'laid' && runsOverItself(wire.points, points))
+    return { board: moved, reason: `Wire ${id} would run back over itself.` }
   return { board: moved, reason: blockedReason(board, target) ?? (cornerHole ? blockedReason(board, cornerHole) : null) }
 }
 
