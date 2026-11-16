@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mapHole, movePart, moveWire, moveWireEnd, pickAt } from '~core/move'
 import { parseBoard, type BoardFile, type Part } from '~core/schema'
 import { holeName, parseHole } from '~core/holes'
+import { placePart } from '~core/footprints'
 import { mk, axial, trail } from './helpers'
 
 const H = parseHole
@@ -392,5 +393,58 @@ describe('pickAt', () => {
 
   it('empty board -> null', () => {
     expect(pickAt(mk(), 'top', { col: 4, row: 4 })).toBeNull()
+  })
+
+  it('a point inside a part\'s body but on none of its holes picks the part', () => {
+    // A TO-92's body reaches past its three pins.
+    const b = mk({ parts: [{ ref: 'Q1', footprint: 'to92', at: 'E5', rotation: 0, pins: {} }] })
+    const pp = placePart(b.parts[0]!)
+    const pitch = b.board.pitchMm
+    const r = pp.bodyRectMm
+    const own = new Set([...pp.pins.map(x => x.hole), ...pp.bodyHoles].map(h => holeName(h)))
+    // A spot in the body whose nearest hole the part does not own: only the body-rectangle branch can pick it.
+    let point: { col: number, row: number } | null = null
+    for (let x = r.x + 0.05; x < r.x + r.w && !point; x += 0.2)
+      for (let y = r.y + 0.05; y < r.y + r.h && !point; y += 0.2) {
+        const p = { col: x / pitch + 1, row: y / pitch + 1 }
+        if (!own.has(holeName({ col: Math.round(p.col), row: Math.round(p.row) }))) point = p
+      }
+    expect(point).not.toBeNull()
+    expect(pickAt(b, 'top', point!)).toMatchObject({ kind: 'part', ref: 'Q1' })
+  })
+
+  it('a wire end wins over a wire line, even one drawn later', () => {
+    const b = mk({ wires: [laid('W2', ['E4', 'B4']), laid('W1', ['B2', 'B6'])] })
+    expect(pickAt(b, 'bottom', { col: 4, row: 2 })).toEqual({ kind: 'wire-end', id: 'W2', end: 'last', at: H('B4') })
+  })
+
+  it('of two wire ends in reach, the wire drawn last wins', () => {
+    const b = mk({ wires: [laid('W1', ['B2', 'B6']), laid('W2', ['B6', 'E6'])] })
+    expect(pickAt(b, 'bottom', { col: 6, row: 2 })).toEqual({ kind: 'wire-end', id: 'W2', end: 'first', at: H('B6') })
+  })
+
+  it('of two overlapping parts, the one drawn last wins', () => {
+    const b = mk({ parts: [axial('R1', 'B2', 'B5', null), axial('R2', 'B3', 'B7', null)] })
+    expect(pickAt(b, 'top', { col: 4, row: 2 })).toMatchObject({ kind: 'part', ref: 'R2' })
+  })
+})
+
+describe('moveWireEnd, more', () => {
+  it('the first end\'s joint moves with it', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B6'], { joints: ['B2'] })] })
+    const r = moveWireEnd(b, 'W1', 'first', H('B1'), 'row-first')
+    expect(r.reason).toBeNull()
+    expect(r.board.wires[0]).toMatchObject({ points: ['B1', 'B6'], joints: ['B1'] })
+  })
+
+  it('a target past the right or bottom edge: off the board, with the moved wire', () => {
+    const b = frozen({ wires: [wire('W1', ['B2', 'B5'])] })
+    const { cols, rows } = b.board
+    const right = moveWireEnd(b, 'W1', 'last', { col: cols + 1, row: 2 }, 'row-first')
+    expect(right.reason).toBe('Wire W1 would be off the board.')
+    expect(right.board.wires[0]!.points).toEqual(['B2', holeName({ col: cols + 1, row: 2 })])
+    const below = moveWireEnd(b, 'W1', 'last', { col: 5, row: rows + 1 }, 'row-first')
+    expect(below.reason).toBe('Wire W1 would be off the board.')
+    expect(below.board.wires[0]!.points.at(-1)).toBe(holeName({ col: 5, row: rows + 1 }))
   })
 })
