@@ -19,6 +19,7 @@ import { benchUrl, loadFlip, saveFlip } from '~/utils/bottomFlip'
 import { moveHint } from '~/utils/moveHint'
 import { hoverMovesTarget } from '~/utils/movePointer'
 import { moveSides } from '~/utils/moveCopy'
+import { moveBar as moveBarFor } from '~/utils/moveBar'
 import type { Flip, Mirror } from '~core/sideView'
 
 // `id` is the key the board was opened by: its board id (the owner) or its share link id
@@ -302,17 +303,14 @@ onMounted(() => {
 })
 onBeforeUnmount(() => coarseQuery?.removeEventListener?.('change', onCoarse))
 /** The touch bar's buttons for what is held: Rotate (a part, a whole wire), Switch bend (a laid-wire end). */
-const moveBar = computed(() => {
-  const h = held.value
-  if (!coarse.value || !h || (lockedTitle.value && lockedTitle.value !== PAUSED_TITLE)) return null
-  const pick = h.pick
-  const end = pick.kind === 'wire-end'
-  return {
-    rotate: !end,
-    bend: end && live.board.value?.wires.find(w => w.id === pick.id)?.kind === 'laid',
-    canPlace: preview.value?.reason === null
-  }
-})
+const moveBar = computed(() => moveBarFor({
+  coarse: coarse.value,
+  held: held.value,
+  preview: preview.value,
+  lockedTitle: lockedTitle.value,
+  pausedTitle: PAUSED_TITLE,
+  board: live.board.value
+}))
 
 function onHover(side: Side, hole: Hole | null) {
   hover.value = hole ? { side, hole } : null
@@ -787,6 +785,7 @@ const sideTitle = (s: Side) => (s === 'top'
                 variant="outline"
                 icon="i-lucide-rotate-cw"
                 label="Rotate"
+                :disabled="moveBar.paused"
                 @click="rotate(1)"
               />
               <UButton
@@ -796,13 +795,14 @@ const sideTitle = (s: Side) => (s === 'top'
                 variant="outline"
                 icon="i-lucide-corner-down-right"
                 label="Switch bend"
+                :disabled="moveBar.paused"
                 @click="switchBend()"
               />
               <UButton
                 size="sm"
                 icon="i-lucide-check"
                 label="Place"
-                :disabled="!moveBar.canPlace"
+                :disabled="!moveBar.canPlace || moveBar.paused"
                 @click="place()"
               />
               <UButton
