@@ -334,21 +334,34 @@ const ringed = computed(() => {
           pointer-events="none"
           :transform="copyTransform"
         >
-          <BoardParts
+          <!-- a held part's leg folds, on the bottom: only the folds -->
+          <BoardCopper
+            v-if="copy.folds"
             :board="copy.board"
             :side="side"
             :geo="geo"
             :lit="null"
+            :conn="connectivity"
             :placed="copy.placed"
             :tint="copy.tint"
           />
-          <BoardWires
-            :board="copy.board"
-            :side="side"
-            :geo="geo"
-            :lit="null"
-            :tint="copy.tint"
-          />
+          <template v-else>
+            <BoardParts
+              :board="copy.board"
+              :side="side"
+              :geo="geo"
+              :lit="null"
+              :placed="copy.placed"
+              :tint="copy.tint"
+            />
+            <BoardWires
+              :board="copy.board"
+              :side="side"
+              :geo="geo"
+              :lit="null"
+              :tint="copy.tint"
+            />
+          </template>
         </g>
 
         <!-- edge labels: columns top and bottom, rows left and right -->

@@ -18,6 +18,7 @@ import {
 import { benchUrl, loadFlip, saveFlip } from '~/utils/bottomFlip'
 import { moveHint } from '~/utils/moveHint'
 import { hoverMovesTarget } from '~/utils/movePointer'
+import { moveSides } from '~/utils/moveCopy'
 import type { Flip, Mirror } from '~core/sideView'
 
 // `id` is the key the board was opened by: its board id (the owner) or its share link id
@@ -287,15 +288,8 @@ const hint = computed(() => (drawing.value
   ? `Drawing ${drawing.value.trailId} on ${drawing.value.side}: click the last hole again or press Esc to end`
   : moveHint(held.value, preview.value, lockedTitle.value === PAUSED_TITLE)))
 
-/** What the Move tool holds, as each side draws it: only the side it was picked on shows the copy. */
-const moving = computed(() => {
-  const h = held.value
-  const r = preview.value
-  const none = { top: null, bottom: null }
-  if (!h || !r) return none
-  const key = h.pick.kind === 'part' ? `part:${h.pick.ref}` : `wire:${h.pick.id}`
-  return { ...none, [h.side]: { board: r.board, key, ok: r.reason === null, ghost: r.ghost } }
-})
+/** What the Move tool holds, as each side draws it (a held part's leg folds on the bottom too). */
+const moving = computed(() => moveSides(held.value, preview.value))
 
 /** A touch screen (no hover, no keys): the Move tool gets a bar of buttons while holding. */
 const coarse = ref(false)

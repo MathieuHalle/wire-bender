@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { ghostTransform, moveCopy } from '../../app/utils/moveCopy'
+import { ghostTransform, moveCopy, moveSides } from '../../app/utils/moveCopy'
+import type { Held } from '../../app/composables/useTools'
 import { mapHole, movePart, type Placement, type Turns } from '~core/move'
 import { parseHole, type Hole } from '~core/holes'
 import { axial, mk } from '../core/helpers'
@@ -57,5 +58,50 @@ describe('moveCopy', () => {
     expect(c.ghost).toBeNull()
     expect(c.board.wires).toEqual([])
     expect(c.board.trails).toEqual([])
+  })
+})
+
+describe('moveSides', () => {
+  const b = mk({
+    parts: [axial('R1', 'B2', 'B5', 'N1'), axial('R2', 'H2', 'H5', 'N2')],
+    legFolds: [{ lead: 'R1.a', to: 'C2' }, { lead: 'R2.a', to: 'I2' }]
+  })
+  const held = (pick: Held['pick'], side: Held['side'] = 'top'): Held =>
+    ({ pick, side, target: pick.at, turns: 0, bend: 'row-first', snapshot: '' })
+
+  it('nothing held: no copy on either side', () => {
+    expect(moveSides(null, null)).toEqual({ top: null, bottom: null })
+  })
+
+  it('a part with a leg fold: its copy on top, its folds\' copy on the bottom', () => {
+    const r = movePart(b, 'R1', { from: H('B2'), to: H('E3'), turns: 0 })
+    const s = moveSides(held({ kind: 'part', ref: 'R1', at: H('B2') }), r)
+    expect(s.top).toMatchObject({ key: 'part:R1', ok: true })
+    expect(s.top!.folds).toBeFalsy()
+    expect(s.bottom).toMatchObject({ key: 'part:R1', ok: true, folds: true })
+    expect(moveCopy(s.bottom)!.board.legFolds).toEqual([{ lead: 'R1.a', to: 'F3' }])
+  })
+
+  it('a part without folds: nothing on the bottom', () => {
+    const r = movePart(b, 'R2', { from: H('H2'), to: H('H3'), turns: 0 })
+    expect(moveSides(held({ kind: 'part', ref: 'R2', at: H('H2') }), { ...r, board: { ...r.board, legFolds: [] } }).bottom).toBeNull()
+  })
+
+  it('a wire: only its own side', () => {
+    const w = mk({ wires: [{ id: 'W1', kind: 'laid', side: 'bottom', points: ['B2', 'B5'], joints: [], bareSegments: [] }] })
+    const s = moveSides(held({ kind: 'wire', id: 'W1', at: H('B2') }, 'bottom'), { board: w, reason: null })
+    expect(s.top).toBeNull()
+    expect(s.bottom).toMatchObject({ key: 'wire:W1' })
+    expect(s.bottom!.folds).toBeFalsy()
+  })
+
+  it('the folds\' copy holds only the part and its folds: no trails, bridges or wires', () => {
+    const c = moveCopy({ board: b, key: 'part:R1', ok: false, folds: true })!
+    expect(c.folds).toBe(true)
+    expect(c.board.legFolds).toEqual([{ lead: 'R1.a', to: 'C2' }])
+    expect(c.board.solderBridges).toEqual([])
+    expect(c.board.trails).toEqual([])
+    expect(c.board.wires).toEqual([])
+    expect(c.tint).toBe('#e5484d')
   })
 })

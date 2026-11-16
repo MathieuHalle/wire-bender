@@ -1,8 +1,9 @@
 // The Move tool's copy: what a side draws for the held part or wire, where it would land.
-import type { BoardFile } from '~core/schema'
+import type { BoardFile, Side } from '~core/schema'
 import type { Hole } from '~core/holes'
 import { placePart, type PlacedPart } from '~core/footprints'
-import { mapHole, type Placement } from '~core/move'
+import { mapHole, type MoveResult, type Placement } from '~core/move'
+import type { Held } from '../composables/useTools'
 import type { Geo } from './boardView'
 
 /** The Move copy's colour where it cannot go. */
@@ -38,14 +39,34 @@ export function moveCopy(moving: Moving | null): MoveCopy | null {
   const id = moving.key.slice(at + 1)
   const parts = kind === 'part' ? moving.board.parts.filter(p => p.ref === id) : []
   const wires = kind === 'wire' ? moving.board.wires.filter(w => w.id === id) : []
-  const board: BoardFile = { ...moving.board, parts, wires, trails: [] }
+  const folds = moving.folds ?? false
+  const board: BoardFile = folds
+    ? { ...moving.board, parts, wires: [], trails: [], solderBridges: [], legFolds: moving.board.legFolds.filter(f => f.lead.startsWith(`${id}.`)) }
+    : { ...moving.board, parts, wires, trails: [] }
   return {
     board,
     placed: parts.map(placePart),
     tint: moving.ok ? null : REFUSED,
     ghost: moving.ghost ?? null,
-    folds: moving.folds ?? false
+    folds
   }
+}
+
+/**
+ * What each side draws of the held item: the side it was picked on gets the copy. A held part's
+ * leg folds are bent on the bottom, so a part picked on top with folds also gives the bottom a
+ * copy of just its folds.
+ */
+export function moveSides(held: Held | null, preview: MoveResult | null): Record<Side, Moving | null> {
+  const out: Record<Side, Moving | null> = { top: null, bottom: null }
+  if (!held || !preview) return out
+  const pick = held.pick
+  const key = pick.kind === 'part' ? `part:${pick.ref}` : `wire:${pick.id}`
+  const base = { board: preview.board, key, ok: preview.reason === null, ghost: preview.ghost }
+  out[held.side] = base
+  if (pick.kind === 'part' && held.side !== 'bottom' && preview.board.legFolds.some(f => f.lead.startsWith(`${pick.ref}.`)))
+    out.bottom = { ...base, folds: true }
+  return out
 }
 
 /**
