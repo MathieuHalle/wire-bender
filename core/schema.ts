@@ -81,6 +81,8 @@ const partSchema = z.strictObject({
 })
 
 const benchDefaults = { endLeadMm: 5, bendAllowanceMm: 1, spareMm: 5, flyingSlackMm: 10, roundToMm: 5, paper: 'letter' as const }
+/** The bench settings a board gets when its file leaves them out. */
+export const BENCH_DEFAULTS: Readonly<typeof benchDefaults> = benchDefaults
 
 export const boardFileSchema = z.strictObject({
   format: z.literal('wirebender/1'),

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { runCheck } from '~core/check'
 import { parseBoard, type BoardFile } from '~core/schema'
+import { blankBoard, PRESET_IDS, presetBoard, type BoardSides } from '~core/boardPresets'
 import { parseFlip } from '~core/sideView'
 import { statsLine, ADVISORY } from '../../cli/format'
 import { tickKey } from '../../export/benchHtml'
@@ -54,30 +55,30 @@ function boardTooLarge(board: BoardFile): ApiResult | null {
 
 /** An empty `wirebender/1` board from `{ name, cols, rows, type }`; parseBoard rejects bad values. */
 function emptyBoard(json: Record<string, unknown>): unknown {
-  return {
-    format: 'wirebender/1',
-    revision: 0,
-    name: json.name,
-    board: { cols: json.cols, rows: json.rows, pitchMm: 2.54, type: json.type, blocked: [] },
-    netClasses: {},
-    nets: {},
-    rules: { keepAway: [], adjacency: [] },
-    parts: [],
-    trails: [],
-    wires: [],
-    legFolds: [],
-    solderBridges: []
-  }
+  // Unchecked here on purpose: parseBoard names what is wrong with cols, rows or type.
+  return blankBoard(json.name as string, { cols: json.cols as number, rows: json.rows as number, pitchMm: 2.54, type: json.type as BoardSides })
 }
 
-/** `POST /api/boards`: `{ board }` imports, `{ name, cols, rows, type }` creates an empty board, owned by `ownerId`. */
+const PRESET_ERROR = `preset: must be one of ${PRESET_IDS.join(', ')}`
+
+/**
+ * `POST /api/boards`, owned by `ownerId`: `{ board }` imports; `{ name, cols, rows, type }` creates an
+ * empty board; `{ name, preset }` one from a preset (`custom` is the size fields again).
+ */
 export function createOrImport(db: Db, text: string, author = AUTHOR, ownerId = 'local', tokenId: string | null = null): ApiResult {
   const p = parseBody(text)
   if (!p.ok) return p.result
   const { json } = p
   const importing = 'board' in json
   if (!importing && (typeof json.name !== 'string' || json.name.trim() === '')) return invalid('name: must be a non-empty string')
-  const parsed = parseBoard(importing ? json.board : emptyBoard(json))
+  const fromPreset = !importing && 'preset' in json && json.preset !== 'custom'
+  let source: unknown
+  if (importing) source = json.board
+  else if (fromPreset) {
+    source = typeof json.preset === 'string' ? presetBoard(json.preset, json.name as string) : null
+    if (!source) return invalid(PRESET_ERROR)
+  } else source = emptyBoard(json)
+  const parsed = parseBoard(source)
   if (!parsed.ok) return invalid(...parsed.errors)
   const big = boardTooLarge(parsed.board)
   if (big) return big

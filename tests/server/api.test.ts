@@ -61,6 +61,45 @@ describe('create and import', () => {
     expect(listRevisions(db, id)[0]).toMatchObject({ how: 'create', author: 'Local' })
   })
 
+  describe('from a preset', () => {
+    const PRESET_ERROR = 'preset: must be one of custom, proto-4x6, proto-5x7, proto-7x9, chogori-22004515'
+    const create = (body: unknown) => api.createOrImport(db, JSON.stringify(body))
+    const stored = (id: string) => (api.getBoardResponse(db, own(id)).body as { board: BoardFile }).board
+
+    it('creates the connector board with J1, as the preset makes it', () => {
+      const r = create({ name: 'Cable', preset: 'chogori-22004515' })
+      expect(r.status).toBe(200)
+      const b = stored((r.body as { id: string }).id)
+      expect(b).toMatchObject({ name: 'Cable', board: { cols: 2, rows: 2, type: 'one-sided' } })
+      expect(b.parts.map(p => p.ref)).toEqual(['J1'])
+    })
+
+    it('the preset decides: size fields sent with it are ignored', () => {
+      const r = create({ name: 'B', preset: 'proto-5x7', cols: 3, rows: 3, type: 'one-sided' })
+      expect(stored((r.body as { id: string }).id).board).toMatchObject({ cols: 18, rows: 24, type: 'two-sided' })
+    })
+
+    it('an unknown or non-string preset is a 422 naming the ids, and creates nothing', () => {
+      for (const preset of ['nope', 7, null]) {
+        const r = create({ name: 'B', preset })
+        expect(r.status).toBe(422)
+        expect((r.body as { errors: string[] }).errors).toEqual([PRESET_ERROR])
+      }
+      expect(listBoards(db, 'local', 'mine')).toEqual([])
+    })
+
+    it('a blank name is refused as today', () => {
+      const r = create({ name: '  ', preset: 'proto-5x7' })
+      expect(r.status).toBe(422)
+      expect((r.body as { errors: string[] }).errors).toEqual(['name: must be a non-empty string'])
+    })
+
+    it('custom is today\'s create', () => {
+      const r = create({ name: 'B', preset: 'custom', cols: 4, rows: 3, type: 'one-sided' })
+      expect(stored((r.body as { id: string }).id).board).toMatchObject({ cols: 4, rows: 3, pitchMm: 2.54, type: 'one-sided' })
+    })
+  })
+
   it('rejects a bad create with 422', () => {
     for (const body of [{ name: '', cols: 4, rows: 4, type: 'one-sided' }, { name: 'x', cols: 0, rows: 4, type: 'one-sided' }, { name: 'x', cols: 4, rows: 4, type: 'round' }, {}]) {
       const r = api.createOrImport(db, JSON.stringify(body))
