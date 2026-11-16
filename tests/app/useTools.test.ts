@@ -327,6 +327,19 @@ describe('the Move tool', () => {
     expect(t.held.value).toBeNull()
   })
 
+  test('holding, a click that rounds to a hole off the board is ignored: the copy stays where it is', () => {
+    t.tool.value = 'move'
+    t.onMoveClick('bottom', at('B6'))
+    t.onMoveHover('bottom', h('B8'))
+    const { cols, rows } = f.board.value!.board
+    for (const p of [{ col: 0.4, row: 2 }, { col: 4, row: 0.3 }, { col: cols + 0.6, row: 2 }, { col: 4, row: rows + 0.6 }]) {
+      t.onMoveClick('bottom', p)
+      expect(t.held.value!.target).toEqual(h('B8'))
+    }
+    expect(f.applied).toHaveLength(0)
+    expect(f.notes).toEqual([])
+  })
+
   test('R and → turn clockwise, ← counter-clockwise; ignored for a wire end', () => {
     t.tool.value = 'move'
     t.onMoveClick('top', at('B2'))
