@@ -3,18 +3,6 @@
 Small things noticed along the way, not yet planned. Newest first. Take an item into a plan
 (`docs/superpowers/plans/`) when it is picked up, and remove it here when it is done.
 
-## Move tool follow-ups
-
-*Noted 2026-11-15, from the Move tool reviews (v0.2.0).* None of these can change wiring.
-
-- Leg folds aren't drawn in the moving copy (folds are drawn on the bottom; parts are held on top).
-- A click in the diagonal gap between holes rounds to a hole that isn't the hover target, so it only moves the copy and needs a second click.
-- A laid wire's end can be moved back along its own run, or given a corner that retraces it; `checkStraight` accepts both. Refuse, or at least say so.
-- A few refusals (past the top/left edge, a laid end onto its previous point, both flying ends in one hole) draw the red copy at the original spot instead of under the pointer.
-- On the iPad, the touch bar's Rotate and Switch bend still act while the board is reconnecting (the keys don't).
-- `partConflicts` re-places every part twice on each hover; cache the "before" set per board if big boards feel slow.
-- Tests to add: the `pickAt` body-rect branch and precedence (end vs line, last drawn wins), a first-end joint and an off-board `moveWireEnd`, the page wiring of `pickableBoard`, and the copy, routing and touch bar as components.
-
 ## GitHub Actions still on Node 20
 
 *Noted 2026-11-14, from the v0.1.1 release run.* GitHub runs these actions on Node 24 with a

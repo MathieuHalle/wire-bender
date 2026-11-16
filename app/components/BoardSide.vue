@@ -12,6 +12,9 @@ import { litOf, makeGeo, SIDE_MARGIN, sideBox, sideExtent, type Group, type Lit,
 import { drawnBoard, drawnPlaced } from '~/utils/hiddenItems'
 import { ALL_LAYERS, type Layers } from '~/utils/layers'
 import { CANVAS_CONTEXT } from '~/utils/canvasContext'
+import { ghostTransform, moveCopy, type Moving } from '~/utils/moveCopy'
+// Named apart from the `hoverHole` prop.
+import { hoverHole as holeUnder } from '~/utils/movePointer'
 
 const props = withDefaults(defineProps<{
   board: BoardFile
@@ -45,9 +48,10 @@ const props = withDefaults(defineProps<{
   /**
    * What the Move tool holds, on this side: the item `key` (`part:<ref>` or `wire:<id>`) is
    * drawn faded, and over it that item as it is on `board` (where it would land), in red
-   * when it cannot go there (`ok` false).
+   * when it cannot go there (`ok` false); past the top or left edge, the original drawn through
+   * `ghost`.
    */
-  moving?: { board: BoardFile, key: string, ok: boolean } | null
+  moving?: Moving | null
 }>(), { layers: () => ({ ...ALL_LAYERS }), hidden: () => new Set<string>(), highlightLit: null, moving: null, mirror: 'none', highlightNet: null, hoverHole: null, tool: 'inspect', conn: undefined, placed: undefined, drawFrom: null, markHoles: () => [] })
 
 const emit = defineEmits<{
@@ -76,20 +80,10 @@ const lit = computed(() => props.highlightLit ?? litOf(props.highlightNet))
 const drawn = computed(() => drawnBoard(props.board, props.hidden))
 const drawnParts = computed(() => drawnPlaced(placedParts.value, props.hidden))
 
-/** The Move copy's colour where it cannot go. */
-const REFUSED = '#e5484d'
 /** The held item alone, as it would land: a board with just that part or wire. */
-const copy = computed(() => {
-  const m = props.moving
-  if (!m) return null
-  const at = m.key.indexOf(':')
-  const kind = m.key.slice(0, at)
-  const id = m.key.slice(at + 1)
-  const parts = kind === 'part' ? m.board.parts.filter(p => p.ref === id) : []
-  const wires = kind === 'wire' ? m.board.wires.filter(w => w.id === id) : []
-  const board: BoardFile = { ...m.board, parts, wires, trails: [] }
-  return { board, placed: parts.map(placePart), tint: m.ok ? null : REFUSED }
-})
+const copy = computed(() => moveCopy(props.moving))
+/** Past the top or left edge the copy is the original, drawn where it would land. */
+const copyTransform = computed(() => (copy.value?.ghost ? ghostTransform(geo.value, copy.value.ghost) : undefined))
 
 /** Board outline (half a pitch past the outer holes) and everything that overhangs it. */
 const extent = computed(() => sideExtent(geo.value, placedParts.value))
@@ -136,10 +130,9 @@ function inBoard(h: Hole) {
   return h.col >= 1 && h.row >= 1 && h.col <= geo.value.cols && h.row <= geo.value.rows
 }
 
-function holeAt(fc: number, fr: number): Hole | null {
-  const h = { col: Math.round(fc), row: Math.round(fr) }
-  if (!inBoard(h) || Math.hypot(fc - h.col, fr - h.row) > 0.5) return null
-  return h
+/** The hole under (fc, fr); in the Move tool every point snaps to one, as a Move click rounds. */
+function holeAt(fc: number, fr: number, snapAll = false): Hole | null {
+  return holeUnder(fc, fr, geo.value.cols, geo.value.rows, snapAll)
 }
 
 function onMove(ev: PointerEvent) {
@@ -154,7 +147,7 @@ function track(cx: number, cy: number) {
   lastClient = { x: cx, y: cy }
   const p = boardPoint({ clientX: cx, clientY: cy })
   pointer.value = p
-  const h = p ? holeAt(p.fc, p.fr) : null
+  const h = p ? holeAt(p.fc, p.fr, props.tool === 'move') : null
   // The tooltip sits in the canvas when there is one, kept inside it.
   const box = (canvas?.overlay.value ?? rootEl.value)?.getBoundingClientRect()
   tipAt.value = h && box ? { x: cx - box.left, y: cy - box.top, w: box.width, h: box.height } : null
@@ -339,22 +332,36 @@ const ringed = computed(() => {
         <g
           v-if="copy"
           pointer-events="none"
+          :transform="copyTransform"
         >
-          <BoardParts
+          <!-- a held part's leg folds, on the bottom: only the folds -->
+          <BoardCopper
+            v-if="copy.folds"
             :board="copy.board"
             :side="side"
             :geo="geo"
             :lit="null"
+            :conn="connectivity"
             :placed="copy.placed"
             :tint="copy.tint"
           />
-          <BoardWires
-            :board="copy.board"
-            :side="side"
-            :geo="geo"
-            :lit="null"
-            :tint="copy.tint"
-          />
+          <template v-else>
+            <BoardParts
+              :board="copy.board"
+              :side="side"
+              :geo="geo"
+              :lit="null"
+              :placed="copy.placed"
+              :tint="copy.tint"
+            />
+            <BoardWires
+              :board="copy.board"
+              :side="side"
+              :geo="geo"
+              :lit="null"
+              :tint="copy.tint"
+            />
+          </template>
         </g>
 
         <!-- edge labels: columns top and bottom, rows left and right -->

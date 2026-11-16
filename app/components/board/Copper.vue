@@ -14,6 +14,8 @@ const props = defineProps<{
   lit: Lit | null
   conn: Connectivity
   placed: PlacedPart[]
+  /** The Move copy's colour where it cannot go: draws every fold in it. */
+  tint?: string | null
 }>()
 
 const SHORT = '#d6008f'
@@ -85,7 +87,7 @@ const folds = computed(() => {
       k: `${f.lead}>${f.to}`,
       d: `M${a.x} ${a.y}L${k.x} ${k.y}L${b.x} ${b.y}`,
       b,
-      color: colorOfGroup(groupOf.value.get(id)),
+      color: props.tint ?? colorOfGroup(groupOf.value.get(id)),
       lit: props.lit?.ids.has(id) ?? false
     }]
   })
