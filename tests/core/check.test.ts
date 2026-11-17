@@ -397,6 +397,30 @@ describe('runCheck', () => {
     expect(b[1]!.message).toContain('J1.5')
   })
 
+  describe('on a shaped board (round 10 × 10: A1 is outside it)', () => {
+    const round = { cols: 10, rows: 10, shape: { kind: 'round' } } as never
+    const offShape = (over: BoardOverrides) =>
+      only(check({ ...over, board: round }).findings, 'blockedHole').map(f => f.message)
+
+    it('a part pin on a missing hole is off the board, as past the edge', () => {
+      expect(offShape({ parts: [axial('R1', 'A1', 'A4', null)] }))
+        .toEqual(['Off the board: pin R1.a of R1 (placed at A1) lands off the board'])
+    })
+
+    it('trail, wire and leg-fold holes on a missing hole are off the board', () => {
+      expect(offShape({ trails: [trail('T1', ['A1', 'A4'])] })).toEqual(['Off the board: trail T1 point A1 is outside the board'])
+      expect(offShape({ wires: [{ id: 'W1', kind: 'flying', side: 'bottom', points: ['A1', 'E5'], joints: [], bareSegments: [] }] }))
+        .toEqual(['Off the board: wire W1 point A1 is outside the board'])
+      expect(offShape({ parts: [axial('R1', 'E4', 'E7', null)], legFolds: [{ lead: 'R1.a', to: 'A1' }] }))
+        .toEqual(['Off the board: leg fold of R1.a at A1 is outside the board'])
+    })
+
+    it('the same items on a plain board are fine', () => {
+      const plain = check({ trails: [trail('T1', ['A1', 'A4'])], parts: [axial('R1', 'E4', 'E7', null)], legFolds: [{ lead: 'R1.a', to: 'A1' }] })
+      expect(only(plain.findings, 'blockedHole')).toEqual([])
+    })
+  })
+
   it('a part with pins off the board names only holes on the board', () => {
     const { findings } = check({
       parts: [{ ref: 'U1', footprint: 'dip8', at: 'A1', rotation: 90, pins: { 1: 'N', 2: 'N', 3: null, 4: null, 5: null, 6: null, 7: null, 8: null } }]

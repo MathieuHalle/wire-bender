@@ -6,6 +6,7 @@ import { buildConnectivity, type Connectivity } from '../connectivity'
 import { placePart, type PlacedPart } from '../footprints'
 import { holeKey, holeName, parseHole, pathHoles, type Hole } from '../holes'
 import type { BoardFile, HoleName, PinRole, Side } from '../schema'
+import { holeExists } from '../boardShape'
 
 export type Severity = 'error' | 'warning' | 'caution'
 export type RuleId = 'openNet' | 'short' | 'singleLeadNet' | 'contention' | 'twoInOneHole'
@@ -90,14 +91,14 @@ export function buildContext(board: BoardFile): CheckContext {
     })
   }
 
-  const { cols, rows } = board.board
   return {
     board, conn, placed, leads,
     leadById: new Map(leads.map(l => [l.id, l])),
     leadsAt, wireEndsAt, runs,
     runById: new Map(runs.map(r => [r.id, r])),
     sides: board.board.type === 'two-sided' ? ['bottom', 'top'] : ['bottom'],
-    onBoard: h => h.col >= 1 && h.row >= 1 && h.col <= cols && h.row <= rows
+    // In the grid and inside the board's shape.
+    onBoard: h => holeExists(board.board, h)
   }
 }
 
