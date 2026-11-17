@@ -1,11 +1,11 @@
 <script setup lang="ts">
 // The "New board" dialog: name, a preset or Custom (size and copper sides), then the new board's page opens.
-import { newBoardBody, PRESET_ITEMS, shownSize, type NewBoardDraft } from '~/utils/newBoard'
+import { newBoardBody, PRESET_ITEMS, SHAPE_ITEMS, shownSize, type NewBoardDraft, type ShapeChoice } from '~/utils/newBoard'
 import type { BoardSides } from '~core/boardPresets'
 
 const open = defineModel<boolean>('open', { default: false })
 
-const fresh = (): NewBoardDraft => ({ name: '', preset: 'custom', cols: 30, rows: 20, type: 'one-sided' })
+const fresh = (): NewBoardDraft => ({ name: '', preset: 'custom', cols: 30, rows: 20, type: 'one-sided', shape: 'rect', cornerHoles: 2 })
 const draft = ref<NewBoardDraft>(fresh())
 /** A preset's size shows read-only; Custom shows (and edits) the draft's own. */
 const size = computed(() => shownSize(draft.value))
@@ -85,6 +85,31 @@ async function create() {
           :items="SIDES"
           @update:model-value="(v: string) => (draft.type = v as BoardSides)"
         />
+        <div class="flex gap-3">
+          <UFormField
+            label="Shape"
+            class="flex-1"
+          >
+            <USelect
+              :model-value="size.shape"
+              :items="SHAPE_ITEMS"
+              :disabled="size.fixed"
+              class="w-full"
+              @update:model-value="(v: ShapeChoice) => (draft.shape = v)"
+            />
+          </UFormField>
+          <UFormField
+            v-if="size.shape === 'chamfer' || size.shape === 'notch'"
+            label="Corner size (holes)"
+          >
+            <UInputNumber
+              :model-value="draft.cornerHoles"
+              :disabled="size.fixed"
+              :min="1"
+              @update:model-value="(v: number | null) => (draft.cornerHoles = v ?? 1)"
+            />
+          </UFormField>
+        </div>
         <ul
           v-if="createErrors.length"
           class="font-mono text-xs text-error"

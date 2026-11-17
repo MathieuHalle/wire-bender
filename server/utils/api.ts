@@ -56,7 +56,9 @@ function boardTooLarge(board: BoardFile): ApiResult | null {
 /** An empty `wirebender/1` board from `{ name, cols, rows, type }`; parseBoard rejects bad values. */
 function emptyBoard(json: Record<string, unknown>): unknown {
   // Unchecked here on purpose: parseBoard names what is wrong with cols, rows or type.
-  return blankBoard(json.name as string, { cols: json.cols as number, rows: json.rows as number, pitchMm: 2.54, type: json.type as BoardSides })
+  const b = blankBoard(json.name as string, { cols: json.cols as number, rows: json.rows as number, pitchMm: 2.54, type: json.type as BoardSides })
+  // A shape is passed through as sent: parseBoard says what is wrong with it.
+  return 'shape' in json ? { ...b, board: { ...b.board, shape: json.shape } } : b
 }
 
 const PRESET_ERROR = `preset: must be one of ${PRESET_IDS.join(', ')}`

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { blankBoard, BOARD_PRESETS, PRESET_IDS, presetBoard } from '~core/boardPresets'
 import { parseBoard } from '~core/schema'
+import { existingHoles } from '~core/boardShape'
 
 describe('board presets', () => {
   it('every preset is a valid board, named as asked', () => {
@@ -24,7 +25,9 @@ describe('board presets', () => {
 
   it('the connector starts with J1: pin 1 + (red), pin 2 - (black)', () => {
     const b = presetBoard('chogori-22004515', 'Cable 1')!
-    expect(b.board).toEqual({ cols: 2, rows: 2, pitchMm: 2.54, type: 'one-sided', blocked: [] })
+    expect(b.board).toEqual({ cols: 2, rows: 2, pitchMm: 2.54, type: 'one-sided', blocked: [], shape: { kind: 'round' } })
+    // Round, and its four holes all there.
+    expect(existingHoles(b.board)).toHaveLength(4)
     expect(b.parts).toEqual([{ ref: 'J1', footprint: 'header-2x2', at: 'A1', rotation: 0, value: 'CHOGORI 22004515-01', pins: { 1: '+', 2: '-', 3: null, 4: null } }])
     expect(b.nets).toEqual({ '+': { color: '#d62839' }, '-': { color: '#222222' } })
   })

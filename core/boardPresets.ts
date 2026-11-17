@@ -1,7 +1,7 @@
 // Board presets: the boards "New board" and `POST /api/boards` can start from. Each one is an
 // ordinary `wirebender/1` board: a size, a pitch, copper sides, and optionally starting parts,
 // nets and blocked holes. One list, shared by the app and the server.
-import { BENCH_DEFAULTS, type BoardFile, type Part } from './schema'
+import { BENCH_DEFAULTS, type BoardFile, type BoardShape, type Part } from './schema'
 
 export type BoardSides = 'one-sided' | 'two-sided'
 
@@ -17,15 +17,17 @@ export interface BoardPreset {
   parts?: Part[]
   /** Holes not to use: mounting holes, cut-outs (`board.blocked`). */
   blocked?: BoardFile['board']['blocked']
+  /** Round, or with cut corners (`board.shape`); absent for a rectangle. */
+  shape?: BoardShape
 }
 
 /** The empty board of that size: no parts, nets or wiring. */
-export function blankBoard(name: string, size: { cols: number, rows: number, pitchMm: number, type: BoardSides }): BoardFile {
+export function blankBoard(name: string, size: { cols: number, rows: number, pitchMm: number, type: BoardSides, shape?: BoardShape }): BoardFile {
   return {
     format: 'wirebender/1',
     revision: 0,
     name,
-    board: { cols: size.cols, rows: size.rows, pitchMm: size.pitchMm, type: size.type, blocked: [] },
+    board: { cols: size.cols, rows: size.rows, pitchMm: size.pitchMm, type: size.type, blocked: [], ...(size.shape ? { shape: size.shape } : {}) },
     netClasses: {},
     nets: {},
     rules: { keepAway: [], adjacency: [] },
@@ -55,6 +57,8 @@ export const BOARD_PRESETS: BoardPreset[] = [
     rows: 2,
     pitchMm: 2.54,
     type: 'one-sided',
+    // Round, like the connector; its four holes all stay.
+    shape: { kind: 'round' },
     nets: { '+': { color: '#d62839' }, '-': { color: '#222222' } },
     parts: [{ ref: 'J1', footprint: 'header-2x2', at: 'A1', rotation: 0, value: 'CHOGORI 22004515-01', pins: { 1: '+', 2: '-', 3: null, 4: null } }]
   }

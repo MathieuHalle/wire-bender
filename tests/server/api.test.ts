@@ -94,6 +94,16 @@ describe('create and import', () => {
       expect((r.body as { errors: string[] }).errors).toEqual(['name: must be a non-empty string'])
     })
 
+    it('a Custom create may name a shape; a bad one is a 422 from the board check', () => {
+      const r = create({ name: 'Round', cols: 10, rows: 10, type: 'one-sided', shape: { kind: 'round' } })
+      expect(r.status).toBe(200)
+      expect(stored((r.body as { id: string }).id).board.shape).toEqual({ kind: 'round' })
+      const bad = create({ name: 'Bad', cols: 10, rows: 10, type: 'one-sided', shape: { kind: 'oval' } })
+      expect(bad.status).toBe(422)
+      const empty = create({ name: 'Bad', cols: 10, rows: 10, type: 'one-sided', shape: { kind: 'corners', corners: { topLeft: { cut: 'notch', holes: 5 }, topRight: { cut: 'notch', holes: 5 } } } })
+      expect((empty.body as { errors: string[] }).errors).toEqual(['board.shape: the top edge\'s corner cuts leave no hole (5 + 5 of 10)'])
+    })
+
     it('custom is today\'s create', () => {
       const r = create({ name: 'B', preset: 'custom', cols: 4, rows: 3, type: 'one-sided' })
       expect(stored((r.body as { id: string }).id).board).toMatchObject({ cols: 4, rows: 3, pitchMm: 2.54, type: 'one-sided' })

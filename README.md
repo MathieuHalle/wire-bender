@@ -235,7 +235,7 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | Route | Does |
 | --- | --- |
 | `GET /api/boards?list=mine\|shared\|trash` | list your boards (`id`, `name`, `head`, `visibility`, `hasPassword`, ...; `mine` by default), those in the trash, or those shared with you (`key`, `name`, `owner`, `role`, `lastOpened`) |
-| `POST /api/boards` | `{ "board": <board json> }` imports; `{ "name", "cols", "rows", "type" }` creates an empty board, or `{ "name", "preset" }` one from a preset (`proto-4x6`, `proto-5x7`, `proto-7x9`, `chogori-22004515`); answers `{ id }` |
+| `POST /api/boards` | `{ "board": <board json> }` imports; `{ "name", "cols", "rows", "type", "shape"? }` creates an empty board (`shape`: round or cut corners, as in the board file), or `{ "name", "preset" }` one from a preset (`proto-4x6`, `proto-5x7`, `proto-7x9`, `chogori-22004515`); answers `{ id }` |
 | `POST /api/boards/import-bundle` | a bundle zip as the raw body (`Content-Type: application/zip`, up to 50 MB) becomes a new board with its history, `201 { id, name, head, revisions }` (signed in; counts toward the board limits and the create rate) |
 | `GET /api/boards/:id` | `{ id, name, head, board, role, signInToEdit, owner: { name }, forkedFrom }`. `id` is the key you asked with; `role` is `owner`, `edit` or `view`; `signInToEdit` is true for a signed-out visitor on an edit link; `forkedFrom` is `{ key, name }` of the board this one was forked from, for its owner while they can still open that board by the link they forked it through, else `null` |
 | `PUT /api/boards/:id` | `{ "board": <board json>, "baseRevision"?: n }`; `409` with `{ current }` if `baseRevision` is not the head. Only the owner's PUT can change the name; anyone else's keeps it |
