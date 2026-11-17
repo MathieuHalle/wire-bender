@@ -1,5 +1,6 @@
 import { edgeLabels } from '../edgeLabels'
 import { holeMm } from '../holes'
+import { existingHoles, outlinePoints } from '../boardShape'
 import type { BoardFile } from '../schema'
 import { BOARD_THICKNESS_MM, EDGE_MARGIN_PITCH, LABEL_OFFSET_PITCH } from './dims'
 import type { EdgeLabel, Scene3D, XZ } from './types'
@@ -10,12 +11,11 @@ import type { EdgeLabel, Scene3D, XZ } from './types'
  */
 export function boardGeometry(board: BoardFile): Pick<Scene3D, 'board' | 'holes' | 'pads' | 'labels'> {
   const { cols, rows, pitchMm, type } = board.board
-  const holes: XZ[] = []
-  for (let row = 1; row <= rows; row++)
-    for (let col = 1; col <= cols; col++) {
-      const m = holeMm({ col, row }, pitchMm)
-      holes.push({ x: m.x, z: m.y })
-    }
+  // Only the holes the board has (a round or cut board has fewer).
+  const holes: XZ[] = existingHoles(board.board).map((h) => {
+    const m = holeMm(h, pitchMm)
+    return { x: m.x, z: m.y }
+  })
   // A margin of EDGE_MARGIN_PITCH past the outer holes on every side, wide enough for the
   // printed numbers. It is the same on all four sides, so the centre (and every hole) stays put.
   const margin = EDGE_MARGIN_PITCH * pitchMm
@@ -24,7 +24,10 @@ export function boardGeometry(board: BoardFile): Pick<Scene3D, 'board' | 'holes'
   return {
     board: {
       widthMm, depthMm, thicknessMm: BOARD_THICKNESS_MM,
-      center: [((cols - 1) * pitchMm) / 2, -BOARD_THICKNESS_MM / 2, ((rows - 1) * pitchMm) / 2]
+      center: [((cols - 1) * pitchMm) / 2, -BOARD_THICKNESS_MM / 2, ((rows - 1) * pitchMm) / 2],
+      pitchMm,
+      // The same margin as the box, so the printed numbers stay on the board.
+      ...(board.board.shape ? { outline: outlinePoints(board.board, EDGE_MARGIN_PITCH).map(p => ({ x: p.x, z: p.y })) } : {})
     },
     holes,
     labels: edgeLabelsMm(cols, rows, pitchMm),

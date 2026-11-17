@@ -29,6 +29,25 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+describe('a shaped board in 3D', () => {
+  it('the slab follows the outline (extruded), the board\'s tag kept, its top at y = 0', () => {
+    const s = buildScene(mk({ board: { cols: 10, rows: 10, shape: { kind: 'round' } } as never }))
+    const { group } = buildMeshes(s)
+    const slab = (group.children as THREE.Mesh[]).find(m => m.name === 'board')!
+    expect(slab.geometry.type).toBe('ExtrudeGeometry')
+    expect(slab.userData.tag).toEqual({ kind: 'board', id: 'board' })
+    slab.geometry.computeBoundingBox()
+    const box = slab.geometry.boundingBox!.clone().translate(slab.position)
+    expect(box.max.y).toBeCloseTo(0)
+    expect(box.min.y).toBeCloseTo(-s.board.thicknessMm)
+  })
+
+  it('a plain board keeps its box', () => {
+    const { group } = buildMeshes(buildScene(mk({ board: { cols: 4, rows: 3 } })))
+    expect((group.children as THREE.Mesh[]).find(m => m.name === 'board')!.geometry.type).toBe('BoxGeometry')
+  })
+})
+
 describe('buildMeshes', () => {
   const scene = buildScene(board2())
 
@@ -348,6 +367,20 @@ describe('printed edge labels', () => {
     const uv = mesh.geometry.getAttribute('uv')
     expect(pos.getZ(0)).toBeLessThan(pos.getZ(1))
     expect(uv.getY(0)).toBeGreaterThan(uv.getY(1))
+  })
+
+  it('label size does not depend on the first two holes being neighbours', () => {
+    // Round 3 × 3: its holes are A2, B1, B2, B3, C2: the first two are a diagonal apart.
+    const quadWidth = (s: ReturnType<typeof buildScene>) => {
+      const mesh = labelMesh(s, fakeCanvas().canvas)!
+      mesh.geometry.computeBoundingBox()
+      const pos = mesh.geometry.getAttribute('position')
+      return Math.abs(pos.getX(1) - pos.getX(0)) + Math.abs(pos.getZ(1) - pos.getZ(0))
+    }
+    // At a 1 mm pitch a column number is shrunk to fit; a pitch guessed from that diagonal (1.41 mm) would not shrink it.
+    const round = buildScene(mk({ board: { cols: 3, rows: 3, pitchMm: 1, shape: { kind: 'round' } } as never }))
+    const plain = buildScene(mk({ board: { cols: 3, rows: 3, pitchMm: 1 } }))
+    expect(quadWidth(round)).toBeCloseTo(quadWidth(plain))
   })
 
   it('quads are centred on the scene labels', () => {

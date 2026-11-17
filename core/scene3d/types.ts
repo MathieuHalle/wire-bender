@@ -64,7 +64,11 @@ export type BoardEdge = 'top' | 'bottom' | 'left' | 'right'
 export interface EdgeLabel { text: string, edge: BoardEdge, x: number, z: number }
 
 export interface Scene3D {
-  board: { widthMm: number, depthMm: number, thicknessMm: number, center: V3 }
+  /**
+   * The slab: a box `widthMm × depthMm`, or for a shaped board (round, cut corners) its `outline`
+   * (x/z, board mm) extruded the same thickness, inside that box. `pitchMm` sizes the printed numbers.
+   */
+  board: { widthMm: number, depthMm: number, thicknessMm: number, center: V3, pitchMm: number, outline?: XZ[] }
   holes: XZ[]
   pads: { top: XZ[], bottom: XZ[] }
   /** Column numbers and row letters printed on the top surface's margin (none on the bottom). */

@@ -29,6 +29,11 @@ export interface Wire {
   bareSegments: number[]
   joints: HoleName[]
 }
+export type Corner = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'
+/** A corner cut `holes` deep: a 45° chamfer, or a square notch. */
+export interface CornerCut { cut: 'chamfer' | 'notch', holes: number }
+/** A board that is not a plain rectangle: round, or with cut corners (as seen from the top). */
+export type BoardShape = { kind: 'round' } | { kind: 'corners', corners: Partial<Record<Corner, CornerCut>> }
 export interface BoardFile {
   format: 'wirebender/1'
   revision: number
@@ -39,6 +44,8 @@ export interface BoardFile {
     pitchMm: number
     type: 'one-sided' | 'two-sided'
     blocked: { holes: HoleName[], reason: string }[]
+    /** Absent: the full `cols × rows` rectangle. Holes outside the shape are missing (`core/boardShape.ts`). */
+    shape?: BoardShape
   }
   netClasses: Record<string, { color?: string }>
   nets: Record<string, { class?: string, color?: string }>
@@ -65,6 +72,19 @@ export interface BoardFile {
 const hole = z.string()
 const side = z.enum(['top', 'bottom'])
 const role = z.enum(['in', 'out', 'pwr', 'oc', 'passive'])
+const cornerCut = z.strictObject({ cut: z.enum(['chamfer', 'notch']), holes: z.number().int().positive() })
+const boardShape = z.discriminatedUnion('kind', [
+  z.strictObject({ kind: z.literal('round') }),
+  z.strictObject({
+    kind: z.literal('corners'),
+    corners: z.strictObject({
+      topLeft: cornerCut.optional(),
+      topRight: cornerCut.optional(),
+      bottomLeft: cornerCut.optional(),
+      bottomRight: cornerCut.optional()
+    })
+  })
+])
 
 const partSchema = z.strictObject({
   ref: z.string().min(1),
@@ -93,7 +113,8 @@ export const boardFileSchema = z.strictObject({
     rows: z.number().int().positive(),
     pitchMm: z.number().positive(),
     type: z.enum(['one-sided', 'two-sided']),
-    blocked: z.array(z.strictObject({ holes: z.array(hole), reason: z.string() }))
+    blocked: z.array(z.strictObject({ holes: z.array(hole), reason: z.string() })),
+    shape: boardShape.optional()
   }),
   netClasses: z.record(z.string(), z.strictObject({ color: z.string().optional() })),
   nets: z.record(z.string(), z.strictObject({ class: z.string().optional(), color: z.string().optional() })),
@@ -164,6 +185,23 @@ function checkHoles(b: BoardFile): string[] {
   return errors
 }
 
+/** Two corner cuts on one edge must leave at least one hole on it. */
+function checkShape(b: BoardFile): string[] {
+  const s = b.board.shape
+  if (s?.kind !== 'corners') return []
+  const n = (c: Corner) => s.corners[c]?.holes ?? 0
+  const { cols, rows } = b.board
+  const edges: [string, Corner, Corner, number][] = [
+    ['top', 'topLeft', 'topRight', cols],
+    ['bottom', 'bottomLeft', 'bottomRight', cols],
+    ['left', 'topLeft', 'bottomLeft', rows],
+    ['right', 'topRight', 'bottomRight', rows]
+  ]
+  return edges
+    .filter(([, a, c, size]) => n(a) + n(c) >= size)
+    .map(([edge, a, c, size]) => `board.shape: the ${edge} edge's corner cuts leave no hole (${n(a)} + ${n(c)} of ${size})`)
+}
+
 function checkStraight(b: BoardFile): string[] {
   const errors: string[] = []
   const walk = (prefix: string, points: HoleName[]) => {
@@ -230,7 +268,7 @@ function checkTopSide(b: BoardFile): string[] {
   return errors
 }
 
-const checks: Check[] = [checkHoles, checkStraight, checkFootprints, checkUnique, checkTopSide]
+const checks: Check[] = [checkHoles, checkShape, checkStraight, checkFootprints, checkUnique, checkTopSide]
 
 export function parseBoard(json: unknown): ParseResult {
   const res = boardFileSchema.safeParse(json)

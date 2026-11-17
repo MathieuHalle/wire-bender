@@ -3,6 +3,7 @@
 // Placement rules: twoInOneHole, bodyCollision, underBody, touchesTab, blockedHole.
 import { FOOTPRINT_PITCH_MM, LEG_DIAMETER_MM, TAB_CLEARANCE_MM, tabPlateMm, type Rect } from '../footprints'
 import { holeKey, holeMm, holeName, parseHole, type Hole } from '../holes'
+import type { HoleName } from '../schema'
 import { joinAnd, names, type CheckContext, type Finding, type Run } from './context'
 
 /** Bodies may touch: only an overlap beyond this in both axes is a collision. */
@@ -158,6 +159,16 @@ export function placementRules(ctx: CheckContext): Finding[] {
           rule: 'blockedHole', severity: 'error', holes: [pp.part.at],
           message: `Off the board: pin ${pp.part.ref}.${p.name} of ${pp.part.ref} (placed at ${pp.part.at}) lands off the board`
         })
+  // Past the edge is a format error for these, so only a hole the board's shape removed lands
+  // here. (A straight run between two holes the board has never crosses a missing one: the
+  // points are enough.)
+  const offShape = (what: string, name: HoleName) => {
+    if (!ctx.onBoard(parseHole(name)))
+      out.push({ rule: 'blockedHole', severity: 'error', holes: [], message: `Off the board: ${what} ${name} is outside the board` })
+  }
+  for (const t of board.trails) for (const n of t.points) offShape(`trail ${t.id} point`, n)
+  for (const w of board.wires) for (const n of w.points) offShape(`wire ${w.id} point`, n)
+  for (const f of board.legFolds) offShape(`leg fold of ${f.lead} at`, f.to)
 
   const reason = new Map<string, string>()
   for (const b of board.board.blocked) for (const n of b.holes) reason.set(holeKey(parseHole(n)), b.reason)

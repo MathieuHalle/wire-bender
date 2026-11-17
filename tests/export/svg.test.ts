@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { wireCards, type WireCard } from '~core/bench/cards'
 import { parseBoard, type BoardFile } from '~core/schema'
+import { existingHoles } from '~core/boardShape'
 import { bendSvgs, boardOverviewSvg, legFoldSvg, scaleBarSvg, stripBarSvg } from '../../export/svg'
 import { mk, trail } from '../core/helpers'
 
@@ -178,6 +179,32 @@ describe('bendSvgs', () => {
     expect(svg).not.toContain('<script')
     expect(svg).not.toContain('W<1>')
     expect(svg).toContain('W&lt;1&gt;')
+  })
+})
+
+describe('boardOverviewSvg of a shaped board', () => {
+  const holeCircles = (svg: string) => (svg.match(/<circle [^>]*r="0.5"/g) ?? []).length
+
+  it('a round board draws its circle and only the holes it has', () => {
+    const b = mk({ board: { cols: 10, rows: 10, shape: { kind: 'round' } } as never })
+    const svg = boardOverviewSvg(b, 'top', { title: false })
+    expect(holeCircles(svg)).toBe(existingHoles(b.board).length)
+    expect(svg).not.toContain('rx="0.6"')
+    expect(svg).toContain(`r="${(5 * 2.54).toFixed(2).replace(/\.?0+$/, '')}"`)
+  })
+
+  it('a notched board draws its outline as a path, and leaves the notch empty', () => {
+    const b = mk({ board: { cols: 12, rows: 8, shape: { kind: 'corners', corners: { topLeft: { cut: 'notch', holes: 2 } } } } as never })
+    const svg = boardOverviewSvg(b, 'top', { title: false })
+    expect(holeCircles(svg)).toBe(12 * 8 - 4)
+    expect(svg).toContain('fill="#f4f8f5"')
+  })
+
+  it('a plain board still draws every hole on its rectangle', () => {
+    const b = mk({ board: { cols: 6, rows: 4 } })
+    const svg = boardOverviewSvg(b, 'top', { title: false })
+    expect(holeCircles(svg)).toBe(24)
+    expect(svg).toContain('rx="0.6"')
   })
 })
 

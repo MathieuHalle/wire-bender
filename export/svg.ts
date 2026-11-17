@@ -10,6 +10,7 @@ import type { LegFoldRow } from '../core/bench/sheet'
 import type { BoardFile, Side } from '../core/schema'
 import { safeColor } from '../core/color'
 import { ghostWires, sideMap, type Flip, type SideMap } from '../core/sideView'
+import { existingHoles, shapeOutline } from '../core/boardShape'
 
 export { safeColor }
 
@@ -238,11 +239,14 @@ export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: b
   const half = p / 2
   const height = (rows - 1) * p
 
-  // board and holes
-  s.rect(-half, -half, g.span + p, height + p, `rx="0.6" fill="#f4f8f5" stroke="#9fb5a6" stroke-width="0.25"`)
-  for (let row = 1; row <= rows; row++)
-    for (let col = 1; col <= cols; col++)
-      s.circle(g.pt({ col, row }), 0.5, `fill="#ffffff" stroke="${HOLE}" stroke-width="0.18"`)
+  // board and holes (a shaped board: its outline, and only the holes it has)
+  const body = `fill="#f4f8f5" stroke="#9fb5a6" stroke-width="0.25"`
+  const shape = shapeOutline(board.board, g)
+  if (!shape) s.rect(-half, -half, g.span + p, height + p, `rx="0.6" ${body}`)
+  else if (shape.kind === 'circle') s.circle({ x: shape.cx, y: shape.cy }, shape.r, body)
+  else s.poly([...shape.points, shape.points[0]!], `${body} stroke-linejoin="round"`)
+  for (const h of existingHoles(board.board))
+    s.circle(g.pt(h), 0.5, `fill="#ffffff" stroke="${HOLE}" stroke-width="0.18"`)
   for (const bl of board.board.blocked)
     for (const h of bl.holes) {
       const c = g.pt(parseHole(h))

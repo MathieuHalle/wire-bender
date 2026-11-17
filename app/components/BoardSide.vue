@@ -3,6 +3,7 @@
 // left-right or top-bottom, so text is never drawn mirrored: every coordinate goes through
 // `geo`, and every pointer position back through `geo.hole`.
 import { edgeLabels } from '~core/edgeLabels'
+import { holeExists } from '~core/boardShape'
 import { holeKey, holeName, type Hole } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
 import { placePart, type PlacedPart } from '~core/footprints'
@@ -126,13 +127,14 @@ function boardPoint(ev: { clientX: number, clientY: number }) {
   return { fc: h.col, fr: h.row }
 }
 
+/** True for a hole the board has (in the grid, inside its shape). */
 function inBoard(h: Hole) {
-  return h.col >= 1 && h.row >= 1 && h.col <= geo.value.cols && h.row <= geo.value.rows
+  return holeExists(props.board.board, h)
 }
 
 /** The hole under (fc, fr); in the Move tool every point snaps to one, as a Move click rounds. */
 function holeAt(fc: number, fr: number, snapAll = false): Hole | null {
-  return holeUnder(fc, fr, geo.value.cols, geo.value.rows, snapAll)
+  return holeUnder(fc, fr, inBoard, snapAll)
 }
 
 function onMove(ev: PointerEvent) {

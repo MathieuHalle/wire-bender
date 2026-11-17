@@ -2,6 +2,7 @@ import type { BoardFile, Part, Side } from './schema'
 import { holeKey, holeMm, holeName, parseHole, pathHoles, walkHoles, type Hole } from './holes'
 import { FOOTPRINTS, placePart, rotateOffset } from './footprints'
 import { OVERLAP_TOLERANCE_MM } from './check/placement'
+import { holeExists } from './boardShape'
 
 /** Quarter turns clockwise on screen, as `rotateOffset` turns. */
 export type Turns = 0 | 1 | 2 | 3
@@ -107,8 +108,7 @@ export function movePart(board: BoardFile, ref: string, p: Placement): MoveResul
   const pins = placePart(moved.parts[idx]!).pins.map(x => x.hole)
   const folds = moved.legFolds.filter(f => f.lead.startsWith(prefix)).map(f => parseHole(f.to))
   const holes: Hole[] = [...pins, ...folds]
-  const { cols, rows } = board.board
-  const off = (h: Hole) => h.col < 1 || h.row < 1 || h.col > cols || h.row > rows
+  const off = (h: Hole) => !holeExists(board.board, h)
   if (pins.some(off)) return { board: moved, reason: offBoard }
   if (folds.some(off)) return { board: moved, reason: foldOff }
 
@@ -143,8 +143,8 @@ export function moveWire(board: BoardFile, id: string, p: Placement): MoveResult
       ? { ...x, points: mapped.map(holeName), joints: x.joints.map(n => mapName(n, p)) }
       : x))
   }
-  const { cols, rows } = board.board
-  if (mapped.some(h => h.col > cols || h.row > rows)) return { board: moved, reason: off }
+  // Only its points: a laid run between two holes the board has never crosses a missing one.
+  if (mapped.some(h => !holeExists(board.board, h))) return { board: moved, reason: off }
   for (const h of mapped) {
     const reason = blockedReason(board, h)
     if (reason) return { board: moved, reason }
@@ -231,8 +231,9 @@ export function moveWireEnd(board: BoardFile, id: string, end: WireEnd, target: 
     const reason = wire.kind === 'flying' ? `Both ends of wire ${id} would be in ${targetName}.` : 'The end can\'t land on the point before it.'
     return { board: moved, reason }
   }
-  const { cols, rows } = board.board
-  if (target.col > cols || target.row > rows) return { board: moved, reason: `Wire ${id} would be off the board.` }
+  // The end, and the corner of an L: a cut corner can take the corner hole away.
+  if (!holeExists(board.board, target) || (cornerHole && !holeExists(board.board, cornerHole)))
+    return { board: moved, reason: `Wire ${id} would be off the board.` }
   if (wire.kind === 'laid' && runsOverItself(wire.points, points))
     return { board: moved, reason: `Wire ${id} would run back over itself.` }
   return { board: moved, reason: blockedReason(board, target) ?? (cornerHole ? blockedReason(board, cornerHole) : null) }
