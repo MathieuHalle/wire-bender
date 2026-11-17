@@ -15,9 +15,10 @@ export function hoverMovesTarget(pointerType: string | null | undefined): boolea
  * none. With `snapAll` (the Move tool) every point snaps to the hole a click there rounds to, so
  * the copy the hover shows is the one the click places.
  */
-export function hoverHole(fc: number, fr: number, cols: number, rows: number, snapAll: boolean): Hole | null {
+export function hoverHole(fc: number, fr: number, exists: (h: Hole) => boolean, snapAll: boolean): Hole | null {
   const h = { col: Math.round(fc), row: Math.round(fr) }
-  if (h.col < 1 || h.row < 1 || h.col > cols || h.row > rows) return null
+  // Off the board, or a hole its shape removed (`holeExists`).
+  if (!exists(h)) return null
   if (!snapAll && Math.hypot(fc - h.col, fr - h.row) > 0.5) return null
   return h
 }

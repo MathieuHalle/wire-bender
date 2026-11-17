@@ -2,6 +2,7 @@ import type { BoardFile, Side, Trail } from './schema'
 import { holeKey, holeName, parseHole, straightRun, walkHoles, type Hole } from './holes'
 import { placePart } from './footprints'
 import { buildConnectivity } from './connectivity'
+import { holeExists } from './boardShape'
 
 export interface Drawing { trailId: string, side: Side }
 export type EditResult = { ok: true, board: BoardFile, drawing: Drawing | null } | { ok: false, reason: string }
@@ -39,7 +40,9 @@ function hasOtherTrace(board: BoardFile, side: Side, h: Hole, exceptTrailId: str
 
 function rejection(board: BoardFile, side: Side, h: Hole): string | null {
   const name = holeName(h)
-  if (h.col < 1 || h.row < 1 || h.col > board.board.cols || h.row > board.board.rows) return `Hole ${name} is off the board.`
+  // Outside the grid, or a hole the board's shape removed. (A straight run between two holes the
+  // board has never crosses a missing one, so the clicked points are all there is to check.)
+  if (!holeExists(board.board, h)) return `Hole ${name} is off the board.`
   const k = holeKey(h)
   for (const b of board.board.blocked) {
     if (b.holes.some(n => holeKey(parseHole(n)) === k)) return `Hole ${name} is blocked: ${b.reason}`

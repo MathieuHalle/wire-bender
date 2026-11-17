@@ -25,6 +25,17 @@ function clicks(board: BoardFile, side: 'top' | 'bottom', names: string[]) {
   return { board: b, drawing: d }
 }
 
+describe('pencilClick on a shaped board', () => {
+  const round = mk({ board: { cols: 10, rows: 10, shape: { kind: 'round' } } as never })
+  it('refuses a hole outside the shape as off the board', () => {
+    const r = pencilClick(round, 'bottom', H('A1'), null)
+    expect(r).toEqual({ ok: false, reason: 'Hole A1 is off the board.' })
+  })
+  it('draws on the holes it has', () => {
+    expect(pencilClick(round, 'bottom', H('E1'), null).ok).toBe(true)
+  })
+})
+
 describe('pencilClick', () => {
   it('pencil draws an L', () => {
     const { board, drawing } = clicks(mk({ board: { rows: 12 } }), 'bottom', ['G2', 'G5', 'K5', 'K5'])

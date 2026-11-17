@@ -327,6 +327,17 @@ describe('the Move tool', () => {
     expect(t.held.value).toBeNull()
   })
 
+  test('holding, a click on a hole the board\'s shape removed is ignored', () => {
+    f = fakeBoard(mk({ board: { cols: 10, rows: 10, shape: { kind: 'round' } } as never, parts: [axial('R1', 'E4', 'E7', null)] }))
+    t = createTools(f.deps)
+    t.tool.value = 'move'
+    t.onMoveClick('top', at('E4'))
+    t.onMoveHover('top', h('E5'))
+    t.onMoveClick('top', at('A1')) // outside the circle
+    expect(t.held.value!.target).toEqual(h('E5'))
+    expect(f.applied).toHaveLength(0)
+  })
+
   test('holding, a click that rounds to a hole off the board is ignored: the copy stays where it is', () => {
     t.tool.value = 'move'
     t.onMoveClick('bottom', at('B6'))

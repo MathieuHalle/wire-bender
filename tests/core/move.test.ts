@@ -429,6 +429,38 @@ describe('pickAt', () => {
   })
 })
 
+describe('moves on a shaped board', () => {
+  const round = (over: Parameters<typeof mk>[0] = {}) =>
+    frozen({ ...over, board: { cols: 10, rows: 10, shape: { kind: 'round' } } as never })
+
+  it('a part with a pin on a missing hole is off the board', () => {
+    const b = round({ parts: [axial('R1', 'E4', 'E7', 'N1')] })
+    // A3 is outside the circle; A6 is not.
+    expect(movePart(b, 'R1', { from: H('E4'), to: H('A3'), turns: 0 }).reason).toBe('R1 would be off the board.')
+    expect(movePart(b, 'R1', { from: H('E4'), to: H('B4'), turns: 0 }).reason).toBeNull()
+  })
+
+  it('a whole wire with a point on a missing hole is off the board', () => {
+    const b = round({ wires: [wire('W1', ['E4', 'E7'])] })
+    expect(moveWire(b, 'W1', { from: H('E4'), to: H('A3'), turns: 0 }).reason).toBe('Wire W1 would be off the board.')
+  })
+
+  it('a wire end onto a missing hole is off the board', () => {
+    const b = round({ wires: [wire('W1', ['E4', 'E7'])] })
+    expect(moveWireEnd(b, 'W1', 'last', H('A1'), 'col-first').reason).toBe('Wire W1 would be off the board.')
+  })
+
+  it('an L whose corner falls in a notch is off the board; the other bend is fine', () => {
+    const b = frozen({
+      board: { cols: 10, rows: 10, shape: { kind: 'corners', corners: { topLeft: { cut: 'notch', holes: 2 } } } } as never,
+      wires: [wire('W1', ['A6', 'A4'])]
+    })
+    // Row first from A6 to C1 turns at A1, which the notch removed.
+    expect(moveWireEnd(b, 'W1', 'last', H('C1'), 'row-first').reason).toBe('Wire W1 would be off the board.')
+    expect(moveWireEnd(b, 'W1', 'last', H('C1'), 'col-first').reason).toBeNull()
+  })
+})
+
 describe('moveWireEnd, more', () => {
   it('the first end\'s joint moves with it', () => {
     const b = frozen({ wires: [wire('W1', ['B2', 'B6'], { joints: ['B2'] })] })

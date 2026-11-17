@@ -7,6 +7,7 @@ import type { BoardFile, Side } from '~core/schema'
 import { parseHole, type Hole } from '~core/holes'
 import { eraseSegment, pencilClick, toggleJoint, type Drawing, type EditResult } from '~core/edit'
 import { movePart, moveWire, moveWireEnd, pickAt, type Bend, type MoveResult, type Pick as MovePick, type Turns } from '~core/move'
+import { holeExists } from '~core/boardShape'
 import type { Tool } from '~/utils/boardView'
 import { stable } from '#shared/yboard'
 import type { LiveBoard } from './useLiveBoard'
@@ -169,8 +170,7 @@ export function createTools(deps: ToolDeps) {
     if (side !== h.side) return
     const hole = { col: Math.round(point.col), row: Math.round(point.row) }
     // Off the board there is no hole to aim at (the hover offers none either): the copy stays put.
-    const { cols, rows } = b.board
-    if (hole.col < 1 || hole.row < 1 || hole.col > cols || hole.row > rows) return
+    if (!holeExists(b.board, hole)) return
     if (hole.col === h.target.col && hole.row === h.target.row) place()
     else held.value = { ...h, target: hole }
   }
