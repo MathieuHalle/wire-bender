@@ -82,6 +82,21 @@ export function boardOutline(b: Board, marginPitch = 0.5): Outline {
   return { kind: 'polygon', points }
 }
 
+/**
+ * A shaped board's outline as a side draws it: board mm mapped through the side's `x` / `y`
+ * (its mirroring). Null for a plain board, which each drawing keeps as its own rectangle.
+ */
+export function shapeOutline(
+  b: Board,
+  map: { x(v: number): number, y(v: number): number },
+  marginPitch = 0.5
+): { kind: 'circle', cx: number, cy: number, r: number } | { kind: 'polygon', points: { x: number, y: number }[] } | null {
+  if (!b.shape) return null
+  const o = boardOutline(b, marginPitch)
+  if (o.kind === 'circle') return { kind: 'circle', cx: map.x(o.cx), cy: map.y(o.cy), r: o.r }
+  return { kind: 'polygon', points: o.points.map(p => ({ x: map.x(p.x), y: map.y(p.y) })) }
+}
+
 /** The outline as a polygon (a circle in `segments` points), board mm. */
 export function outlinePoints(b: Board, marginPitch = 0.5, segments = 64): { x: number, y: number }[] {
   const o = boardOutline(b, marginPitch)

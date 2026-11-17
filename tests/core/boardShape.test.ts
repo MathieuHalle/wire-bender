@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boardOutline, existingHoles, holeExists, outlinePoints } from '~core/boardShape'
+import { boardOutline, existingHoles, holeExists, outlinePoints, shapeOutline } from '~core/boardShape'
 import { holeMm, holeName, parseHole, type Hole } from '~core/holes'
 import { parseBoard, type BoardFile, type BoardShape } from '~core/schema'
 import { mk } from './helpers'
@@ -114,6 +114,27 @@ describe('boardOutline', () => {
 
   it('a round board is a circle on the grid\'s middle, as wide as its shorter side', () => {
     expect(boardOutline(settings(10, 10, { kind: 'round' }))).toEqual({ kind: 'circle', cx: 4.5 * 2.54, cy: 4.5 * 2.54, r: 5 * 2.54 })
+  })
+})
+
+describe('shapeOutline (the outline as a side draws it)', () => {
+  const same = { x: (v: number) => v, y: (v: number) => v }
+  it('a plain board has none: the side draws its own rectangle', () => {
+    expect(shapeOutline(settings(6, 4), same)).toBeNull()
+  })
+
+  it('a notch at the top left is drawn top right on a side mirrored left-right', () => {
+    const b = settings(10, 10, { kind: 'corners', corners: { topLeft: { cut: 'notch', holes: 2 } } })
+    const span = 9 * 2.54
+    const lr = { x: (v: number) => span - v, y: (v: number) => v }
+    // The notch's inside corner, between B2 and C3 (board mm 1.5 pitch, 1.5 pitch).
+    const pts = (shapeOutline(b, lr) as { kind: 'polygon', points: { x: number, y: number }[] }).points
+    expect(pts.some(p => Math.abs(p.x - (span - 1.5 * 2.54)) < 1e-9 && Math.abs(p.y - 1.5 * 2.54) < 1e-9)).toBe(true)
+    expect(pts.some(p => Math.abs(p.x - 1.5 * 2.54) < 1e-9 && Math.abs(p.y - 1.5 * 2.54) < 1e-9)).toBe(false)
+  })
+
+  it('a round board is its circle, centre mapped', () => {
+    expect(shapeOutline(settings(10, 10, { kind: 'round' }), same)).toEqual({ kind: 'circle', cx: 4.5 * 2.54, cy: 4.5 * 2.54, r: 5 * 2.54 })
   })
 })
 

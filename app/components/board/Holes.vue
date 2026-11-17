@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// The board itself: outline, every hole (with its pad ring on sides that have pads),
-// blocked holes crossed, and lit pads of the highlighted group.
+// The board itself: outline (its shape, if it has one), every hole it has (with its pad ring
+// on sides that have pads), blocked holes crossed, and lit pads of the highlighted group.
+import { existingHoles, shapeOutline } from '~core/boardShape'
 import { holeKey, parseHole } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
 import type { Geo, Lit } from '~/utils/boardView'
@@ -14,16 +15,12 @@ const outline = computed(() => {
   const half = g.pitch / 2
   return { x: -half, y: -half, w: g.span + g.pitch, h: g.rows * g.pitch }
 })
+/** A round or cut board's outline, as this side draws it (mirrored with it); null for a rectangle. */
+const shape = computed(() => shapeOutline(props.board.board, props.geo))
+const shapePoints = computed(() => (shape.value?.kind === 'polygon' ? shape.value.points.map(p => `${p.x},${p.y}`).join(' ') : ''))
+const fill = computed(() => (props.side === 'top' ? '#e4efe7' : '#dde8e0'))
 
-const holes = computed(() => {
-  const out: { k: string, x: number, y: number }[] = []
-  for (let row = 1; row <= props.geo.rows; row++)
-    for (let col = 1; col <= props.geo.cols; col++) {
-      const p = props.geo.pt({ col, row })
-      out.push({ k: holeKey({ col, row }), ...p })
-    }
-  return out
-})
+const holes = computed(() => existingHoles(props.board.board).map(h => ({ k: holeKey(h), ...props.geo.pt(h) })))
 
 const blocked = computed(() =>
   props.board.board.blocked.flatMap(b => b.holes.map(n => ({ n, ...props.geo.pt(parseHole(n)) }))))
@@ -37,13 +34,31 @@ const litPads = computed(() => {
 
 <template>
   <g pointer-events="none">
+    <circle
+      v-if="shape?.kind === 'circle'"
+      :cx="shape.cx"
+      :cy="shape.cy"
+      :r="shape.r"
+      :fill="fill"
+      stroke="#b7cbbd"
+      stroke-width="0.25"
+    />
+    <polygon
+      v-else-if="shape"
+      :points="shapePoints"
+      :fill="fill"
+      stroke="#b7cbbd"
+      stroke-width="0.25"
+      stroke-linejoin="round"
+    />
     <rect
+      v-else
       :x="outline.x"
       :y="outline.y"
       :width="outline.w"
       :height="outline.h"
       rx="0.6"
-      :fill="side === 'top' ? '#e4efe7' : '#dde8e0'"
+      :fill="fill"
       stroke="#b7cbbd"
       stroke-width="0.25"
     />
