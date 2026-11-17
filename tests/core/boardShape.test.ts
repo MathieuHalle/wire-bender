@@ -162,6 +162,27 @@ describe('the shape in the board file', () => {
     expect(errors(board({ kind: 'corners', corners: { topLeft: { cut: 'round', holes: 1 } } })).length).toBeGreaterThan(0)
   })
 
+  it('cuts on opposite corners that overlap or meet are an error: the board would split', () => {
+    const corners = (c: Record<string, unknown>, size: number) => errors(board({ kind: 'corners', corners: c }, size, size))
+    // 3 × 3: the two notches leave only A1 and C3, and the outline crosses itself.
+    expect(corners({ topRight: { cut: 'notch', holes: 2 }, bottomLeft: { cut: 'notch', holes: 2 } }, 3))
+      .toEqual(['board.shape: the topRight and bottomLeft corner cuts overlap or meet, splitting the board'])
+    // 4 × 4: the notches' inside corners touch at one point.
+    expect(corners({ topRight: { cut: 'notch', holes: 2 }, bottomLeft: { cut: 'notch', holes: 2 } }, 4))
+      .toEqual(['board.shape: the topRight and bottomLeft corner cuts overlap or meet, splitting the board'])
+    expect(corners({ topLeft: { cut: 'chamfer', holes: 4 }, bottomRight: { cut: 'notch', holes: 3 } }, 5))
+      .toEqual(['board.shape: the topLeft and bottomRight corner cuts overlap or meet, splitting the board'])
+  })
+
+  it('cuts that keep the board in one piece still parse (what the form makes, too)', () => {
+    const ok = (c: Record<string, unknown>, cols: number, rows: number) => expect(errors(board({ kind: 'corners', corners: c }, cols, rows))).toEqual([])
+    ok({ topLeft: { cut: 'notch', holes: 2 }, bottomRight: { cut: 'chamfer', holes: 3 } }, 10, 10)
+    const all = (cut: string, holes: number) => ({ topLeft: { cut, holes }, topRight: { cut, holes }, bottomLeft: { cut, holes }, bottomRight: { cut, holes } })
+    ok(all('notch', 2), 5, 5)
+    ok(all('chamfer', 2), 5, 5)
+    ok(all('notch', 3), 12, 8)
+  })
+
   it('cuts that leave an edge without a hole are an error, named', () => {
     expect(errors(board({ kind: 'corners', corners: { topLeft: { cut: 'notch', holes: 5 }, topRight: { cut: 'chamfer', holes: 5 } } })))
       .toEqual(['board.shape: the top edge\'s corner cuts leave no hole (5 + 5 of 10)'])

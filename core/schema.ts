@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { parseHole } from './holes'
 import { FOOTPRINTS } from './footprints'
+import { outlineIsSimple } from './boardShape'
 
 export type HoleName = string
 export type Side = 'top' | 'bottom'
@@ -197,9 +198,17 @@ function checkShape(b: BoardFile): string[] {
     ['left', 'topLeft', 'bottomLeft', rows],
     ['right', 'topRight', 'bottomRight', rows]
   ]
-  return edges
+  const errors = edges
     .filter(([, a, c, size]) => n(a) + n(c) >= size)
     .map(([edge, a, c, size]) => `board.shape: the ${edge} edge's corner cuts leave no hole (${n(a)} + ${n(c)} of ${size})`)
+  if (errors.length) return errors
+  // Cuts on opposite corners may not overlap or meet: the board would come apart in pieces.
+  for (const [a, c] of [['topLeft', 'bottomRight'], ['topRight', 'bottomLeft']] as [Corner, Corner][]) {
+    const pair = { [a]: s.corners[a], [c]: s.corners[c] }
+    if (s.corners[a] && s.corners[c] && !outlineIsSimple({ ...b.board, shape: { kind: 'corners', corners: pair } }))
+      errors.push(`board.shape: the ${a} and ${c} corner cuts overlap or meet, splitting the board`)
+  }
+  return errors
 }
 
 function checkStraight(b: BoardFile): string[] {

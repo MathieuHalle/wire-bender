@@ -144,6 +144,7 @@ The JSON Schema covers the shape: keys, types, enums, and number ranges. A reade
 - **Hole names.** Every hole is a string like `B7`: capital letters, then a number from 1 with no leading zero. The schema only says "string".
 - **Holes in range.** Every hole must lie inside `board.cols` by `board.rows`.
 - **Corner cuts leave every edge a hole.** The two cuts on one edge (for the top edge, `topLeft` and `topRight`) add up to fewer holes than that edge has.
+- **Opposite corner cuts stay apart.** The cuts at `topLeft` and `bottomRight` (and at `topRight` and `bottomLeft`) may not overlap or meet: the board would come apart in pieces.
 - **Holes outside the shape are missing.** A hole of the grid exists only if its centre is at least a quarter pitch inside the outline. Nothing may sit on a missing hole, but that is a check error (`Off the board`), not a format error: a board whose shape hides an item still reads.
 - **Straight steps.** In a trail, and in a laid wire, two neighbouring points share a row or a column. Flying wires are exempt.
 - **Known footprints.** `footprint` must be a built-in footprint id.
