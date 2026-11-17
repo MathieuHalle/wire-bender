@@ -177,12 +177,15 @@ export function buildMeshes(scene: Scene3D): BuiltMeshes {
     return m
   }
 
-  const { widthMm, depthMm, thicknessMm, center } = scene.board
+  const { widthMm, depthMm, thicknessMm, center, outline } = scene.board
+  // A round or cut board: its outline, extruded the slab's thickness (already in board x/z).
   const slab = new THREE.Mesh(
-    new THREE.BoxGeometry(widthMm, thicknessMm, depthMm),
+    outline
+      ? extrudeGeometry(outline, center[1] - thicknessMm / 2, center[1] + thicknessMm / 2)
+      : new THREE.BoxGeometry(widthMm, thicknessMm, depthMm),
     new THREE.MeshStandardMaterial({ color: COLORS.board, roughness: 0.85 })
   )
-  slab.position.set(...center)
+  if (!outline) slab.position.set(...center)
   slab.name = 'board'
   slab.userData.tag = { kind: 'board', id: 'board' } satisfies Tag
   group.add(slab)
@@ -270,8 +273,8 @@ export function labelMesh(scene: Scene3D, canvas: HTMLCanvasElement | null): THR
   texture.anisotropy = 8 // the renderer clamps it; keeps the numbers sharp at a slant
 
   const { center, thicknessMm } = scene.board
-  // The pitch, from the first two holes (neighbours in a row, or in a column on a one-column board).
-  const pitch = scene.holes.length > 1 ? Math.hypot(scene.holes[1]!.x - scene.holes[0]!.x, scene.holes[1]!.z - scene.holes[0]!.z) : Infinity
+  // The board's own pitch (the first two holes of a round or cut board need not be neighbours).
+  const pitch = scene.board.pitchMm
   const mmPerPx = LABEL_TEXT_MM / LABEL_PX
   const ly = center[1] + thicknessMm / 2 + LIFT
   const W = canvas.width

@@ -5,12 +5,33 @@ import { edgeLabels } from '~core/edgeLabels'
 import { holeMm } from '~core/holes'
 import { buildScene, EDGE_MARGIN_PITCH, LABEL_OFFSET_PITCH } from '~core/scene3d'
 import { mk } from './helpers'
+import { existingHoles } from '~core/boardShape'
 
 function board2(): BoardFile {
   const res = parseBoard(JSON.parse(readFileSync(new URL('../fixtures/channel-board-2.json', import.meta.url), 'utf8')))
   if (!res.ok) throw new Error(res.errors.join('\n'))
   return res.board
 }
+
+describe('scene3d board, shaped', () => {
+  it('a round board: only the holes it has, its pads, its outline, its pitch', () => {
+    const b = mk({ board: { cols: 10, rows: 10, type: 'two-sided', shape: { kind: 'round' } } as never })
+    const s = buildScene(b)
+    const n = existingHoles(b.board).length
+    expect(s.holes).toHaveLength(n)
+    expect(s.pads.bottom).toHaveLength(n)
+    expect(s.pads.top).toHaveLength(n)
+    expect(s.board.outline!.length).toBeGreaterThanOrEqual(32)
+    expect(s.board.pitchMm).toBe(2.54)
+  })
+
+  it('a plain board: every hole, no outline (the box), its pitch', () => {
+    const s = buildScene(mk({ board: { cols: 4, rows: 3 } }))
+    expect(s.holes).toHaveLength(12)
+    expect(s.board.outline).toBeUndefined()
+    expect(s.board.pitchMm).toBe(2.54)
+  })
+})
 
 describe('scene3d board', () => {
   it('board slab has a 1.5 pitch margin past the outer holes, for the printed numbers', () => {
