@@ -53,6 +53,7 @@ A side is `"top"` or `"bottom"`. Parts sit on the top. Solder pads are on the bo
 | `pitchMm` | number, above 0 | Distance between holes, in mm. |
 | `type` | `"one-sided"` or `"two-sided"` | Whether there are pads on the top side too. |
 | `blocked` | array | Holes you must not use (mounting holes, cut-outs). Each item is `{ "holes": [hole, ...], "reason": string }`. |
+| `shape` | object, optional | The board's outline when it is not the full rectangle. `{ "kind": "round" }`: a circle centred on the grid, as wide as the shorter side (`min(cols, rows)` pitches). `{ "kind": "corners", "corners": { ... } }`: a rectangle with cut corners; each of `topLeft`, `topRight`, `bottomLeft`, `bottomRight` (as seen from the top) may be `{ "cut": "chamfer" \| "notch", "holes": n }`, `n` a whole number from 1. A **notch** removes the `n × n` holes at the corner; a **chamfer** removes the holes nearer the corner than a 45° line (`n` = 1: the corner hole; 2: three holes). Without `shape`, the board is the full rectangle. |
 
 ### `netClasses` and `nets`
 
@@ -142,6 +143,8 @@ The JSON Schema covers the shape: keys, types, enums, and number ranges. A reade
 
 - **Hole names.** Every hole is a string like `B7`: capital letters, then a number from 1 with no leading zero. The schema only says "string".
 - **Holes in range.** Every hole must lie inside `board.cols` by `board.rows`.
+- **Corner cuts leave every edge a hole.** The two cuts on one edge (for the top edge, `topLeft` and `topRight`) add up to fewer holes than that edge has.
+- **Holes outside the shape are missing.** A hole of the grid exists only if its centre is at least a quarter pitch inside the outline. Nothing may sit on a missing hole, but that is a check error (`Off the board`), not a format error: a board whose shape hides an item still reads.
 - **Straight steps.** In a trail, and in a laid wire, two neighbouring points share a row or a column. Flying wires are exempt.
 - **Known footprints.** `footprint` must be a built-in footprint id.
 - **Unique refs and ids.** Part `ref`s are unique. Trail and wire `id`s are unique across both lists together.

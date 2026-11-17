@@ -61,6 +61,131 @@
             ],
             "additionalProperties": false
           }
+        },
+        "shape": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "round"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "corners"
+                },
+                "corners": {
+                  "type": "object",
+                  "properties": {
+                    "topLeft": {
+                      "type": "object",
+                      "properties": {
+                        "cut": {
+                          "type": "string",
+                          "enum": [
+                            "chamfer",
+                            "notch"
+                          ]
+                        },
+                        "holes": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "cut",
+                        "holes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "topRight": {
+                      "type": "object",
+                      "properties": {
+                        "cut": {
+                          "type": "string",
+                          "enum": [
+                            "chamfer",
+                            "notch"
+                          ]
+                        },
+                        "holes": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "cut",
+                        "holes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "bottomLeft": {
+                      "type": "object",
+                      "properties": {
+                        "cut": {
+                          "type": "string",
+                          "enum": [
+                            "chamfer",
+                            "notch"
+                          ]
+                        },
+                        "holes": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "cut",
+                        "holes"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "bottomRight": {
+                      "type": "object",
+                      "properties": {
+                        "cut": {
+                          "type": "string",
+                          "enum": [
+                            "chamfer",
+                            "notch"
+                          ]
+                        },
+                        "holes": {
+                          "type": "integer",
+                          "exclusiveMinimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "cut",
+                        "holes"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "kind",
+                "corners"
+              ],
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "required": [
