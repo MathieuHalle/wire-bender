@@ -79,7 +79,9 @@ export function boardOutline(b: Board, marginPitch = 0.5): Outline {
       points.push(holeMm({ col, row }, p))
     }
   }
-  return { kind: 'polygon', points }
+  // Two cuts on one edge can meet at the same point (a zero-length edge): keep it once.
+  const same = (a: { x: number, y: number }, c: { x: number, y: number }) => Math.abs(a.x - c.x) < 1e-9 && Math.abs(a.y - c.y) < 1e-9
+  return { kind: 'polygon', points: points.filter((q, i) => !same(q, points[(i + points.length - 1) % points.length]!)) }
 }
 
 /**
@@ -95,6 +97,41 @@ export function shapeOutline(
   const o = boardOutline(b, marginPitch)
   if (o.kind === 'circle') return { kind: 'circle', cx: map.x(o.cx), cy: map.y(o.cy), r: o.r }
   return { kind: 'polygon', points: o.points.map(p => ({ x: map.x(p.x), y: map.y(p.y) })) }
+}
+
+/** Which side of line a→b the point c is on: > 0, < 0, or 0 on the line (within `EPS` mm²). */
+const EPS = 1e-9
+function turn(a: { x: number, y: number }, b: { x: number, y: number }, c: { x: number, y: number }): number {
+  const v = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+  return Math.abs(v) < EPS ? 0 : Math.sign(v)
+}
+const within = (a: number, b: number, v: number) => Math.min(a, b) - EPS <= v && v <= Math.max(a, b) + EPS
+type P = { x: number, y: number }
+const onSegment = (a: P, b: P, c: P) => within(a.x, b.x, c.x) && within(a.y, b.y, c.y)
+/** True when segments ab and cd cross or touch (an end on the other, or overlapping). */
+function meet(a: P, b: P, c: P, d: P): boolean {
+  const t1 = turn(a, b, c)
+  const t2 = turn(a, b, d)
+  const t3 = turn(c, d, a)
+  const t4 = turn(c, d, b)
+  if (t1 !== t2 && t3 !== t4 && t1 * t2 <= 0 && t3 * t4 <= 0 && (t1 !== 0 || t2 !== 0)) return true
+  return (t1 === 0 && onSegment(a, b, c)) || (t2 === 0 && onSegment(a, b, d))
+    || (t3 === 0 && onSegment(c, d, a)) || (t4 === 0 && onSegment(c, d, b))
+}
+
+/**
+ * True when the outline (2D margin) is one simple polygon: no two edges that are not neighbours
+ * cross or touch. Cuts on opposite corners that overlap or meet break this, splitting the board.
+ */
+export function outlineIsSimple(b: Board): boolean {
+  const pts = outlinePoints(b, 0.5)
+  const n = pts.length
+  for (let i = 0; i < n; i++)
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue // neighbours through the closing edge
+      if (meet(pts[i]!, pts[(i + 1) % n]!, pts[j]!, pts[(j + 1) % n]!)) return false
+    }
+  return true
 }
 
 /** The outline as a polygon (a circle in `segments` points), board mm. */
