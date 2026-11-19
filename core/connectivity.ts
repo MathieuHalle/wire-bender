@@ -13,8 +13,10 @@
 // bottom pad of every hole on it, and every one of those holes has a pad (the strip's copper),
 // so a lead there is soldered to it and a bare conductor passing over touches it. On a
 // breadboard the strip is the clip and the "bottom pad" is where a lead or jumper end plugs in.
+// A cut (`cuts`) removes the copper at a strip hole: the strip is two conductors either side of
+// it, and the cut hole has no bottom pad at all (a lead there is soldered to nothing).
 import { holeKey, parseHole, pathHoles, type Hole } from './holes'
-import { stripDrilled } from './strips'
+import { stripSegments } from './strips'
 import { placePart } from './footprints'
 import type { BoardFile, Side } from './schema'
 
@@ -83,7 +85,7 @@ const wireNode = (id: string) => `wire:${id}`
 const padNode = (h: Hole, side: Side) => `pad:${holeKey(h)}:${side}`
 const stripNode = (id: string) => `strip:${id}`
 
-/** A strip's conductor id: its ends' grid names. */
+/** A strip's conductor id: its ends' grid names. A cut strip's pieces are named the same way, by their own ends (`stripSegments`). */
 export const stripId = (s: { from: string, to: string }): string => `${s.from}-${s.to}`
 
 interface Bare { node: string, id: string, side: Side, holes: Hole[], joined: Set<string> }
@@ -133,8 +135,10 @@ export function buildConnectivity(board: BoardFile): Connectivity {
 
   // ---- Which pads carry solder, and who put it there ---------------------------
   const solder = new Map<string, { hole: Hole, side: Side, by: string[] }>()
+  const cutHoles = new Set((board.cuts ?? []).map(n => holeKey(parseHole(n))))
   const addSolder = (h: Hole, side: Side, by: string) => {
     if (side === 'top' && !twoSided) return // one-sided boards have no top pads
+    if (side === 'bottom' && cutHoles.has(holeKey(h))) return // the copper there was cut away
     const node = padNode(h, side)
     const s = solder.get(node) ?? { hole: h, side, by: [] }
     if (!s.by.includes(by)) s.by.push(by)
@@ -165,7 +169,7 @@ export function buildConnectivity(board: BoardFile): Connectivity {
   }
   for (const f of board.legFolds) addSolder(parseHole(f.to), 'bottom', f.lead)
   // Every strip hole has copper on the bottom: the strip's own pad.
-  const strips = (board.board.strips ?? []).map(st => ({ id: stripId(st), holes: stripDrilled(st) }))
+  const strips = stripSegments(board.board, board.cuts)
   for (const st of strips) for (const h of st.holes) addSolder(h, 'bottom', st.id)
   for (const [node, s] of solder) add(node, { kind: 'pad', hole: s.hole, side: s.side })
   for (const st of strips) {

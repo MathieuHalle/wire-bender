@@ -2,7 +2,8 @@
 //
 // Shared types and the facts every rule group reads: placed parts, what sits in each
 // hole, where each trail and wire runs, and the connectivity graph.
-import { buildConnectivity, stripId, type Connectivity } from '../connectivity'
+import { buildConnectivity, type Connectivity } from '../connectivity'
+import { stripSegments } from '../strips'
 import { placePart, type PlacedPart } from '../footprints'
 import { holeKey, holeName, parseHole, pathHoles, type Hole } from '../holes'
 import type { BoardFile, HoleName, PinRole, Side } from '../schema'
@@ -12,6 +13,7 @@ import { holeLabel, stripLabel } from '../holeLabel'
 export type Severity = 'error' | 'warning' | 'caution'
 export type RuleId = 'openNet' | 'short' | 'singleLeadNet' | 'contention' | 'twoInOneHole'
   | 'bodyCollision' | 'underBody' | 'touchesTab' | 'blockedHole' | 'keepAway' | 'adjacent' | 'missingJoint'
+  | 'cutProposal' | 'onCut' | 'idleCut'
 export type AdjacencyLevel = 'supply' | 'mcu' | 'harmless'
 
 export interface Finding {
@@ -102,11 +104,17 @@ export function buildContext(board: BoardFile): CheckContext {
     leadsAt, wireEndsAt, runs,
     runById: new Map(runs.map(r => [r.id, r])),
     sides: board.board.type === 'two-sided' ? ['bottom', 'top'] : ['bottom'],
-    stripIds: new Set((board.board.strips ?? []).map(stripId)),
+    stripIds: new Set(stripSegments(board.board, board.cuts).map(s => s.id)),
     label: h => holeLabel(board.board, h),
     // In the grid and inside the board's shape.
     onBoard: h => holeExists(board.board, h)
   }
+}
+
+/** "A", "A or B", "A, B or C". */
+export function joinOr(xs: string[]): string {
+  if (xs.length <= 1) return xs.join('')
+  return `${xs.slice(0, -1).join(', ')} or ${xs[xs.length - 1]}`
 }
 
 /** "A", "A and B", "A, B and C". */

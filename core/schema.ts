@@ -1,8 +1,8 @@
 import { z } from 'zod'
-import { holeName as holeNameOf, parseHole } from './holes'
+import { holeKey as holeKeyOf, holeName as holeNameOf, parseHole } from './holes'
 import { FOOTPRINTS } from './footprints'
 import { existingHoles, outlineIsSimple } from './boardShape'
-import { stripHoles } from './strips'
+import { stripHoles, stripIndex } from './strips'
 
 export type HoleName = string
 export type Side = 'top' | 'bottom'
@@ -69,6 +69,8 @@ export interface BoardFile {
   wires: Wire[]
   legFolds: { lead: string, to: HoleName }[]
   solderBridges: { side: Side, a: HoleName, b: HoleName }[]
+  /** A stripboard's cuts: the copper around each of these strip holes is removed, splitting the strip. */
+  cuts?: HoleName[]
   bench: {
     endLeadMm: number
     bendAllowanceMm: number
@@ -149,6 +151,7 @@ export const boardFileSchema = z.strictObject({
   })),
   legFolds: z.array(z.strictObject({ lead: z.string(), to: hole })),
   solderBridges: z.array(z.strictObject({ side, a: hole, b: hole })),
+  cuts: z.array(hole).optional(),
   bench: z.strictObject({
     endLeadMm: z.number().nonnegative().default(benchDefaults.endLeadMm),
     bendAllowanceMm: z.number().nonnegative().default(benchDefaults.bendAllowanceMm),
@@ -197,6 +200,7 @@ function checkHoles(b: BoardFile): string[] {
     w.joints.forEach((n, j) => check(`wires[${i}].joints[${j}]`, n))
   })
   b.legFolds.forEach((f, i) => check(`legFolds[${i}].to`, f.to))
+  b.cuts?.forEach((n, i) => check(`cuts[${i}]`, n))
   b.solderBridges.forEach((s, i) => {
     check(`solderBridges[${i}].a`, s.a)
     check(`solderBridges[${i}].b`, s.b)
@@ -270,6 +274,21 @@ function checkStrips(b: BoardFile): string[] {
     }
   })
   if (b.board.shape?.kind === 'strips' && !strips.length) errors.push('board.shape: strips names no strip')
+  // Cuts: on a drilled strip hole, once each; a breadboard is never cut.
+  const drilled = stripIndex(b.board)
+  const seen = new Set<string>()
+  b.cuts?.forEach((n, i) => {
+    if (b.board.type === 'breadboard') errors.push(`cuts[${i}]: a breadboard's clips can't be cut`)
+    else if (seen.has(n)) errors.push(`cuts[${i}]: duplicate ${n}`)
+    else {
+      try {
+        if (!drilled.has(holeKeyOf(parseHole(n)))) errors.push(`cuts[${i}]: ${n} is not on a strip`)
+      } catch {
+        // a bad name: reported by checkHoles
+      }
+    }
+    seen.add(n)
+  })
   if (b.board.type === 'breadboard' && !strips.length) errors.push('board.strips: a breadboard has no strips')
   return errors
 }

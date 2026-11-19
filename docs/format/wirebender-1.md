@@ -42,6 +42,7 @@ A side is `"top"` or `"bottom"`. Parts sit on the top. Solder pads are on the bo
 | `wires` | array | Wires. |
 | `legFolds` | array | Component leads folded over to another hole. |
 | `solderBridges` | array | Solder blobs joining two neighbouring pads. |
+| `cuts` | array of holes, optional | A stripboard's cuts. See `cuts` below. |
 | `bench` | object | Settings for the bench sheet (wire lengths and paper). |
 
 ### `board`
@@ -128,6 +129,10 @@ A trail is bare copper wire laid along the pads. Each is `{ "id": string, "side"
 
 `{ "side": side, "a": hole, "b": hole }`. A blob of solder joining two pads on one side.
 
+### `cuts`
+
+A list of holes on a stripboard (a `one-sided` or `two-sided` board with `strips`) where the strip is cut: the copper around the hole is drilled or scraped away. The strip is two conductors, one either side of the cut, and the cut hole joins nothing on the bottom: a lead or wire end there is soldered to nothing (the check warns). A cut must be on a drilled strip hole, once; a `breadboard` has no cuts.
+
 ### `bench`
 
 | Key | Type | Default | Meaning |
@@ -151,6 +156,7 @@ The JSON Schema covers the shape: keys, types, enums, and number ranges. A reade
 - **Opposite corner cuts stay apart.** The cuts at `topLeft` and `bottomRight` (and at `topRight` and `bottomLeft`) may not overlap or meet: the board would come apart in pieces.
 - **Strips are straight and apart.** A strip runs along one row or one column, and no two strips share a hole. A `skip` hole lies between the strip's ends. The `strips` shape needs at least one strip, and so does a `breadboard`.
 - **Row labels.** `rowLabels` has one entry per row, and no label is made of capital letters only (`A`, `AB`), so a printed name is never read as a grid name. Labels may repeat (a breadboard prints `+` and `-` on both pairs of rails); a reader shows a repeated one with its grid name.
+- **Cuts are on strips.** Each hole in `cuts` is a drilled hole of a strip, listed once. A `breadboard` has no `cuts`.
 - **Nothing soldered on a breadboard.** A `breadboard` has no `trails`, `legFolds` or `solderBridges`, and its wires lie on the `top` with no `joints` and no `bareSegments`.
 - **Holes outside the shape are missing.** A hole of the grid exists only if its centre is at least a quarter pitch inside the outline. Nothing may sit on a missing hole, but that is a check error (`Off the board`), not a format error: a board whose shape hides an item still reads.
 - **Straight steps.** In a trail, and in a laid wire, two neighbouring points share a row or a column. Flying wires are exempt.

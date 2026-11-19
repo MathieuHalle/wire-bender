@@ -53,3 +53,41 @@ export function stripIndex(b: Board): Map<string, number> {
 }
 
 export const isBreadboard = (b: Board): boolean => b.type === 'breadboard'
+
+/** A stripboard: a soldered board with strips (cuts and the Cut tool apply). */
+export const isStripboard = (b: Board): boolean => b.type !== 'breadboard' && (b.strips?.length ?? 0) > 0
+
+/** A piece of a strip between cuts: its id (`B1-B6`, its end holes' grid names), its drilled holes in order. */
+export interface StripSegment { id: string, strip: number, holes: Hole[] }
+
+/**
+ * Every strip cut into its pieces at `cuts` (the cut holes belong to no piece: the copper there is
+ * gone). A strip with no cut is one piece, `from-to`. Pieces with no hole left are dropped.
+ */
+export function stripSegments(b: Board, cuts: readonly string[] = []): StripSegment[] {
+  const cut = new Set(cuts)
+  const out: StripSegment[] = []
+  ;(b.strips ?? []).forEach((s, i) => {
+    let hs: Hole[]
+    try {
+      hs = stripDrilled(s)
+    } catch {
+      return
+    }
+    if (!cut.size || !hs.some(h => cut.has(holeName(h)))) {
+      out.push({ id: `${s.from}-${s.to}`, strip: i, holes: hs })
+      return
+    }
+    let run: Hole[] = []
+    const flush = () => {
+      if (run.length) out.push({ id: `${holeName(run[0]!)}-${holeName(run[run.length - 1]!)}`, strip: i, holes: run })
+      run = []
+    }
+    for (const h of hs) {
+      if (cut.has(holeName(h))) flush()
+      else run.push(h)
+    }
+    flush()
+  })
+  return out
+}
