@@ -55,7 +55,7 @@ Four steps, each one released on its own:
 ## The format (my calls)
 
 ```json
-"board": { "cols": 63, "rows": 20, "pitchMm": 2.54, "type": "breadboard", "blocked": [],
+"board": { "cols": 63, "rows": 18, "pitchMm": 2.54, "type": "breadboard", "blocked": [],
            "shape": { "kind": "strips" },
            "strips": [{ "from": "F1", "to": "J1" }, { "from": "A3", "to": "A62" }] }
 "cuts": ["C7", "C12"]
@@ -103,7 +103,7 @@ Four steps, each one released on its own:
 
 ## The app (my calls)
 
-- **New board:** stripboard presets (sizes to confirm, see the questions below) and the three
+- **New board:** the two stripboard presets and the three
   breadboards. The custom size gets a "Copper" choice: none (perfboard) or strips along the rows.
 - **Stripboard:** a **Cut** tool that toggles a cut at a hole on the bottom side. A cut is drawn
   as a bare ring with no copper. Proposed cuts from a finding show as dashed rings, and clicking
@@ -116,6 +116,52 @@ Four steps, each one released on its own:
   lists each part's holes and each jumper's ends and length, and no solder steps.
 - **MCP / API:** `create_board` and `POST /api/boards` take the new preset ids. Boards are still
   read and written whole.
+
+## Breadboard layout and look (my calls, owner: "make it look a little like a breadboard")
+
+The owner's reference is the 400-hole half breadboard (BPS-BB400 style): an ivory block, two
+halves of 5-hole clip strips across a centre channel, and two rails along each long edge, marked
+with red `+` and blue `-` lines. Its holes are grouped in fives, with a space between groups.
+
+- **Grid rows, top to bottom:** rail, rail, one empty row, `a`–`e`, two empty rows (the channel:
+  `e` to `f` is 0.3", so a DIP chip straddles it), `f`–`j`, one empty row, rail, rail. That's 18
+  grid rows. Empty rows are missing holes (`shape: strips`).
+- **Clip strips:** one strip per column on each side, `a`–`e` and `f`–`j`, 5 holes.
+- **Rails:** groups of 5 with one missing hole between groups, on the grid columns. A rail is one
+  strip when it runs the full length, or two strips when it is split. On real boards the rail
+  groups can sit up to half a pitch off the columns. That doesn't change any connection (jumpers
+  reach either way), so the grid is kept.
+- **Sizes:** **830** (63 columns, rails of 50 holes in 10 groups; many are split in the middle, so
+  the preset splits them and says so in the name, with an unsplit one as well), **400** (30
+  columns, rails of 25 holes in 5 groups, not split), **170** (17 columns, no rails, 10 grid rows).
+  Taken from sellers' drawings: confirm on a real board before release.
+- **Printed names (owner: yes):** the preset carries a display-only label for each grid row (`+`,
+  `-`, `a`–`j`, nothing for empty rows) and numbers columns 1, 5, 10, … like the print. The edges
+  of 2D and 3D, the bench sheet and findings show these names, as in `a12` (the file and the API
+  keep grid names, as in `D12`). A finding gives both when they differ: `a12 (D12)`.
+- **2D look:** an ivory board, square holes, the channel drawn as a groove, the red and blue rail
+  lines with `+` and `-` at both ends, and the printed row letters and column numbers. A clip
+  strip lights up whole when hovered, so the owner can see what is joined.
+- **3D look:** an ivory block about 8.5 mm thick, square holes, the channel as a groove, the rail
+  lines and print on the top. Parts stand in it with their legs going in, not soldered. Jumpers
+  arch over it.
+
+## Stripboard presets (my calls, owner: "pick the top 1–2 most common")
+
+- **Veroboard 95 × 127 mm:** 36 strips × 50 holes.
+- **Veroboard 64 × 95 mm:** 24 strips × 37 holes.
+- Both are one-sided, with copper strips on the bottom along the long side (each grid row is one
+  strip). The counts come from sellers' listings: unconfirmed, like `proto-4x6`. "Custom" can
+  make any other size with strips along the rows.
+
+## Order (owner: "as it makes most sense")
+
+1. **Strips**, then **breadboard**: one release. Breadboard is the first user of strips, so strips
+   aren't released untested, and it needs no new tool.
+2. **Stripboard**: cuts, the Cut tool and proposals, on top of strips.
+3. **Board features**: last, because the mounting hole positions are to be measured first (with
+   the `proto-4x6` count). It changes `holeExists`, which strips already use, so nothing built
+   before has to change.
 
 ## Step 4: no-go zones, cutouts and mounting holes (my calls)
 
@@ -144,11 +190,17 @@ Three kinds of feature, from lightest to heaviest:
   offers: mounting hole, standoff, heatsink, keep clear). Click a zone to edit its reason or remove
   it. A zone is one `blocked` item, so the format doesn't change. Blocked holes are still drilled
   and padded: blocking says "don't use", it doesn't remove anything.
-- **Cutouts** are rectangles on the grid, `from` and `to` as corners. The holes inside are
-  missing (`holeExists`, as with a shape), and the material is removed half a pitch past them, like
-  a notch. They may not touch the outline or each other (the board would come apart, or the hole
-  would be a notch). The 3D slab is built with them as openings, and the 2D view and the bench
-  sheet draw them.
+- **Cutouts** come in three kinds (owner: round and free-size ones "would be nice"):
+  - `{ "from": "D5", "to": "F12" }`: a rectangle on the grid. The material is removed half a
+    pitch past those holes, like a notch. The Block tool's drag can make one.
+  - `{ "kind": "rect", "x", "y", "widthMm", "heightMm" }`: any size, in mm from hole `A1` (a
+    connector's window, a slot).
+  - `{ "kind": "round", "x", "y", "diameterMm" }`: a pot shaft, a LED bezel, a cable hole.
+
+  Each has an optional `reason`. A grid hole is missing when its centre is inside a cutout or
+  less than ¼ pitch from its edge (the same ¼ pitch rule as shapes). Cutouts may not touch the
+  outline or each other (the board would come apart, or the hole would be a notch). The 3D slab
+  is built with them as openings, and the 2D view and the bench sheet draw them.
 - **Mounting holes** are placed in mm from the centre of hole `A1`, so they can sit between holes
   or in the margin, as on real proto boards. A grid hole whose centre is within the radius is
   missing. One within the radius plus `clearanceMm` is blocked, with the reason "mounting hole".
@@ -164,20 +216,17 @@ Three kinds of feature, from lightest to heaviest:
   measured.
 - The format stays `wirebender/1` (new optional fields).
 
-## Questions for the owner
+## Owner's answers (2026-11-19)
 
-1. **Breadboard row names.** On a breadboard's grid, the rails and gaps take rows too, so the
-   printed row `a` would be WireBender's row `D` or so. Should a breadboard show its printed names
-   (`a`–`j`, `+`, `-`) on the edges? My call: yes, by a display-only label list in the preset,
-   while the file keeps grid names. The other choice is to keep grid names everywhere.
-2. **Breadboard measurements.** I need the rail layout from a real board: how many holes per rail
-   group and how far the rails sit from rows `a` and `j`. On the 830, whether the rails are split
-   in the middle. Same as the `proto-4x6` count: to confirm before release.
-3. **Stripboard sizes.** Which stripboards do you use (strips × holes, strip direction)? Those
-   become the presets.
-4. **Order.** Breadboard first (smaller, it tests strips without a new tool), then stripboard. Or
-   stripboard first, as first agreed. Step 4 doesn't depend on the others: it could come first.
-5. **Cutout shapes.** Rectangles on the grid only, or round and free-size cutouts too (for a
-   connector or a pot shaft)? My call: rectangles, plus round through mounting holes.
-6. **Mounting hole sizes.** The usual ones on your boards (M2, M2.5 or M3, so 2.2, 2.7 or 3.2 mm
-   holes) and where they sit on the proto boards, to measure with the `proto-4x6` count.
+1. Breadboard row names: show the printed names (above).
+2. Breadboard: "around 5–8 holes per side", make it look like one (above; 5, from the reference).
+3. Stripboard: the owner doesn't use them; the two most common sizes (above).
+4. Order: as it makes most sense (above).
+5. Round and free-size cutouts: "would be nice" (step 4).
+6. Mounting hole sizes and places: the owner measures them with the `proto-4x6` count.
+
+## To confirm before each release
+
+- Strips + breadboard: the three layouts against a real board (rail groups, the 830's split).
+- Stripboard: the two Veroboard hole counts.
+- Board features: mounting hole sizes and places on the proto boards; the `proto-4x6` count.
