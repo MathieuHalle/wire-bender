@@ -14,7 +14,7 @@ board shapes next, stripboard (Veroboard) as its own project after.
   start the board with parts and nets (the connector's `+` / `-` header). **Custom** keeps today's
   fields (columns, rows, one- or two-sided, 2.54 mm) and is the default.
 - `POST /api/boards` accepts `{ "name", "preset" }` beside today's `{ "name", "cols", "rows", "type" }`
-  (which stays as it is). An unknown preset is a `422` that lists the preset names.
+  (which stays as it is). An unknown preset is a `422` that lists the preset ids (stable, for scripts).
 - Presets may include **blocked holes** (`board.blocked`, already in the format: "mounting holes,
   cut-outs"), so a board with holes is a preset like any other.
 
