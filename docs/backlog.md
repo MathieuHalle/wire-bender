@@ -6,8 +6,9 @@ Small things noticed along the way, not yet planned. Newest first. Take an item 
 ## Next project: stripboard and breadboard
 
 *Agreed 2026-11-16 (stripboard), third of three after presets and shapes. Paused 2026-11-19, then
-widened to breadboards and picked up the same day (owner).* Both boards have copper the owner did
-not draw: holes joined before anything is placed. Three steps:
+widened to breadboards and picked up the same day (owner); design draft:
+`docs/superpowers/specs/2026-11-19-wirebender-strips-design.md`.* Both boards have copper the owner did
+not draw: holes joined before anything is placed. Four steps:
 
 1. **The shared layer:** built-in strips in the board file, worked into connectivity, the checks,
    the drawing and 3D.
@@ -16,6 +17,8 @@ not draw: holes joined before anything is placed. Three steps:
    folds don't apply, and the bench sheet lists where each part goes.
 3. **Stripboard (Veroboard):** strips along every row, a "cut" tool, cuts in the file, checks on
    cuts, and a list of cuts on the bench sheet.
+4. **Board features:** a Block tool for no-go zones, cutouts through the board and mounting
+   holes, all shown in 3D (owner, 2026-11-19).
 
 Start with a design conversation, as the Move tool did.
 

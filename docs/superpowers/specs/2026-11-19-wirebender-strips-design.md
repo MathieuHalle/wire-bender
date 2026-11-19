@@ -10,11 +10,15 @@ is cut **at a hole**; the check **proposes** cuts and the owner places them; bre
 the **full (830), half (400) and mini (170)** boards. The other calls are mine, marked for the
 owner to check.
 
-Three steps, each one released on its own:
+Four steps, each one released on its own:
 
 1. **Strips:** built-in copper in the board file, in connectivity, the checks, 2D and 3D.
 2. **Breadboard:** a board type with nothing soldered, and the three presets.
 3. **Stripboard:** cuts, the Cut tool, cut proposals, and cuts on the bench sheet.
+4. **Board features:** no-go zones drawn with a Block tool, cutouts through the board, and
+   mounting holes. All three show in 2D, in 3D and on the bench sheet. (Owner, 2026-11-19:
+   "add both to the design as an extra step", and the 3D view must include them.) It doesn't
+   depend on strips, and it applies to every board type.
 
 ## Goals
 
@@ -113,6 +117,53 @@ Three steps, each one released on its own:
 - **MCP / API:** `create_board` and `POST /api/boards` take the new preset ids. Boards are still
   read and written whole.
 
+## Step 4: no-go zones, cutouts and mounting holes (my calls)
+
+Today `board.blocked` (holes with a reason) is drawn crossed in 2D, refused by the tools and
+reported by the check. But only a preset, the API or the MCP can add one, and 3D drills and pads
+a blocked hole like any other. The board itself is always solid: a shape removes holes only at
+the outline (the shapes design left "holes or slots inside the board" out; this step takes them
+in).
+
+Three kinds of feature, from lightest to heaviest:
+
+| Feature | The board there | Holes in it | 3D |
+| --- | --- | --- | --- |
+| **No-go zone** (`blocked`, exists) | solid | exist, must not be used | a hatched patch on the top, with its reason on hover |
+| **Cutout** (new) | removed | missing | an opening through the slab |
+| **Mounting hole** (new) | a round hole drilled | missing under it; blocked around it | a hole through the slab, with a ring for the screw head or standoff |
+
+```json
+"board": { ...,
+  "blocked":  [{ "holes": ["H10", "H11", "J10", "J11"], "reason": "heatsink" }],
+  "cutouts":  [{ "from": "D5", "to": "F12", "reason": "slot for the ribbon cable" }],
+  "mountingHoles": [{ "x": -2.5, "y": -2.5, "diameterMm": 3.2, "clearanceMm": 3 }] }
+```
+
+- **The Block tool:** drag over holes to block that rectangle, and type a reason (a list
+  offers: mounting hole, standoff, heatsink, keep clear). Click a zone to edit its reason or remove
+  it. A zone is one `blocked` item, so the format doesn't change. Blocked holes are still drilled
+  and padded: blocking says "don't use", it doesn't remove anything.
+- **Cutouts** are rectangles on the grid, `from` and `to` as corners. The holes inside are
+  missing (`holeExists`, as with a shape), and the material is removed half a pitch past them, like
+  a notch. They may not touch the outline or each other (the board would come apart, or the hole
+  would be a notch). The 3D slab is built with them as openings, and the 2D view and the bench
+  sheet draw them.
+- **Mounting holes** are placed in mm from the centre of hole `A1`, so they can sit between holes
+  or in the margin, as on real proto boards. A grid hole whose centre is within the radius is
+  missing. One within the radius plus `clearanceMm` is blocked, with the reason "mounting hole".
+  3D drills it through the slab and draws the clearance ring on both sides. The margin grows when
+  a mounting hole needs it.
+- **Strips and features:** a blocked hole on a strip is still copper (only a cut separates). A
+  cutout or a mounting hole across a strip removes that copper, so it splits the strip the way a
+  cut does. Connectivity takes the strip's holes from `holeExists`.
+- **Checks:** anything on a missing hole is "Off the board" (as today). Anything on a blocked hole
+  is "Blocked hole", with its reason (as today). A part's body over a cutout or a mounting hole's
+  clearance is a warning.
+- **New board and presets:** the blank proto boards get their corner mounting holes once
+  measured.
+- The format stays `wirebender/1` (new optional fields).
+
 ## Questions for the owner
 
 1. **Breadboard row names.** On a breadboard's grid, the rails and gaps take rows too, so the
@@ -125,4 +176,8 @@ Three steps, each one released on its own:
 3. **Stripboard sizes.** Which stripboards do you use (strips × holes, strip direction)? Those
    become the presets.
 4. **Order.** Breadboard first (smaller, it tests strips without a new tool), then stripboard. Or
-   stripboard first, as first agreed.
+   stripboard first, as first agreed. Step 4 doesn't depend on the others: it could come first.
+5. **Cutout shapes.** Rectangles on the grid only, or round and free-size cutouts too (for a
+   connector or a pot shaft)? My call: rectangles, plus round through mounting holes.
+6. **Mounting hole sizes.** The usual ones on your boards (M2, M2.5 or M3, so 2.2, 2.7 or 3.2 mm
+   holes) and where they sit on the proto boards, to measure with the `proto-4x6` count.
