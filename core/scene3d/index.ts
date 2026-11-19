@@ -3,6 +3,7 @@ import type { BoardFile } from '../schema'
 import { boardGeometry } from './board'
 import { conductorPrims, leadNets, sceneConnectivity } from './conductors'
 import { partPrims } from './parts'
+import { breadboardPrims, stripBandPrims } from './strips'
 import type { Prim, Scene3D, V3 } from './types'
 
 export * from './types'
@@ -103,6 +104,9 @@ export function buildScene(board: BoardFile): Scene3D {
   }
   // After the parts, so a leg's own joint keeps its cone.
   prims.push(...conductorPrims(board, skipped, conn))
+  // Nothing is soldered on a breadboard: legs and jumper ends go into the block, with no cone.
+  if (board.board.type === 'breadboard') prims = prims.filter(p => p.kind !== 'cone')
+  prims.push(...stripBandPrims(board), ...breadboardPrims(board))
   prims = dedupCones(prims)
   return { ...geo, prims, bounds: sceneBounds(geo.board, prims), skipped }
 }

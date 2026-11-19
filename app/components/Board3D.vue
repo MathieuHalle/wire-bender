@@ -302,6 +302,8 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
   { id: 'top', label: 'Top' },
   { id: 'bottom', label: 'Bottom' }
 ]
+/** A breadboard is seen from the top: its bottom is a backing sheet, nothing to look at. */
+const presets = computed(() => (props.board.board.type === 'breadboard' ? PRESETS.filter(p => p.id !== 'bottom') : PRESETS))
 </script>
 
 <template>
@@ -376,7 +378,7 @@ const PRESETS: { id: CameraPresetName, label: string }[] = [
           aria-label="Camera"
         >
           <UButton
-            v-for="p in PRESETS"
+            v-for="p in presets"
             :key="p.id"
             size="xs"
             class="w-20 justify-center"
