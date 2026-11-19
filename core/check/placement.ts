@@ -162,13 +162,23 @@ export function placementRules(ctx: CheckContext): Finding[] {
   // Past the edge is a format error for these, so only a hole the board's shape removed lands
   // here. (A straight run between two holes the board has never crosses a missing one: the
   // points are enough.)
-  const offShape = (what: string, name: HoleName) => {
+  // The finding lights the item's holes the board has, so the item can be found on the canvas.
+  const offShape = (what: string, name: HoleName, item: Hole[]) => {
     if (!ctx.onBoard(parseHole(name)))
-      out.push({ rule: 'blockedHole', severity: 'error', holes: [], message: `Off the board: ${what} ${name} is outside the board` })
+      out.push({ rule: 'blockedHole', severity: 'error', holes: names(ctx, item), message: `Off the board: ${what} ${name} is outside the board` })
   }
-  for (const t of board.trails) for (const n of t.points) offShape(`trail ${t.id} point`, n)
-  for (const w of board.wires) for (const n of w.points) offShape(`wire ${w.id} point`, n)
-  for (const f of board.legFolds) offShape(`leg fold of ${f.lead} at`, f.to)
+  for (const t of board.trails) {
+    const item = t.points.map(parseHole)
+    for (const n of t.points) offShape(`trail ${t.id} point`, n, item)
+  }
+  for (const w of board.wires) {
+    const item = w.points.map(parseHole)
+    for (const n of w.points) offShape(`wire ${w.id} point`, n, item)
+  }
+  for (const f of board.legFolds) {
+    const lead = ctx.leadById.get(f.lead)
+    offShape(`leg fold of ${f.lead} at`, f.to, lead ? [lead.hole] : [])
+  }
 
   const reason = new Map<string, string>()
   for (const b of board.board.blocked) for (const n of b.holes) reason.set(holeKey(parseHole(n)), b.reason)

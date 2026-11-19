@@ -415,6 +415,14 @@ describe('runCheck', () => {
         .toEqual(['Off the board: leg fold of R1.a at A1 is outside the board'])
     })
 
+    it('they light the item\'s holes the board has, so it can be found', () => {
+      const holes = (over: BoardOverrides) => only(check({ ...over, board: round }).findings, 'blockedHole').map(f => f.holes)
+      expect(holes({ trails: [trail('T1', ['A1', 'A4'])] })).toEqual([['A4']])
+      expect(holes({ wires: [{ id: 'W1', kind: 'flying', side: 'bottom', points: ['A1', 'E5'], joints: [], bareSegments: [] }] })).toEqual([['E5']])
+      // A leg fold lights its lead's hole.
+      expect(holes({ parts: [axial('R1', 'E4', 'E7', null)], legFolds: [{ lead: 'R1.a', to: 'A1' }] })).toEqual([['E4']])
+    })
+
     it('the same items on a plain board are fine', () => {
       const plain = check({ trails: [trail('T1', ['A1', 'A4'])], parts: [axial('R1', 'E4', 'E7', null)], legFolds: [{ lead: 'R1.a', to: 'A1' }] })
       expect(only(plain.findings, 'blockedHole')).toEqual([])
