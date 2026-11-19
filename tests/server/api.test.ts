@@ -61,6 +61,12 @@ describe('create and import', () => {
     expect(listRevisions(db, id)[0]).toMatchObject({ how: 'create', author: 'Local' })
   })
 
+  it('an empty size field (null, as the form sends it) is a 422 naming the field', () => {
+    const r = api.createOrImport(db, JSON.stringify({ name: 'Blank', cols: null, rows: 8, type: 'one-sided' }))
+    expect(r.status).toBe(422)
+    expect((r.body as { errors: string[] }).errors.join('\n')).toContain('cols')
+  })
+
   describe('from a preset', () => {
     const PRESET_ERROR = 'preset: must be one of custom, proto-4x6, proto-5x7, proto-7x9, chogori-22004515'
     const create = (body: unknown) => api.createOrImport(db, JSON.stringify(body))
