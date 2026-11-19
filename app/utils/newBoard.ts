@@ -61,7 +61,7 @@ export function newBoardBody(d: NewBoardDraft): { name: string, preset: string }
 }
 
 /** What the form shows: the preset's size and shape (fixed) or the Custom values (editable). */
-export function shownSize(d: NewBoardDraft): { cols: number | null, rows: number | null, type: BoardSides, shape: ShapeChoice, fixed: boolean } {
+export function shownSize(d: NewBoardDraft): { cols: number | null, rows: number | null, type: BoardSides | 'breadboard', shape: ShapeChoice, fixed: boolean } {
   const p = presetOf(d)
   return p
     ? { cols: p.cols, rows: p.rows, type: p.type, shape: choiceOf(p.shape), fixed: true }
