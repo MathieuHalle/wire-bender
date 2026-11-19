@@ -18,6 +18,8 @@ const props = defineProps<{
   dimKey?: string | null
   /** Draws every part in this colour (the Move copy where it cannot go). */
   tint?: string | null
+  /** The Move copy drawn turned by this many degrees (`ghostTurn`): labels turn back, to read upright. */
+  upright?: number
 }>()
 
 /** How faded the part held by the Move tool is drawn. */
@@ -282,6 +284,7 @@ const dim = (id: string) => (props.lit && !props.lit.ids.has(id) ? 0.45 : 1)
       :key="`t${p.ref}`"
       :x="p.c.x"
       :y="p.c.y"
+      :transform="upright ? `rotate(${-upright} ${p.c.x} ${p.c.y})` : undefined"
       :font-size="p.font"
       text-anchor="middle"
       dominant-baseline="central"

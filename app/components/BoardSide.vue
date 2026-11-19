@@ -13,9 +13,9 @@ import { litOf, makeGeo, SIDE_MARGIN, sideBox, sideExtent, type Group, type Lit,
 import { drawnBoard, drawnPlaced } from '~/utils/hiddenItems'
 import { ALL_LAYERS, type Layers } from '~/utils/layers'
 import { CANVAS_CONTEXT } from '~/utils/canvasContext'
-import { ghostTransform, moveCopy, type Moving } from '~/utils/moveCopy'
+import { ghostTransform, ghostTurn, moveCopy, type Moving } from '~/utils/moveCopy'
 // Named apart from the `hoverHole` prop.
-import { hoverHole as holeUnder } from '~/utils/movePointer'
+import { hoverHole as holeUnder, hoverSnaps } from '~/utils/movePointer'
 import { bandEnd } from '~/utils/rubberBand'
 
 const props = withDefaults(defineProps<{
@@ -86,6 +86,8 @@ const drawnParts = computed(() => drawnPlaced(placedParts.value, props.hidden))
 const copy = computed(() => moveCopy(props.moving))
 /** Past the top or left edge the copy is the original, drawn where it would land. */
 const copyTransform = computed(() => (copy.value?.ghost ? ghostTransform(geo.value, copy.value.ghost) : undefined))
+/** How far that turns the copy: its labels turn back by it, to read upright as an allowed copy's do. */
+const copyTurn = computed(() => (copy.value?.ghost ? ghostTurn(geo.value, copy.value.ghost) : 0))
 
 /** Board outline (half a pitch past the outer holes) and everything that overhangs it. */
 const extent = computed(() => sideExtent(geo.value, placedParts.value))
@@ -133,7 +135,7 @@ function inBoard(h: Hole) {
   return holeExists(props.board.board, h)
 }
 
-/** The hole under (fc, fr); in the Move tool every point snaps to one, as a Move click rounds. */
+/** The hole under (fc, fr); while this side holds a Move, every point snaps to one, as its click rounds. */
 function holeAt(fc: number, fr: number, snapAll = false): Hole | null {
   return holeUnder(fc, fr, inBoard, snapAll)
 }
@@ -150,7 +152,7 @@ function track(cx: number, cy: number) {
   lastClient = { x: cx, y: cy }
   const p = boardPoint({ clientX: cx, clientY: cy })
   pointer.value = p
-  const h = p ? holeAt(p.fc, p.fr, props.tool === 'move') : null
+  const h = p ? holeAt(p.fc, p.fr, hoverSnaps(props.tool, props.moving)) : null
   // The tooltip sits in the canvas when there is one, kept inside it.
   const box = (canvas?.overlay.value ?? rootEl.value)?.getBoundingClientRect()
   tipAt.value = h && box ? { x: cx - box.left, y: cy - box.top, w: box.width, h: box.height } : null
@@ -350,6 +352,7 @@ const ringed = computed(() => {
               :side="side"
               :geo="geo"
               :lit="null"
+              :upright="copyTurn"
               :placed="copy.placed"
               :tint="copy.tint"
             />
@@ -358,6 +361,7 @@ const ringed = computed(() => {
               :side="side"
               :geo="geo"
               :lit="null"
+              :upright="copyTurn"
               :tint="copy.tint"
             />
           </template>

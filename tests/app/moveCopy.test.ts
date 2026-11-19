@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ghostTransform, moveCopy, moveSides } from '../../app/utils/moveCopy'
+import { ghostTransform, ghostTurn, moveCopy, moveSides } from '../../app/utils/moveCopy'
 import type { Held } from '../../app/composables/useTools'
 import { mapHole, movePart, type Placement, type Turns } from '~core/move'
 import { parseHole, type Hole } from '~core/holes'
@@ -15,9 +15,12 @@ function apply(m: string, p: { x: number, y: number }) {
 
 const plain = { pt: (h: Hole) => ({ x: h.col * 2.54, y: h.row * 2.54 }) }
 const mirrored = { pt: (h: Hole) => ({ x: -h.col * 2.54 + 50, y: h.row * 2.54 }) }
+/** The bottom flipped top to bottom (`bottomMirror` vertical). */
+const flipped = { pt: (h: Hole) => ({ x: h.col * 2.54, y: -h.row * 2.54 + 50 }) }
+const GEOS = [['plain', plain], ['mirrored', mirrored], ['top-bottom mirrored', flipped]] as const
 
 describe('ghostTransform', () => {
-  for (const [name, geo] of [['plain', plain], ['mirrored', mirrored]] as const) {
+  for (const [name, geo] of GEOS) {
     it(`draws each hole where the placement takes it (${name})`, () => {
       for (const turns of [0, 1, 2, 3] as Turns[]) {
         const p: Placement = { from: H('C3'), to: H('A1'), turns }
@@ -32,6 +35,30 @@ describe('ghostTransform', () => {
       }
     })
   }
+})
+
+describe('ghostTurn (the copy\'s labels turn back by it)', () => {
+  it('is the turn the placement draws, a whole quarter, on every side', () => {
+    for (const [, geo] of GEOS)
+      for (const turns of [0, 1, 2, 3] as Turns[]) {
+        const p: Placement = { from: H('C3'), to: H('A1'), turns }
+        const deg = ghostTurn(geo, p)
+        expect([0, 90, -90, 180]).toContain(deg)
+        // The copy drawn through the transform, a label turned back by `rotate(-deg)`: upright (M · R = I).
+        const [a, b, c, d] = ghostTransform(geo, p).slice(7, -1).split(' ').map(Number) as [number, number, number, number]
+        const r = (-deg * Math.PI) / 180
+        const m = [a * Math.cos(r) + c * Math.sin(r), b * Math.cos(r) + d * Math.sin(r), -a * Math.sin(r) + c * Math.cos(r), -b * Math.sin(r) + d * Math.cos(r)]
+        expect(m.map(v => Math.round(v * 1e6) / 1e6 + 0)).toEqual([1, 0, 0, 1])
+      }
+  })
+
+  it('no turn: 0; a mirrored side turns the other way', () => {
+    const p = (turns: Turns): Placement => ({ from: H('C3'), to: H('A1'), turns })
+    expect(ghostTurn(plain, p(0))).toBe(0)
+    expect(ghostTurn(plain, p(2))).toBe(180)
+    expect(ghostTurn(mirrored, p(1))).toBe(-ghostTurn(plain, p(1)))
+    expect(ghostTurn(flipped, p(1))).toBe(-ghostTurn(plain, p(1)))
+  })
 })
 
 describe('moveCopy', () => {
@@ -82,9 +109,21 @@ describe('moveSides', () => {
     expect(moveCopy(s.bottom)!.board.legFolds).toEqual([{ lead: 'R1.a', to: 'F3' }])
   })
 
-  it('a part without folds: nothing on the bottom', () => {
+  it('a part without folds: the bottom still holds it (its drawing there fades), with no fold to copy', () => {
     const r = movePart(b, 'R2', { from: H('H2'), to: H('H3'), turns: 0 })
-    expect(moveSides(held({ kind: 'part', ref: 'R2', at: H('H2') }), { ...r, board: { ...r.board, legFolds: [] } }).bottom).toBeNull()
+    const bottom = moveSides(held({ kind: 'part', ref: 'R2', at: H('H2') }), { ...r, board: { ...r.board, legFolds: [] } }).bottom
+    expect(bottom).toMatchObject({ key: 'part:R2', folds: true })
+    expect(moveCopy(bottom)!.board.legFolds).toEqual([])
+  })
+
+  it('a refused move past the top-left edge: both sides get the ghost, unmoved board and all', () => {
+    const p: Placement = { from: H('B2'), to: H('A1'), turns: 2 }
+    const r = movePart(b, 'R1', p)
+    expect(r.ghost).toEqual(p)
+    const s = moveSides(held({ kind: 'part', ref: 'R1', at: H('B2') }), r)
+    expect(s.top).toMatchObject({ key: 'part:R1', ok: false, ghost: p, board: b })
+    expect(s.bottom).toMatchObject({ key: 'part:R1', ok: false, ghost: p, folds: true })
+    expect(moveCopy(s.bottom)!.ghost).toEqual(p)
   })
 
   it('a wire: only its own side', () => {
