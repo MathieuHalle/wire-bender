@@ -3,7 +3,9 @@ import { runCheck } from '~core/check'
 import { buildConnectivity } from '~core/connectivity'
 import { parseBoard } from '~core/schema'
 import { stripSegments } from '~core/strips'
-import { axial, mk } from './helpers'
+import { toggleCut } from '~core/edit'
+import { parseHole } from '~core/holes'
+import { axial, breadboard400, mk } from './helpers'
 
 const header = (ref: string, at: string, net: string | null) => ({ ref, footprint: 'header-1x1', at, rotation: 0 as const, pins: { 1: net } })
 const strips = { strips: [{ from: 'B1', to: 'B10' }, { from: 'C1', to: 'C10' }] }
@@ -67,5 +69,19 @@ describe('the cut rules', () => {
     expect(rule(empty, 'idleCut').map(f => f.message)).toEqual(['Cut not needed: the cut at B5 has nothing connected on one side'])
     const needed = mk({ board: strips, parts: [header('J1', 'B2', 'X'), header('J2', 'B8', 'Y')], cuts: ['B5'] })
     expect(rule(needed, 'idleCut')).toEqual([])
+  })
+})
+
+describe('toggleCut', () => {
+  it('cuts a strip hole, and puts it back', () => {
+    const b = mk({ board: strips })
+    const r = toggleCut(b, parseHole('B5'))
+    expect(r.ok && r.board.cuts).toEqual(['B5'])
+    const back = r.ok ? toggleCut(r.board, parseHole('B5')) : r
+    expect(back.ok && 'cuts' in back.board).toBe(false)
+  })
+  it('refuses a hole off the strips, and a breadboard', () => {
+    expect(toggleCut(mk({ board: strips }), parseHole('D5'))).toEqual({ ok: false, reason: 'Hole D5 is not on a strip: there is nothing to cut.' })
+    expect(toggleCut(mk({ board: breadboard400() }), parseHole('D5'))).toEqual({ ok: false, reason: 'A breadboard\'s clips can\'t be cut.' })
   })
 })

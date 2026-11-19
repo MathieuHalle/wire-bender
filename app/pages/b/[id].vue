@@ -7,6 +7,7 @@ import { tagNets, type Tag } from '~core/scene3d'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
 import { drawingEnd } from '~core/edit'
+import { isStripboard } from '~core/strips'
 import { jointSide, LOCKED_TITLE, makeGeo, PAUSED_TITLE, pageKey, RETURN_KEY, returnEntry, SIGN_IN_TITLE, sideBox, sideFrames, VIEW_TITLE, type View } from '~/utils/boardView'
 import { NO_ACCESS } from '~/composables/useLiveBoard'
 import { fallbackAlert } from '~/utils/board3dFallback'
@@ -88,7 +89,7 @@ const lockedTitle = computed(() => (previewing.value
     ? (meta.value?.signInToEdit ? SIGN_IN_TITLE : VIEW_TITLE)
     : readOnly.value ? PAUSED_TITLE : view.value === '3d' ? LOCKED_TITLE : null))
 const {
-  tool, drawing, onHoleClick, onSegmentClick, addJoint, endDrawing,
+  tool, drawing, onHoleClick, onSegmentClick, addJoint, addCut, endDrawing,
   held, preview, onMoveClick, onMoveHover, rotate, switchBend, place, cancel
 } = useTools(live, {
   locked: () => lockedTitle.value !== null,
@@ -283,6 +284,14 @@ function onAddJoint(f: Finding) {
   if (!hole || !board.value || !conn.value) return
   const side = jointSide(board.value, conn.value, hole) ?? 'bottom'
   addJoint(side, hole)
+}
+
+/** "Cut at …": the middle of the proposed holes (the finding lists them in order along the strip). */
+function onAddCut(f: Finding) {
+  if (lockedTitle.value) return
+  const n = f.holes[Math.floor((f.holes.length - 1) / 2)]
+  const hole = n ? tryParseHole(n) : null
+  if (hole) addCut(hole)
 }
 
 /** The last point of the trail or jumper being drawn, on the side it is drawn on. */
@@ -858,6 +867,7 @@ const sideTitle = (s: Side) => (s === 'top'
             :locked="lockedTitle !== null"
             :locked-title="lockedTitle ?? undefined"
             @add-joint="onAddJoint"
+            @add-cut="onAddCut"
           />
         </template>
         <template #edit>
@@ -870,6 +880,7 @@ const sideTitle = (s: Side) => (s === 'top'
             :locked-title="lockedTitle ?? undefined"
             :view-only="viewOnly"
             :breadboard="board?.board.type === 'breadboard'"
+            :stripboard="!!board && isStripboard(board.board)"
             @undo="cancel(); undo()"
             @redo="cancel(); redo()"
           />
