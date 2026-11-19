@@ -91,7 +91,7 @@ describe('the format', () => {
     const labels = (rowLabels: string[]) => errors({ rows: 3, rowLabels })
     expect(labels(['+', '', 'a'])).toEqual([])
     expect(labels(['+', 'a'])).toEqual(['board.rowLabels: 2 labels for 3 rows'])
-    expect(labels(['a', '', 'a'])).toEqual(['board.rowLabels[2]: duplicate "a"'])
+    expect(labels(['+', '', '+'])).toEqual([]) // both pairs of rails print + and -
     expect(labels(['A', '', 'b'])).toEqual(['board.rowLabels[0]: "A" looks like a grid row name'])
   })
   it('refuses solder on a breadboard', () => {

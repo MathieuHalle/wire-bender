@@ -269,18 +269,17 @@ function checkStrips(b: BoardFile): string[] {
   return errors
 }
 
-/** One label per row; non-empty labels unique, and never a grid row's own letters (`A`, `AB`). */
+/**
+ * One label per row, never a grid row's own letters (`A`, `AB`). Labels may repeat: a
+ * breadboard prints `+` and `-` on both pairs of rails (a repeated label is shown with its grid name).
+ */
 function checkRowLabels(b: BoardFile): string[] {
   const labels = b.board.rowLabels
   if (!labels) return []
   if (labels.length !== b.board.rows) return [`board.rowLabels: ${labels.length} labels for ${b.board.rows} rows`]
   const errors: string[] = []
-  const seen = new Set<string>()
   labels.forEach((l, i) => {
-    if (l === '') return
     if (/^[A-Z]+$/.test(l)) errors.push(`board.rowLabels[${i}]: "${l}" looks like a grid row name`)
-    else if (seen.has(l)) errors.push(`board.rowLabels[${i}]: duplicate "${l}"`)
-    seen.add(l)
   })
   return errors
 }

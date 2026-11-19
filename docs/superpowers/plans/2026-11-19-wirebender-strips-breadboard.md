@@ -69,9 +69,10 @@ list), and regenerate `docs/format/wirebender-1.schema.json`.
 - Strip holes are in the grid: `board.strips[0].to: K40 is outside the 30 × 18 board`.
 - Strips don't overlap: `board.strips[4]: shares E7 with board.strips[1]`.
 - `shape: strips` needs strips: `board.shape: strips names no strip`.
-- `rowLabels` has one entry per row: `board.rowLabels: 17 labels for 18 rows`. Labels may be `""`.
-  Non-empty labels are unique, and none is a grid row name (`A`…), so `a12` can't be confused
-  with a hole name. Labels are matched case-sensitively: `a` is allowed, `A` is refused.
+- `rowLabels` has one entry per row: `board.rowLabels: 17 labels for 18 rows`. Labels may be `""`,
+  and may repeat (both pairs of rails print `+` and `-`: a repeated label is shown with its grid
+  name). None is a grid row name (`A`…), so `a12` can't be confused with a hole name: `a` is
+  allowed, `A` is refused.
 - A breadboard has no `trails`, `legFolds`, `solderBridges`, no wire `joints`, no `bareSegments`,
   and wires only on `top`: `trails[0]: a breadboard has no solder (trails)`, and so on.
 - A breadboard has strips: `board.strips: a breadboard has no strips`.
