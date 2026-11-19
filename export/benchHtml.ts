@@ -5,6 +5,8 @@ import { ADVISORY } from '../core/advisory'
 import { benchModel, type BenchModel, type MeterRow } from '../core/bench/sheet'
 import { netLabel, type WireCard } from '../core/bench/cards'
 import type { BoardFile, Side } from '../core/schema'
+import { printedName } from '../core/holeLabel'
+import { parseHole } from '../core/holes'
 import { sideMap, type Flip, type SideMap } from '../core/sideView'
 import {
   bendSvgs, boardOverviewSvg, COPPER, esc, INSULATED_FALLBACK, legFoldSvg, mmExact, mmText, safeColor, scaleBarSvg,
@@ -84,6 +86,38 @@ export const OVERVIEW_FITTED_NOTE = 'Overview not to scale (board wider than the
  * Page 2: both sides as big as one page allows, side by side or one above the other,
  * whichever draws them bigger. For reading at the bench, so not to scale: no scale bar.
  */
+/** A breadboard: one side (the top), nothing soldered, wires are jumpers. */
+const isBreadboard = (board: BoardFile) => board.board.type === 'breadboard'
+
+/**
+ * The shared drawings speak of a soldered board (its parts side, trimming after soldering): on a
+ * breadboard there is one side and a jumper's ends plug in.
+ */
+function breadboardWording(html: string): string {
+  return html
+    .replaceAll('TOP — parts side', 'TOP')
+    .replaceAll('seen from the parts side', 'seen from the top')
+    .replaceAll('trim after soldering', 'push into the hole')
+}
+
+/** A breadboard's enlarged and 1:1 views: the top alone. */
+function topOnly(board: BoardFile, paper: keyof typeof PRINTABLE_MM, printable: number): string[] {
+  const top = boardOverviewSvg(board, 'top')
+  const fitted = svgWidthMm(top) > printable
+  const { w: W, h: Hp } = enlargedArea(paper)
+  const k = Math.floor(Math.min(W / svgWidthMm(top), (Hp - ENLARGED_HEAD_MM - CAPTION_MM) / svgHeightMm(top)) * 100) / 100
+  const small = boardOverviewSvg(board, 'top', { title: false, labelSize: ENLARGED_LABEL_MM / k })
+  return [`<section id="overview" class="overview">
+<h2>${fitted ? 'Board overview' : 'Board overview, 1:1'}</h2>
+${fitted ? `<p class="fitted-note"><strong>${esc(OVERVIEW_FITTED_NOTE)}</strong></p>` : scaleBar()}
+<div class="stack"><figure><figcaption>Breadboard, from the top</figcaption><div class="drawing${fitted ? ' fitted' : ''}">${top}</div></figure></div>
+</section>`, `<section id="enlarged" class="page enlarged">
+<h2>The board, enlarged</h2>
+<p class="fitted-note"><strong>Enlarged ${Math.round(k * 100)}%, not to scale: measure on the 1:1 overview or the jumper cards.</strong></p>
+<div class="stack"><figure><figcaption>Breadboard, from the top</figcaption><div class="drawing">${scaleSvg(small, k)}</div></figure></div>
+</section>`]
+}
+
 function enlarged(board: BoardFile, paper: keyof typeof PRINTABLE_MM, flip: Flip): string {
   // No in-drawing title: the captions name the sides, and the title would widen the drawing.
   const top = boardOverviewSvg(board, 'top', { title: false })
@@ -145,7 +179,7 @@ function table(cols: string[], rows: (string[] | string)[], cls = ''): string {
   return `<table${cls ? ` class="${cls}"` : ''}>${head}<tbody>\n${body}\n</tbody></table>`
 }
 
-function placement(m: BenchModel, id: (k: string) => string): string {
+function placement(m: BenchModel, id: (k: string) => string, breadboard = false): string {
   const rows = m.placement.map(p => [
     tick(id(`place:${p.ref}`)),
     String(p.step),
@@ -158,7 +192,7 @@ function placement(m: BenchModel, id: (k: string) => string): string {
   ])
   return `<section id="placement" class="page">
 <h2>Parts placement</h2>
-<p class="hint">Lowest parts first. Holes are pin:hole.</p>
+<p class="hint">Lowest parts first. Holes are pin:hole.${breadboard ? ' Push the legs straight in: nothing is soldered.' : ''}</p>
 ${m.placement.length ? table(['Done', 'Step', 'Ref', 'Part', 'Value', 'Holes', 'Orientation', 'Mounting'], rows) : '<p>No parts.</p>'}
 </section>`
 }
@@ -182,6 +216,8 @@ function material(c: WireCard): string {
 }
 
 function card(c: WireCard, board: BoardFile, printable: number, id: (k: string) => string, map: SideMap): string {
+  const bb = isBreadboard(board)
+  const shown = (h: string) => (bb ? printedName(board.board, parseHole(h)) : h)
   const color = c.kind === 'trail' ? COPPER : safeColor(c.color, INSULATED_FALLBACK)
   const net = c.net === null
     ? 'no net'
@@ -202,11 +238,11 @@ function card(c: WireCard, board: BoardFile, printable: number, id: (k: string) 
 ${scaleBar()}
 <div class="card-head">
 <span class="card-id">${esc(c.id)}</span>
-<span class="kind">${KIND_LABEL[c.kind]}</span>
+<span class="kind">${bb ? 'jumper' : KIND_LABEL[c.kind]}</span>
 <span class="net"><span class="swatch" style="background:${color}"></span>${net}</span>
 <span class="material">${esc(material(c))}</span>
-<span>${SIDE_LABEL[c.side]}</span>
-<span class="mono">${esc(c.start)} → ${esc(c.end)}</span>
+${bb ? '' : `<span>${SIDE_LABEL[c.side]}</span>`}
+<span class="mono">${esc(shown(c.start))} → ${esc(shown(c.end))}</span>
 </div>
 <p class="cut">Cut ${mmExact(c.cutMm)}</p>
 <p class="breakdown mono">${esc(breakdownLine(c, board.bench.roundToMm))}</p>
@@ -220,7 +256,7 @@ ${drawing}
 
 function cards(m: BenchModel, board: BoardFile, printable: number, id: (k: string) => string, map: SideMap): string {
   return `<section id="cards" class="page">
-<h2>Wire cards</h2>
+<h2>${isBreadboard(board) ? 'Jumpers' : 'Wire cards'}</h2>
 <p class="hint">Lay the cut wire on the drawing from the dashed start; bend at each marked corner. Bend drawings are 1:1. Strip bars are not to scale; their marks are measured from the start end.</p>
 ${m.cards.length ? `<div class="columns">\n${m.cards.map(c => card(c, board, printable, id, map)).join('\n')}\n</div>` : '<p>No trails or wires.</p>'}
 </section>`
@@ -517,10 +553,13 @@ export function benchHtml(board: BoardFile, opts: { hash?: string, date?: string
   const id = tickIds()
   const date = opts.date ?? today()
   const key = `wirebender:${m.name}:${opts.hash ?? m.revision}`
+  // A breadboard: its top alone, and no leg folds (nothing is soldered).
+  const bb = isBreadboard(board)
   const parts = [
-    overview(board, printable, flip), enlarged(board, m.paper, flip), placement(m, id), cards(m, board, printable, id, map),
-    legFolds(m, board.board.pitchMm, id, map), meter(m, id)
-  ].map(html => ({ html, ...sectionHead(html) }))
+    ...(bb ? topOnly(board, m.paper, printable) : [overview(board, printable, flip), enlarged(board, m.paper, flip)]),
+    placement(m, id, bb), cards(m, board, printable, id, map),
+    ...(bb ? [] : [legFolds(m, board.board.pitchMm, id, map)]), meter(m, id)
+  ].map(html => (bb ? breadboardWording(html) : html)).map(html => ({ html, ...sectionHead(html) }))
   return `<!doctype html>
 <html lang="en">
 <head>

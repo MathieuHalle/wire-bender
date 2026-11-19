@@ -7,7 +7,7 @@ import { benchModel } from '~core/bench/sheet'
 import { parseBoard, type BoardFile } from '~core/schema'
 import { benchHtml, enlargedArea } from '../../export/benchHtml'
 import { boardOverviewSvg } from '../../export/svg'
-import { axial, mk, trail } from '../core/helpers'
+import { axial, breadboard400, mk, trail } from '../core/helpers'
 
 function board2(): BoardFile {
   const raw = JSON.parse(readFileSync(fileURLToPath(new URL('../fixtures/channel-board-2.json', import.meta.url)), 'utf8'))
@@ -470,5 +470,36 @@ describe('benchHtml bottom flip', () => {
     expect(sectionOf(out, 'overview')).not.toContain(boardOverviewSvg(b, 'bottom'))
     // the top drawing is the same either way
     expect(sectionOf(out, 'overview')).toContain(boardOverviewSvg(b, 'top'))
+  })
+})
+
+describe('benchHtml on a breadboard', () => {
+  const b = mk({
+    name: 'bb',
+    board: breadboard400(),
+    parts: [{ ref: 'U1', footprint: 'dip8', at: 'H5', rotation: 90, pins: {} }, axial('R1', 'O12', 'O16', 'N')],
+    wires: [
+      { id: 'W1', kind: 'laid', side: 'top', points: ['K20', 'K24'], bareSegments: [], joints: [] },
+      { id: 'W2', kind: 'laid', side: 'top', points: ['O20', 'O24'], bareSegments: [], joints: [] },
+      { id: 'W3', kind: 'laid', side: 'top', points: ['D3', 'D9'], bareSegments: [], joints: [] }
+    ]
+  })
+  const html = benchHtml(b, { date: DATE })
+  const t = text(html)
+  it('shows the top only, and no leg folds', () => {
+    expect(t).toContain('Breadboard, from the top')
+    expect(t).not.toContain('Bottom')
+    expect(html).not.toContain('id="legfolds"')
+  })
+  it('lists jumpers with printed hole names, and says nothing is soldered', () => {
+    expect(t).toContain('Jumpers')
+    expect(t).toContain('e20 → e24')
+    expect(t).toContain('a20 → a24')
+    expect(t).toContain('Push the legs straight in: nothing is soldered.')
+    expect(t).not.toMatch(/solder side|parts side/)
+  })
+  it('places parts by printed names', () => {
+    const rows = benchModel(b).placement
+    expect(rows.find(r => r.ref === 'R1')!.holes).toBe('a:a12 b:a16')
   })
 })

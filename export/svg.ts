@@ -262,10 +262,13 @@ export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: b
     s.text({ x, y: -half - (outer ? 3.6 : 0.9) }, String(col), MIN_FONT, 'middle', `data-col="${col}" ${lab}`)
     s.text({ x, y: height + half + (outer ? 5.2 : 2.5) }, String(col), MIN_FONT, 'middle', lab)
   }
+  // A breadboard's printed row names (a row printed with none gets none).
   for (let row = 1; row <= rows; row++) {
+    const name = board.board.rowLabels ? board.board.rowLabels[row - 1] ?? '' : rowLetters(row)
+    if (!name) continue
     const y = g.pt({ col: 1, row }).y + 0.8
-    s.text({ x: -half - 0.8, y }, rowLetters(row), MIN_FONT, 'end', lab)
-    s.text({ x: g.span + half + 0.8, y }, rowLetters(row), MIN_FONT, 'start', lab)
+    s.text({ x: -half - 0.8, y }, name, MIN_FONT, 'end', lab)
+    s.text({ x: g.span + half + 0.8, y }, name, MIN_FONT, 'start', lab)
   }
 
   // part bodies
