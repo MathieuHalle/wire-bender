@@ -20,7 +20,12 @@ not draw: holes joined before anything is placed. Four steps:
 4. **Board features:** a Block tool for no-go zones, cutouts through the board and mounting
    holes, all shown in 3D (owner, 2026-11-19).
 
-Start with a design conversation, as the Move tool did.
+Design and plan: `docs/superpowers/specs/2026-11-19-wirebender-strips-design.md`,
+`docs/superpowers/plans/2026-11-19-wirebender-strips-breadboard.md`. Steps 1 and 2 (strips and
+breadboard) were built 2026-11-19 on the `strips-design` branch. Before releasing them, check the
+four breadboard layouts on a real board: which rail is `+` at the top, whether row `a` is at the
+bottom, the rail groups and the 830's split (the preset tests check the hole counts, not the board).
+Next: step 3 (stripboard: cuts, the Cut tool, proposals, presets), then step 4 (board features).
 
 ## Board presets follow-ups
 

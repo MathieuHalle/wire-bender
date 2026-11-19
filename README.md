@@ -2,6 +2,8 @@
 
 WireBender is a Nuxt app for planning hand-soldered perfboards: parts, trails and wires on a hole grid, checked with the same engine in the browser and on the command line. Findings are advisory only: check the board with a meter before powering it.
 
+It also plans solderless breadboards (830, 400 and 170 holes, from "New board"): the clip strips and rails are built in, the board shows its printed row names (`a`–`j`, `+`, `-`), the pencil draws jumpers, and the check says when a part sits on one strip (a DIP chip not across the channel). Stripboards (copper strips the board comes with) read, check and draw too; the Cut tool and stripboard presets come next.
+
 - **Design the board with your AI tool.** Connect Claude Code, or any AI tool that speaks MCP, to WireBender's MCP server (see MCP server below); any script can use the HTTP API with a token. The AI places parts and routes wires; you draw, fix and review alongside it.
 - **The board page is the live preview.** Every change, from the AI, from you, or from a tablet beside you, shows up at once in every open copy: both sides, a 3D view, and the check's findings as you go. Every change is a revision you can undo or restore.
 - **Then build it from the bench sheet.** One printable guide (true 1:1, or a single offline HTML file for a phone or iPad) takes you through the build: what to cut, strip, bend, place and solder, in order, with the meter test list to go through before you power it.
@@ -235,7 +237,7 @@ JSON over HTTP, for the app and for scripts (Claude reads and writes boards this
 | Route | Does |
 | --- | --- |
 | `GET /api/boards?list=mine\|shared\|trash` | list your boards (`id`, `name`, `head`, `visibility`, `hasPassword`, ...; `mine` by default), those in the trash, or those shared with you (`key`, `name`, `owner`, `role`, `lastOpened`) |
-| `POST /api/boards` | `{ "board": <board json> }` imports; `{ "name", "cols", "rows", "type", "shape"? }` creates an empty board (`shape`: round or cut corners, as in the board file), or `{ "name", "preset" }` one from a preset (`proto-4x6`, `proto-5x7`, `proto-7x9`, `chogori-22004515`); answers `{ id }` |
+| `POST /api/boards` | `{ "board": <board json> }` imports; `{ "name", "cols", "rows", "type", "shape"? }` creates an empty board (`shape`: round or cut corners, as in the board file), or `{ "name", "preset" }` one from a preset (`proto-4x6`, `proto-5x7`, `proto-7x9`, `chogori-22004515`, and the breadboards `bb-830` (split rails), `bb-830-full`, `bb-400`, `bb-170`); answers `{ id }` |
 | `POST /api/boards/import-bundle` | a bundle zip as the raw body (`Content-Type: application/zip`, up to 50 MB) becomes a new board with its history, `201 { id, name, head, revisions }` (signed in; counts toward the board limits and the create rate) |
 | `GET /api/boards/:id` | `{ id, name, head, board, role, signInToEdit, owner: { name }, forkedFrom }`. `id` is the key you asked with; `role` is `owner`, `edit` or `view`; `signInToEdit` is true for a signed-out visitor on an edit link; `forkedFrom` is `{ key, name }` of the board this one was forked from, for its owner while they can still open that board by the link they forked it through, else `null` |
 | `PUT /api/boards/:id` | `{ "board": <board json>, "baseRevision"?: n }`; `409` with `{ current }` if `baseRevision` is not the head. Only the owner's PUT can change the name; anyone else's keeps it |
