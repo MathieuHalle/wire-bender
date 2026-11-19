@@ -68,7 +68,16 @@ export interface Scene3D {
    * The slab: a box `widthMm × depthMm`, or for a shaped board (round, cut corners) its `outline`
    * (x/z, board mm) extruded the same thickness, inside that box. `pitchMm` sizes the printed numbers.
    */
-  board: { widthMm: number, depthMm: number, thicknessMm: number, center: V3, pitchMm: number, outline?: XZ[] }
+  board: {
+    widthMm: number
+    depthMm: number
+    thicknessMm: number
+    center: V3
+    pitchMm: number
+    outline?: XZ[]
+    /** A breadboard's look: its colour, the print's colour, and square holes on the top only. Absent: a board's. */
+    look?: { color: string, print: string, squareHoles: true }
+  }
   holes: XZ[]
   pads: { top: XZ[], bottom: XZ[] }
   /** Column numbers and row letters printed on the top surface's margin (none on the bottom). */

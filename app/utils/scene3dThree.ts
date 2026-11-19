@@ -183,7 +183,7 @@ export function buildMeshes(scene: Scene3D): BuiltMeshes {
     outline
       ? extrudeGeometry(outline, center[1] - thicknessMm / 2, center[1] + thicknessMm / 2)
       : new THREE.BoxGeometry(widthMm, thicknessMm, depthMm),
-    new THREE.MeshStandardMaterial({ color: COLORS.board, roughness: 0.85 })
+    new THREE.MeshStandardMaterial({ color: scene.board.look?.color ?? COLORS.board, roughness: 0.85 })
   )
   if (!outline) slab.position.set(...center)
   slab.name = 'board'
@@ -193,9 +193,12 @@ export function buildMeshes(scene: Scene3D): BuiltMeshes {
   const topY = center[1] + thicknessMm / 2
   const bottomY = center[1] - thicknessMm / 2
 
-  const disc = new THREE.CircleGeometry(HOLE_DIAMETER_MM / 2, SEGMENTS).rotateX(-Math.PI / 2)
+  // A breadboard's holes are square, and only on its top (its bottom is a backing sheet).
+  const square = !!scene.board.look?.squareHoles
+  const disc = (square ? new THREE.PlaneGeometry(HOLE_DIAMETER_MM, HOLE_DIAMETER_MM) : new THREE.CircleGeometry(HOLE_DIAMETER_MM / 2, SEGMENTS))
+    .rotateX(-Math.PI / 2)
   group.add(instanced('holes', disc, new THREE.MeshStandardMaterial({ color: HOLE_COLOR, roughness: 1 }),
-    surfaceMatrices(scene.holes, scene.holes, topY + LIFT, bottomY - LIFT)))
+    surfaceMatrices(scene.holes, square ? [] : scene.holes, topY + LIFT, bottomY - LIFT)))
 
   const ring = new THREE.Shape().absarc(0, 0, PAD_DIAMETER_MM / 2, 0, Math.PI * 2, false)
   ring.holes.push(new THREE.Path().absarc(0, 0, HOLE_DIAMETER_MM / 2, 0, Math.PI * 2, true))
@@ -310,7 +313,7 @@ export function labelMesh(scene: Scene3D, canvas: HTMLCanvasElement | null): THR
   geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2))
   geometry.setIndex(index)
   const material = new THREE.MeshStandardMaterial({
-    color: COLORS.print, alphaMap: texture, transparent: true, depthWrite: false, roughness: 0.85,
+    color: scene.board.look?.print ?? COLORS.print, alphaMap: texture, transparent: true, depthWrite: false, roughness: 0.85,
     polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
   })
   const mesh = new THREE.Mesh(geometry, material)

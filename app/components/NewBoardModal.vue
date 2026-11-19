@@ -14,6 +14,8 @@ const SIDES = [
   { label: 'One-sided', value: 'one-sided' },
   { label: 'Two-sided', value: 'two-sided' }
 ]
+/** A breadboard preset shows its kind (fixed): Custom makes soldered boards only. */
+const sides = computed(() => (size.value.type === 'breadboard' ? [...SIDES, { label: 'Breadboard (solderless)', value: 'breadboard' }] : SIDES))
 // A fresh form each time it opens.
 watch(open, (o) => {
   if (!o) return
@@ -82,7 +84,7 @@ async function create() {
           :disabled="size.fixed"
           legend="Copper"
           orientation="horizontal"
-          :items="SIDES"
+          :items="sides"
           @update:model-value="(v: string) => (draft.type = v as BoardSides)"
         />
         <div class="flex gap-3">

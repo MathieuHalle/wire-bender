@@ -173,13 +173,14 @@ export type KeyAction = { view: View } | { zoom: 1 | -1 | 0 } | { panel: 'toggle
  * view it came from); Esc leaves 3D for both sides; F flips between framing the top and
  * the bottom side. F and the zoom keys do nothing in 3D, where the canvas is not shown.
  * `[` collapses or opens the side panel, in every view. Tool keys (H I P E J M, and R ← → Tab while moving) are useTools'.
+ * `topOnly` (a breadboard, drawn from the top only): F frames the top.
  */
-export function pageKey(key: string, view: View, last2d: Exclude<View, '3d'>): KeyAction {
+export function pageKey(key: string, view: View, last2d: Exclude<View, '3d'>, topOnly = false): KeyAction {
   if (key === '[') return { panel: 'toggle' }
   if (key === '3') return { view: view === '3d' ? last2d : '3d' }
   if (key === 'Escape') return view === '3d' ? { view: 'both' } : null
   if (view === '3d') return null
-  if (key === 'f' || key === 'F') return { view: view === 'top' ? 'bottom' : 'top' }
+  if (key === 'f' || key === 'F') return { view: topOnly || view !== 'top' ? 'top' : 'bottom' }
   if (key === '+' || key === '=') return { zoom: 1 }
   if (key === '-' || key === '_') return { zoom: -1 }
   if (key === '0') return { zoom: 0 }

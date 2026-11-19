@@ -2,11 +2,12 @@
 //
 // Shared types and the facts every rule group reads: placed parts, what sits in each
 // hole, where each trail and wire runs, and the connectivity graph.
-import { buildConnectivity, type Connectivity } from '../connectivity'
+import { buildConnectivity, stripId, type Connectivity } from '../connectivity'
 import { placePart, type PlacedPart } from '../footprints'
 import { holeKey, holeName, parseHole, pathHoles, type Hole } from '../holes'
 import type { BoardFile, HoleName, PinRole, Side } from '../schema'
 import { holeExists } from '../boardShape'
+import { holeLabel, stripLabel } from '../holeLabel'
 
 export type Severity = 'error' | 'warning' | 'caution'
 export type RuleId = 'openNet' | 'short' | 'singleLeadNet' | 'contention' | 'twoInOneHole'
@@ -49,8 +50,12 @@ export interface CheckContext {
   wireEndsAt: Map<string, string[]>
   runs: Run[]
   runById: Map<string, Run>
-  /** Sides that have pads: bottom only on a one-sided board. */
+  /** Sides that have pads: bottom only on a one-sided board (and on a breadboard, the clips). */
   sides: Side[]
+  /** The strips' conductor ids (`B1-B10`). */
+  stripIds: Set<string>
+  /** A hole as messages name it: `a12 (D12)` on a board with printed row names (`holeLabel`). */
+  label(h: Hole): string
   onBoard(h: Hole): boolean
 }
 
@@ -97,6 +102,8 @@ export function buildContext(board: BoardFile): CheckContext {
     leadsAt, wireEndsAt, runs,
     runById: new Map(runs.map(r => [r.id, r])),
     sides: board.board.type === 'two-sided' ? ['bottom', 'top'] : ['bottom'],
+    stripIds: new Set((board.board.strips ?? []).map(stripId)),
+    label: h => holeLabel(board.board, h),
     // In the grid and inside the board's shape.
     onBoard: h => holeExists(board.board, h)
   }
@@ -108,10 +115,11 @@ export function joinAnd(xs: string[]): string {
   return `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`
 }
 
-/** "trail T1" or "wire W1" for a run id; the id itself otherwise. */
+/** "trail T1" or "wire W1" for a run id, "strip B1–B10" for a strip id; the id itself otherwise. */
 export function runLabel(ctx: CheckContext, id: string): string {
   const r = ctx.runById.get(id)
-  return r ? `${r.kind} ${id}` : id
+  if (r) return `${r.kind} ${id}`
+  return ctx.stripIds.has(id) ? stripLabel(ctx.board.board, id) : id
 }
 
 /** Hole names for a finding, without repeats; holes off the board are left out. */

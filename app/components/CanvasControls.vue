@@ -9,6 +9,8 @@ import { ZOOM_MAX, ZOOM_MIN } from '~/utils/camera2d'
 defineProps<{
   /** The canvas zoom in percent of "fit both sides". */
   zoom: number
+  /** Only the top is shown (a breadboard): no bottom to mirror or place. */
+  topOnly?: boolean
 }>()
 const emit = defineEmits<{ 'zoom-in': [], 'zoom-out': [], 'fit': [] }>()
 const mirrorBottom = defineModel<boolean>('mirrorBottom', { required: true })
@@ -64,12 +66,14 @@ const FLIP_CHOICES = [
       />
     </div>
     <USwitch
+      v-if="!topOnly"
       v-model="mirrorBottom"
       size="sm"
       class="pr-2"
       label="Mirror bottom"
     />
     <div
+      v-if="!topOnly"
       class="-ml-1 flex items-center pr-1"
       role="group"
       aria-label="Where the bottom sits"

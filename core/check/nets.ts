@@ -3,6 +3,7 @@
 // Net rules: openNet, short, singleLeadNet, contention, missingJoint.
 import { holeKey, holeName } from '../holes'
 import type { Connectivity } from '../connectivity'
+import { stripLabel } from '../holeLabel'
 import { joinAnd, names, runLabel, type CheckContext, type Finding } from './context'
 
 type Contact = Connectivity['contacts'][number]
@@ -22,14 +23,14 @@ function uniqueContacts(contacts: Contact[]): Contact[] {
 
 function describeContact(ctx: CheckContext, c: Contact): string {
   const who = runLabel(ctx, c.trailId)
-  const at = holeName(c.hole)
+  const at = ctx.label(c.hole)
   if (ctx.leadById.has(c.with)) return `${who} passes over ${c.with} at ${at}`
   if (ctx.runById.has(c.with)) {
     const crossing = ctx.conn.contacts.some(o =>
       o.trailId === c.with && o.with === c.trailId && o.side === c.side && holeKey(o.hole) === holeKey(c.hole))
     return crossing ? `${who} crosses ${runLabel(ctx, c.with)} at ${at}` : `${who} touches ${runLabel(ctx, c.with)} at ${at}`
   }
-  return `${who} touches ${c.with} at ${at}`
+  return `${who} touches ${runLabel(ctx, c.with)} at ${at}`
 }
 
 function groupOfRun(ctx: CheckContext, id: string): number {
@@ -52,7 +53,7 @@ export function netRules(ctx: CheckContext): Finding[] {
     if (ids.length === 1) {
       out.push({
         rule: 'singleLeadNet', severity: 'warning', holes: names(ctx, [holeOf(ids[0]!)]),
-        message: `Single lead: net ${net} has only one lead (${ids[0]} at ${holeName(holeOf(ids[0]!))})`
+        message: `Single lead: net ${net} has only one lead (${ids[0]} at ${ctx.label(holeOf(ids[0]!))})`
       })
       continue
     }
@@ -80,12 +81,15 @@ export function netRules(ctx: CheckContext): Finding[] {
       const touches = contacts.filter(c => !c.sameNet && groupOfRun(ctx, c.trailId) === gi)
       const perNet = g.nets.map(net => `${net}: ${netLeads.filter(id => ctx.leadById.get(id)!.net === net).join(', ')}`)
       const via = g.conductors.flatMap(x => (x.kind === 'trail' || x.kind === 'wire') ? [x.id] : []).sort()
-      const viaPart = via.length ? ` Via: ${via.join(', ')}.` : ''
+      const strips = g.conductors.flatMap(x => x.kind === 'strip' ? [stripLabel(ctx.board.board, x.id)] : [])
+      const viaPart = via.length || strips.length ? ` Via: ${[...strips, ...via].join(', ')}.` : ''
+      // A breadboard short is a part in the wrong holes (a DIP not across the channel).
+      const move = strips.length && ctx.board.board.type === 'breadboard' ? ' Move one of the parts to another strip.' : ''
       const extra = touches.length ? ` Touches: ${touches.map(c => describeContact(ctx, c)).join('; ')}.` : ''
       out.push({
         rule: 'short', severity: 'error',
         holes: names(ctx, [...touches.map(c => c.hole), ...netLeads.map(holeOf)]),
-        message: `Short: nets ${joinAnd(g.nets)} are joined. ${perNet.join('; ')}.${viaPart}${extra}`
+        message: `Short: nets ${joinAnd(g.nets)} are joined. ${perNet.join('; ')}.${viaPart}${extra}${move}`
       })
     }
     const outs = g.leads.filter(id => ctx.leadById.get(id)?.role === 'out')
@@ -105,7 +109,7 @@ export function netRules(ctx: CheckContext): Finding[] {
     const k = c ? pairKey(c) : `${pj.trailId}|${holeKey(pj.hole)}`
     if (seen.has(k)) continue
     seen.add(k)
-    const what = c ? describeContact(ctx, c) : `${runLabel(ctx, pj.trailId)} passes ${holeName(pj.hole)}`
+    const what = c ? describeContact(ctx, c) : `${runLabel(ctx, pj.trailId)} passes ${ctx.label(pj.hole)}`
     out.push({
       rule: 'missingJoint', severity: 'warning', holes: names(ctx, [pj.hole]),
       message: `Missing joint: ${what} without a solder joint; add ${holeName(pj.hole)} to its joints`

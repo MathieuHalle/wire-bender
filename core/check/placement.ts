@@ -2,7 +2,7 @@
 //
 // Placement rules: twoInOneHole, bodyCollision, underBody, touchesTab, blockedHole.
 import { FOOTPRINT_PITCH_MM, LEG_DIAMETER_MM, TAB_CLEARANCE_MM, tabPlateMm, type Rect } from '../footprints'
-import { holeKey, holeMm, holeName, parseHole, type Hole } from '../holes'
+import { holeKey, holeMm, parseHole, type Hole } from '../holes'
 import type { HoleName } from '../schema'
 import { joinAnd, names, type CheckContext, type Finding, type Run } from './context'
 
@@ -63,7 +63,7 @@ export function placementRules(ctx: CheckContext): Finding[] {
       const what = [...leads, ...wires.map(w => `wire ${w} end`)]
       out.push({
         rule: 'twoInOneHole', severity: 'error', holes: names(ctx, [h]),
-        message: `Two in one hole: ${joinAnd(what)} share ${holeName(h)}`
+        message: `Two in one hole: ${joinAnd(what)} share ${ctx.label(h)}`
       })
     }
   }
@@ -111,7 +111,7 @@ export function placementRules(ctx: CheckContext): Finding[] {
       if (!what.length) continue
       out.push({
         rule: 'underBody', severity: 'error', holes: names(ctx, [h]),
-        message: `Under a body: ${joinAnd(what)} at ${holeName(h)} ${what.length > 1 ? 'are' : 'is'} under the body of ${pp.part.ref}`
+        message: `Under a body: ${joinAnd(what)} at ${ctx.label(h)} ${what.length > 1 ? 'are' : 'is'} under the body of ${pp.part.ref}`
       })
     }
   }
@@ -134,7 +134,7 @@ export function placementRules(ctx: CheckContext): Finding[] {
     const via = [net, tabPin ? `pin ${tabPin.name}` : null].filter(Boolean).join(', ')
     const touch = (what: string, h: Hole) => out.push({
       rule: 'touchesTab', severity: 'error', holes: names(ctx, [h]),
-      message: `${what} at ${holeName(h)} touches the metal tab of ${pp.part.ref} (connected to ${via})`
+      message: `${what} at ${ctx.label(h)} touches the metal tab of ${pp.part.ref} (connected to ${via})`
     })
     for (const l of ctx.leads) {
       if (l.ref === pp.part.ref || (net !== null && l.net === net)) continue
@@ -195,7 +195,7 @@ export function placementRules(ctx: CheckContext): Finding[] {
       if (why === undefined) continue
       out.push({
         rule: 'blockedHole', severity: 'error', holes: names(ctx, [hole]),
-        message: `Blocked hole: ${joinAnd(labels)} at ${holeName(hole)}, which is blocked (${why})`
+        message: `Blocked hole: ${joinAnd(labels)} at ${ctx.label(hole)}, which is blocked (${why})`
       })
     }
   }

@@ -8,7 +8,13 @@
 // Contact rule (spec §9b): a bare conductor (a trail, or a bare segment of a laid
 // wire) on side S that passes over a hole touches whatever is there on side S: a
 // lead or wire end in the hole, solder on that pad, or another bare conductor.
+//
+// Strips (`board.strips`): copper the board comes with. A strip is one conductor joined to the
+// bottom pad of every hole on it, and every one of those holes has a pad (the strip's copper),
+// so a lead there is soldered to it and a bare conductor passing over touches it. On a
+// breadboard the strip is the clip and the "bottom pad" is where a lead or jumper end plugs in.
 import { holeKey, parseHole, pathHoles, type Hole } from './holes'
+import { stripDrilled } from './strips'
 import { placePart } from './footprints'
 import type { BoardFile, Side } from './schema'
 
@@ -17,6 +23,8 @@ export type Conductor
     | { kind: 'trail', id: string }
     | { kind: 'wire', id: string }
     | { kind: 'pad', hole: Hole, side: Side }
+    /** `id` is the strip's grid names, `F1-J1` (strips never overlap, so it is unique). */
+    | { kind: 'strip', id: string }
 
 export interface Connectivity {
   /** Electrically joined sets. `nets` and `leads` are sorted. */
@@ -73,6 +81,10 @@ const leadNode = (id: string) => `lead:${id}`
 const trailNode = (id: string) => `trail:${id}`
 const wireNode = (id: string) => `wire:${id}`
 const padNode = (h: Hole, side: Side) => `pad:${holeKey(h)}:${side}`
+const stripNode = (id: string) => `strip:${id}`
+
+/** A strip's conductor id: its ends' grid names. */
+export const stripId = (s: { from: string, to: string }): string => `${s.from}-${s.to}`
 
 interface Bare { node: string, id: string, side: Side, holes: Hole[], joined: Set<string> }
 
@@ -152,7 +164,14 @@ export function buildConnectivity(board: BoardFile): Connectivity {
     addSolder(parseHole(b.b), b.side, 'solder bridge')
   }
   for (const f of board.legFolds) addSolder(parseHole(f.to), 'bottom', f.lead)
+  // Every strip hole has copper on the bottom: the strip's own pad.
+  const strips = (board.board.strips ?? []).map(st => ({ id: stripId(st), holes: stripDrilled(st) }))
+  for (const st of strips) for (const h of st.holes) addSolder(h, 'bottom', st.id)
   for (const [node, s] of solder) add(node, { kind: 'pad', hole: s.hole, side: s.side })
+  for (const st of strips) {
+    add(stripNode(st.id), { kind: 'strip', id: st.id })
+    for (const h of st.holes) uf.union(stripNode(st.id), padNode(h, 'bottom'))
+  }
 
   // ---- Explicit joins ------------------------------------------------------------
   // Through-hole items (leads, wire ends) join the bottom pad always and the top pad

@@ -1,7 +1,9 @@
 // Which holes a board has, and its outline. A board is its `cols × rows` grid, cut to its
-// `shape` (round, or with chamfered or notched corners, as seen from the top). The tools, the
-// check and every drawing ask here, so a hole that is drawn is a hole that can be used.
-import { holeMm, type Hole } from './holes'
+// `shape`: round, with chamfered or notched corners (as seen from the top), or only its strip
+// holes (`strips`, a rectangle outline). The tools, the check and every drawing ask here, so a
+// hole that is drawn is a hole that can be used.
+import { holeKey, holeMm, type Hole } from './holes'
+import { stripIndex } from './strips'
 import type { BoardFile, Corner } from './schema'
 
 type Board = BoardFile['board']
@@ -23,6 +25,7 @@ export function holeExists(b: Board, h: Hole): boolean {
   if (h.col < 1 || h.row < 1 || h.col > b.cols || h.row > b.rows) return false
   const s = b.shape
   if (!s) return true
+  if (s.kind === 'strips') return stripIndex(b).has(holeKey(h))
   if (s.kind === 'round') {
     const r = Math.min(b.cols, b.rows) / 2
     return Math.hypot(h.col - (b.cols + 1) / 2, h.row - (b.rows + 1) / 2) <= r - RIM + 1e-9

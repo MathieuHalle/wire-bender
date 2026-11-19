@@ -5,7 +5,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue'
 import type { BoardFile, Side } from '~core/schema'
 import { parseHole, type Hole } from '~core/holes'
-import { eraseSegment, pencilClick, toggleJoint, type Drawing, type EditResult } from '~core/edit'
+import { eraseSegment, jumperClick, pencilClick, toggleJoint, type Drawing, type EditResult } from '~core/edit'
 import { movePart, moveWire, moveWireEnd, pickAt, type Bend, type MoveResult, type Pick as MovePick, type Turns } from '~core/move'
 import { holeExists } from '~core/boardShape'
 import type { Tool } from '~/utils/boardView'
@@ -103,7 +103,7 @@ export function createTools(deps: ToolDeps) {
     }
     message.value = null
     // Ending a drawing on its last hole leaves the trails as they were: no undo step.
-    if (r.board.trails !== current.trails) deps.apply(r.board)
+    if (r.board.trails !== current.trails || r.board.wires !== current.wires) deps.apply(r.board)
     return true
   }
 
@@ -112,7 +112,8 @@ export function createTools(deps: ToolDeps) {
     const d = drawing.value
     drawing.value = null
     const b = deps.board.value
-    if (!d || !b) return
+    // A jumper is a wire only once it has two points: ending earlier leaves nothing behind.
+    if (!d || !b || d.jumper) return
     const t = b.trails.find(x => x.id === d.trailId)
     if (!t || t.points.length !== 1) return
     const r = pencilClick(b, d.side, parseHole(t.points[0]!), d)
@@ -122,11 +123,17 @@ export function createTools(deps: ToolDeps) {
   function onHoleClick(side: Side, hole: Hole) {
     const b = deps.board.value
     if (!b) return
+    const breadboard = b.board.type === 'breadboard'
     if (tool.value === 'joint') {
-      take(toggleJoint(b, side, hole), b)
+      if (!breadboard) take(toggleJoint(b, side, hole), b)
       return
     }
     if (tool.value !== 'pencil') return // inspect, navigate: nothing; erase acts on segments
+    if (breadboard) {
+      const r = jumperClick(b, hole, drawing.value)
+      if (take(r, b)) drawing.value = r.drawing
+      return
+    }
     // The side a click lands on is the side being edited.
     if (drawing.value && drawing.value.side !== side) endDrawing()
     // Double click on a hole that already has a trace: the first click added it and ended
@@ -296,6 +303,8 @@ export function createTools(deps: ToolDeps) {
       return
     }
     const t = TOOL_KEYS[key]
+    // A breadboard has no solder: no Joint tool.
+    if (t === 'joint' && deps.board.value?.board.type === 'breadboard') return
     if (t) tool.value = t
   }
 
@@ -307,7 +316,8 @@ export function createTools(deps: ToolDeps) {
   // Undo, a reload or an outside edit can take the drawn trail away.
   watch(deps.board, (b) => {
     const d = drawing.value
-    if (d && !b?.trails.some(t => t.id === d.trailId)) drawing.value = null
+    const gone = d && (d.jumper ? !d.start && !b?.wires.some(w => w.id === d.trailId) : !b?.trails.some(t => t.id === d.trailId))
+    if (gone) drawing.value = null
     // Someone else changed or deleted the held item: drop it and say so.
     const h = held.value
     if (!h) return

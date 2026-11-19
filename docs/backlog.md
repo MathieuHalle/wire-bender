@@ -3,14 +3,29 @@
 Small things noticed along the way, not yet planned. Newest first. Take an item into a plan
 (`docs/superpowers/plans/`) when it is picked up, and remove it here when it is done.
 
-## Next project: stripboard (Veroboard)
+## Next project: stripboard and breadboard
 
-*Agreed 2026-11-16, third of three after presets and shapes. On hold (owner, 2026-11-19): it
-comes back later.* Copper strips joining every hole
-of a row, broken where the owner cuts them. It changes how connectivity is built (a strip is
-copper the owner did not draw), so it touches the drawing, a "cut" tool, the checks, the bench
-sheet (a list of cuts) and 3D. Breadboards could reuse the same idea (fixed strip segments and
-rails). Start with a design conversation, as the Move tool did.
+*Agreed 2026-11-16 (stripboard), third of three after presets and shapes. Paused 2026-11-19, then
+widened to breadboards and picked up the same day (owner); design draft:
+`docs/superpowers/specs/2026-11-19-wirebender-strips-design.md`.* Both boards have copper the owner did
+not draw: holes joined before anything is placed. Four steps:
+
+1. **The shared layer:** built-in strips in the board file, worked into connectivity, the checks,
+   the drawing and 3D.
+2. **Breadboard:** fixed layouts (full, half, mini; the centre gap; power rails, split on some)
+   as presets. Nothing is cut or soldered: parts plug in and wires are jumpers, so trails and leg
+   folds don't apply, and the bench sheet lists where each part goes.
+3. **Stripboard (Veroboard):** strips along every row, a "cut" tool, cuts in the file, checks on
+   cuts, and a list of cuts on the bench sheet.
+4. **Board features:** a Block tool for no-go zones, cutouts through the board and mounting
+   holes, all shown in 3D (owner, 2026-11-19).
+
+Design and plan: `docs/superpowers/specs/2026-11-19-wirebender-strips-design.md`,
+`docs/superpowers/plans/2026-11-19-wirebender-strips-breadboard.md`. Steps 1 and 2 (strips and
+breadboard) were built 2026-11-19 on the `strips-design` branch. Before releasing them, check the
+four breadboard layouts on a real board: which rail is `+` at the top, whether row `a` is at the
+bottom, the rail groups and the 830's split (the preset tests check the hole counts, not the board).
+Next: step 3 (stripboard: cuts, the Cut tool, proposals, presets), then step 4 (board features).
 
 ## Board presets follow-ups
 

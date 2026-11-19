@@ -133,10 +133,12 @@ describe('mcp server', () => {
   it('create_board makes a board from a preset or a size and shape, as POST /api/boards does', async () => {
     const { client, call } = await connect(() => ({ status: 200, json: { id: 'n1' } }))
     await client.callTool({ name: 'create_board', arguments: { name: 'Cable', preset: 'chogori-22004515' } })
+    await client.callTool({ name: 'create_board', arguments: { name: 'Proto', preset: 'bb-400' } })
     const shape = { kind: 'round' }
     await client.callTool({ name: 'create_board', arguments: { name: 'Disc', cols: 9, rows: 9, type: 'one-sided', shape } })
     expect(call.mock.calls).toEqual([
       ['POST', '/api/boards', { name: 'Cable', preset: 'chogori-22004515' }],
+      ['POST', '/api/boards', { name: 'Proto', preset: 'bb-400' }],
       ['POST', '/api/boards', { name: 'Disc', cols: 9, rows: 9, type: 'one-sided', shape }]
     ])
   })

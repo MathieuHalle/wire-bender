@@ -68,7 +68,7 @@ describe('create and import', () => {
   })
 
   describe('from a preset', () => {
-    const PRESET_ERROR = 'preset: must be one of custom, proto-4x6, proto-5x7, proto-7x9, chogori-22004515'
+    const PRESET_ERROR = 'preset: must be one of custom, proto-4x6, proto-5x7, proto-7x9, chogori-22004515, bb-830, bb-830-full, bb-400, bb-170'
     const create = (body: unknown) => api.createOrImport(db, JSON.stringify(body))
     const stored = (id: string) => (api.getBoardResponse(db, own(id)).body as { board: BoardFile }).board
 
@@ -78,6 +78,15 @@ describe('create and import', () => {
       const b = stored((r.body as { id: string }).id)
       expect(b).toMatchObject({ name: 'Cable', board: { cols: 2, rows: 2, type: 'one-sided' } })
       expect(b.parts.map(p => p.ref)).toEqual(['J1'])
+    })
+
+    it('creates a breadboard with its strips and printed row names', () => {
+      const r = create({ name: 'Proto', preset: 'bb-400' })
+      expect(r.status).toBe(200)
+      const b = stored((r.body as { id: string }).id)
+      expect(b.board).toMatchObject({ cols: 30, rows: 18, type: 'breadboard', shape: { kind: 'strips' } })
+      expect(b.board.strips).toHaveLength(64)
+      expect(b.board.rowLabels![14]).toBe('a')
     })
 
     it('the preset decides: size fields sent with it are ignored', () => {

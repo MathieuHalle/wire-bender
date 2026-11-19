@@ -16,6 +16,8 @@ const props = defineProps<{
   viewOnly?: boolean
   /** The view layers (set in the Layers tab). */
   layers: Layers
+  /** A breadboard: the pencil draws jumpers, and there is no Joint tool (nothing is soldered). */
+  breadboard?: boolean
 }>()
 const emit = defineEmits<{ undo: [], redo: [] }>()
 
@@ -29,6 +31,10 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
   { id: 'joint', label: 'Joint', icon: 'i-lucide-circle-dot', key: 'J' },
   { id: 'move', label: 'Move', icon: 'i-lucide-move', key: 'M' }
 ]
+
+const tools = computed(() => (props.breadboard
+  ? TOOLS.filter(t => t.id !== 'joint').map(t => (t.id === 'pencil' ? { ...t, label: 'Jumper', icon: 'i-lucide-spline' } : t))
+  : TOOLS))
 
 const lockTitle = computed(() => props.lockedTitle ?? LOCKED_TITLE)
 const blind = computed(() => (props.locked ? null : blindHint(tool.value, props.layers)))
@@ -47,7 +53,7 @@ const blind = computed(() => (props.locked ? null : blindHint(tool.value, props.
         :title="locked ? lockTitle : undefined"
       >
         <UButton
-          v-for="t in TOOLS"
+          v-for="t in tools"
           :key="t.id"
           size="xs"
           :icon="t.icon"

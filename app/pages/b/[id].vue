@@ -6,6 +6,7 @@ import { runCheck, type Finding } from '~core/check'
 import { tagNets, type Tag } from '~core/scene3d'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
+import { drawingEnd } from '~core/edit'
 import { jointSide, LOCKED_TITLE, makeGeo, PAUSED_TITLE, pageKey, RETURN_KEY, returnEntry, SIGN_IN_TITLE, sideBox, sideFrames, VIEW_TITLE, type View } from '~/utils/boardView'
 import { NO_ACCESS } from '~/composables/useLiveBoard'
 import { fallbackAlert } from '~/utils/board3dFallback'
@@ -136,6 +137,10 @@ const FRAMINGS = [
   { id: 'bottom', label: 'Bottom', key: 'F' }
 ] as const
 
+/** A breadboard is drawn from the top only: no bottom frame, framing or mirror. */
+const topOnly = computed(() => board.value?.board.type === 'breadboard')
+const framings = computed(() => (topOnly.value ? [{ id: 'both' as const, label: 'Board', key: '0' }] : FRAMINGS))
+
 /** Picks a view; a 2D one frames its sides (once the canvas is there, coming from 3D). */
 function pickView(v: View) {
   view.value = v
@@ -149,7 +154,8 @@ const hover = ref<{ side: Side, hole: Hole } | null>(null)
 const highlight = computed(() => {
   const h = hover.value
   if (!h || !conn.value) return null
-  const gi = conn.value.groupAtHole(h.hole, h.side)
+  // A breadboard's clips are its "bottom pads": hovering the top lights the whole clip strip.
+  const gi = conn.value.groupAtHole(h.hole, topOnly.value ? 'bottom' : h.side)
   return gi === null ? null : conn.value.groups[gi]!
 })
 
@@ -279,14 +285,16 @@ function onAddJoint(f: Finding) {
   addJoint(side, hole)
 }
 
-/** The last point of the trail being drawn, on the side it is drawn on. */
+/** The last point of the trail or jumper being drawn, on the side it is drawn on. */
 const drawFrom = computed(() => {
   const d = drawing.value
-  const t = d && board.value?.trails.find(x => x.id === d.trailId)
-  return t && t.points.length ? { side: d!.side, hole: parseHole(t.points[t.points.length - 1]!) } : null
+  const end = d && board.value ? drawingEnd(board.value, d) : null
+  return end ? { side: d!.side, hole: parseHole(end) } : null
 })
 const hint = computed(() => (drawing.value
-  ? `Drawing ${drawing.value.trailId} on ${drawing.value.side}: click the last hole again or press Esc to end`
+  ? drawing.value.jumper
+    ? `Drawing jumper ${drawing.value.trailId}: click the last hole again or press Esc to end`
+    : `Drawing ${drawing.value.trailId} on ${drawing.value.side}: click the last hole again or press Esc to end`
   : moveHint(held.value, preview.value, lockedTitle.value === PAUSED_TITLE)))
 
 /** What the Move tool holds, as each side draws it (a held part's leg folds on the bottom too). */
@@ -349,7 +357,7 @@ const frames = computed(() => {
     return { w: box.w, h: box.h }
   }
   const at = sideFrames({ top: size('top'), bottom: size('bottom') }, bottomFlip.value)
-  return (['top', 'bottom'] as const).map(s => ({ id: s, title: sideTitle(s), rect: at[s] }))
+  return (topOnly.value ? ['top'] as const : ['top', 'bottom'] as const).map(s => ({ id: s, title: sideTitle(s), rect: at[s] }))
 })
 
 /** "Share": the owner's, in public mode only (local mode offers none). It opens the Sharing tab. */
@@ -447,7 +455,7 @@ function onKey(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null
   if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) return
   if (e.metaKey || e.ctrlKey || e.altKey) return
-  const a = pageKey(e.key, view.value, last2d.value)
+  const a = pageKey(e.key, view.value, last2d.value, topOnly.value)
   if (!a) return
   if ('panel' in a) panel.value.open = !panel.value.open
   // In and out of 3D the canvas keeps its camera; F frames a side.
@@ -724,7 +732,7 @@ const sideTitle = (s: Side) => (s === 'top'
                     aria-label="Frame"
                   >
                     <UButton
-                      v-for="v in FRAMINGS"
+                      v-for="v in framings"
                       :key="v.id"
                       size="xs"
                       class="w-20 justify-center"
@@ -743,6 +751,7 @@ const sideTitle = (s: Side) => (s === 'top'
                   v-model:mirror-bottom="mirrorBottom"
                   v-model:flip="bottomFlip"
                   :zoom="zoomPct"
+                  :top-only="topOnly"
                   @zoom-in="canvas?.zoomStep(1)"
                   @zoom-out="canvas?.zoomStep(-1)"
                   @fit="pickView('both')"
@@ -860,6 +869,7 @@ const sideTitle = (s: Side) => (s === 'top'
             :locked="lockedTitle !== null"
             :locked-title="lockedTitle ?? undefined"
             :view-only="viewOnly"
+            :breadboard="board?.board.type === 'breadboard'"
             @undo="cancel(); undo()"
             @redo="cancel(); redo()"
           />

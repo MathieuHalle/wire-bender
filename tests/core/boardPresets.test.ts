@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { blankBoard, BOARD_PRESETS, PRESET_IDS, presetBoard } from '~core/boardPresets'
 import { parseBoard } from '~core/schema'
 import { existingHoles } from '~core/boardShape'
+import { breadboard400 } from './helpers'
 
 describe('board presets', () => {
   it('every preset is a valid board, named as asked', () => {
@@ -13,7 +14,7 @@ describe('board presets', () => {
   })
 
   it('the ids are unique and stable', () => {
-    expect(PRESET_IDS).toEqual(['custom', 'proto-4x6', 'proto-5x7', 'proto-7x9', 'chogori-22004515'])
+    expect(PRESET_IDS).toEqual(['custom', 'proto-4x6', 'proto-5x7', 'proto-7x9', 'chogori-22004515', 'bb-830', 'bb-830-full', 'bb-400', 'bb-170'])
     expect(new Set(PRESET_IDS).size).toBe(PRESET_IDS.length)
   })
 
@@ -49,5 +50,41 @@ describe('board presets', () => {
     const b = blankBoard('Blank', { cols: 10, rows: 8, pitchMm: 2.54, type: 'two-sided' })
     expect(parseBoard(b).ok).toBe(true)
     expect(b).toMatchObject({ name: 'Blank', parts: [], wires: [], trails: [], board: { cols: 10, rows: 8, blocked: [] } })
+  })
+})
+
+describe('breadboard presets', () => {
+  const bb = (id: string) => presetBoard(id, 'x')!
+  it.each([['bb-830', 830], ['bb-830-full', 830], ['bb-400', 400], ['bb-170', 170]])('%s has %i holes (tie points, rails included)', (id, n) => {
+    const b = bb(id)
+    expect(parseBoard(b).ok).toBe(true)
+    expect(b.board.type).toBe('breadboard')
+    expect(existingHoles(b.board)).toHaveLength(n)
+  })
+  it('has clip strips of 5 holes, one per column on each half', () => {
+    const b = bb('bb-400')
+    const clips = b.board.strips!.filter(s => !s.skip)
+    expect(clips).toHaveLength(60)
+    expect(clips[0]).toEqual({ from: 'D1', to: 'H1' })
+    expect(clips[1]).toEqual({ from: 'K1', to: 'O1' })
+  })
+  it('lays the rails as the design says: 400 one strip per rail, 830 split in the middle', () => {
+    const rails = (id: string) => bb(id).board.strips!.filter(s => s.from.startsWith('A'))
+    expect(rails('bb-400')).toEqual([{ from: 'A2', to: 'A30', skip: ['A7', 'A13', 'A19', 'A25'] }])
+    expect(rails('bb-830-full')).toEqual([{ from: 'A3', to: 'A61', skip: ['A8', 'A14', 'A20', 'A26', 'A32', 'A38', 'A44', 'A50', 'A56'] }])
+    expect(rails('bb-830')).toEqual([
+      { from: 'A3', to: 'A31', skip: ['A8', 'A14', 'A20', 'A26'] },
+      { from: 'A33', to: 'A61', skip: ['A38', 'A44', 'A50', 'A56'] }
+    ])
+    expect(bb('bb-830').board.strips!).toHaveLength(63 * 2 + 8)
+  })
+  it('prints the row names', () => {
+    expect(bb('bb-400').board.rowLabels).toEqual(['+', '-', '', 'j', 'i', 'h', 'g', 'f', '', '', 'e', 'd', 'c', 'b', 'a', '', '-', '+'])
+    expect(bb('bb-170').board.rowLabels).toEqual(['j', 'i', 'h', 'g', 'f', '', '', 'e', 'd', 'c', 'b', 'a'])
+    expect(bb('bb-170').board.rows).toBe(12)
+  })
+  it('matches the 400 the core tests use', () => {
+    const { cols, rows, type, shape, strips, rowLabels } = bb('bb-400').board
+    expect({ cols, rows, type, shape, strips, rowLabels }).toEqual(breadboard400())
   })
 })

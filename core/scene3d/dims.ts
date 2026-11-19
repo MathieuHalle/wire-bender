@@ -2,6 +2,8 @@ import { LEG_DIAMETER_MM } from '../footprints'
 
 /** Physical sizes for the 3D scene, mm. */
 export const BOARD_THICKNESS_MM = 1.6
+/** A breadboard's plastic block. Its top is y = 0 like a board's; legs and jumper ends go into it. */
+export const BREADBOARD_THICKNESS_MM = 8.5
 export const HOLE_DIAMETER_MM = 1.0
 export const PAD_DIAMETER_MM = 1.8
 export const COPPER_THICKNESS_MM = 0.05
@@ -68,5 +70,10 @@ export const COLORS = {
   wireEntry: '#16201b',
   tabHole: '#16150f',
   /** The column and row numbers printed on the top surface. */
-  print: '#ece6d2'
+  print: '#ece6d2',
+  breadboard: '#f1ede2',
+  breadboardPrint: '#5d5a52',
+  channel: '#dcd4c1',
+  railPlus: '#d62839',
+  railMinus: '#1f5fbf'
 } as const

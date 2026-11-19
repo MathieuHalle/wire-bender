@@ -1,7 +1,8 @@
 import { z } from 'zod'
-import { parseHole } from './holes'
+import { holeName as holeNameOf, parseHole } from './holes'
 import { FOOTPRINTS } from './footprints'
 import { existingHoles, outlineIsSimple } from './boardShape'
+import { stripHoles } from './strips'
 
 export type HoleName = string
 export type Side = 'top' | 'bottom'
@@ -34,7 +35,11 @@ export type Corner = 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight'
 /** A corner cut `holes` deep: a 45° chamfer, or a square notch. */
 export interface CornerCut { cut: 'chamfer' | 'notch', holes: number }
 /** A board that is not a plain rectangle: round, or with cut corners (as seen from the top). */
-export type BoardShape = { kind: 'round' } | { kind: 'corners', corners: Partial<Record<Corner, CornerCut>> }
+/**
+ * A board that is not a plain rectangle: round, with cut corners (as seen from the top), or
+ * `strips`: only the holes on a strip exist (a breadboard's gaps and channel).
+ */
+export type BoardShape = { kind: 'round' } | { kind: 'corners', corners: Partial<Record<Corner, CornerCut>> } | { kind: 'strips' }
 export interface BoardFile {
   format: 'wirebender/1'
   revision: number
@@ -43,10 +48,15 @@ export interface BoardFile {
     cols: number
     rows: number
     pitchMm: number
-    type: 'one-sided' | 'two-sided'
+    /** `breadboard`: parts and jumpers plug in, nothing is soldered; the strips are its clips. */
+    type: 'one-sided' | 'two-sided' | 'breadboard'
     blocked: { holes: HoleName[], reason: string }[]
     /** Absent: the full `cols × rows` rectangle. Holes outside the shape are missing (`core/boardShape.ts`). */
     shape?: BoardShape
+    /** Copper the board comes with, each a straight run along a row or a column (`core/strips.ts`). */
+    strips?: { from: HoleName, to: HoleName, skip?: HoleName[] }[]
+    /** Display only: the printed name of each row (`""` for none), as on a breadboard's print. */
+    rowLabels?: string[]
   }
   netClasses: Record<string, { color?: string }>
   nets: Record<string, { class?: string, color?: string }>
@@ -84,7 +94,8 @@ const boardShape = z.discriminatedUnion('kind', [
       bottomLeft: cornerCut.optional(),
       bottomRight: cornerCut.optional()
     })
-  })
+  }),
+  z.strictObject({ kind: z.literal('strips') })
 ])
 
 const partSchema = z.strictObject({
@@ -113,9 +124,11 @@ export const boardFileSchema = z.strictObject({
     cols: z.number().int().positive(),
     rows: z.number().int().positive(),
     pitchMm: z.number().positive(),
-    type: z.enum(['one-sided', 'two-sided']),
+    type: z.enum(['one-sided', 'two-sided', 'breadboard']),
     blocked: z.array(z.strictObject({ holes: z.array(hole), reason: z.string() })),
-    shape: boardShape.optional()
+    shape: boardShape.optional(),
+    strips: z.array(z.strictObject({ from: hole, to: hole, skip: z.array(hole).optional() })).optional(),
+    rowLabels: z.array(z.string()).optional()
   }),
   netClasses: z.record(z.string(), z.strictObject({ color: z.string().optional() })),
   nets: z.record(z.string(), z.strictObject({ class: z.string().optional(), color: z.string().optional() })),
@@ -166,6 +179,11 @@ function checkHoles(b: BoardFile): string[] {
     }
   }
   b.board.blocked.forEach((bl, i) => bl.holes.forEach((n, j) => check(`board.blocked[${i}].holes[${j}]`, n)))
+  b.board.strips?.forEach((st, i) => {
+    check(`board.strips[${i}].from`, st.from)
+    check(`board.strips[${i}].to`, st.to)
+    st.skip?.forEach((n, j) => check(`board.strips[${i}].skip[${j}]`, n))
+  })
   b.parts.forEach((p, i) => {
     check(`parts[${i}].at`, p.at)
     if (p.to !== undefined) check(`parts[${i}].to`, p.to)
@@ -215,6 +233,75 @@ function checkShape(b: BoardFile): string[] {
     if (s.corners[a] && s.corners[c] && !outlineIsSimple({ ...b.board, shape: { kind: 'corners', corners: pair } }))
       errors.push(`board.shape: the ${a} and ${c} corner cuts overlap or meet, splitting the board`)
   }
+  return errors
+}
+
+/**
+ * Strips run along one row or one column and don't share a hole; the `strips` shape needs a strip;
+ * a breadboard has strips.
+ */
+function checkStrips(b: BoardFile): string[] {
+  const errors: string[] = []
+  const strips = b.board.strips ?? []
+  const owner = new Map<string, number>()
+  strips.forEach((st, i) => {
+    let hs
+    try {
+      hs = stripHoles(st)
+    } catch {
+      return // reported by checkHoles
+    }
+    if (!hs.length) {
+      errors.push(`board.strips[${i}]: ${st.from} to ${st.to} is not along one row or column`)
+      return
+    }
+    const inner = new Set(hs.slice(1, -1).map(holeNameOf))
+    st.skip?.forEach((n, j) => {
+      if (!inner.has(n)) errors.push(`board.strips[${i}].skip[${j}]: ${n} is not between ${st.from} and ${st.to}`)
+    })
+    for (const h of hs) {
+      const name = `${h.col}|${h.row}`
+      const other = owner.get(name)
+      if (other !== undefined) {
+        errors.push(`board.strips[${i}]: shares ${holeNameOf(h)} with board.strips[${other}]`)
+        return
+      }
+      owner.set(name, i)
+    }
+  })
+  if (b.board.shape?.kind === 'strips' && !strips.length) errors.push('board.shape: strips names no strip')
+  if (b.board.type === 'breadboard' && !strips.length) errors.push('board.strips: a breadboard has no strips')
+  return errors
+}
+
+/**
+ * One label per row, never a grid row's own letters (`A`, `AB`). Labels may repeat: a
+ * breadboard prints `+` and `-` on both pairs of rails (a repeated label is shown with its grid name).
+ */
+function checkRowLabels(b: BoardFile): string[] {
+  const labels = b.board.rowLabels
+  if (!labels) return []
+  if (labels.length !== b.board.rows) return [`board.rowLabels: ${labels.length} labels for ${b.board.rows} rows`]
+  const errors: string[] = []
+  labels.forEach((l, i) => {
+    if (/^[A-Z]+$/.test(l)) errors.push(`board.rowLabels[${i}]: "${l}" looks like a grid row name`)
+  })
+  return errors
+}
+
+/** Nothing is soldered on a breadboard: no trails, folds, bridges, joints or bare wire; wires on top. */
+function checkBreadboard(b: BoardFile): string[] {
+  if (b.board.type !== 'breadboard') return []
+  const errors: string[] = []
+  const no = 'a breadboard has no solder'
+  b.trails.forEach((_, i) => errors.push(`trails[${i}]: ${no} (trails)`))
+  b.legFolds.forEach((_, i) => errors.push(`legFolds[${i}]: ${no} (leg folds)`))
+  b.solderBridges.forEach((_, i) => errors.push(`solderBridges[${i}]: ${no} (solder bridges)`))
+  b.wires.forEach((w, i) => {
+    if (w.side !== 'top') errors.push(`wires[${i}].side: a breadboard's jumpers are on the top`)
+    if (w.joints.length) errors.push(`wires[${i}].joints: ${no} (joints)`)
+    if (w.bareSegments.length) errors.push(`wires[${i}].bareSegments: ${no} (bare wire)`)
+  })
   return errors
 }
 
@@ -284,7 +371,7 @@ function checkTopSide(b: BoardFile): string[] {
   return errors
 }
 
-const checks: Check[] = [checkHoles, checkShape, checkStraight, checkFootprints, checkUnique, checkTopSide]
+const checks: Check[] = [checkHoles, checkShape, checkStrips, checkRowLabels, checkBreadboard, checkStraight, checkFootprints, checkUnique, checkTopSide]
 
 export function parseBoard(json: unknown): ParseResult {
   const res = boardFileSchema.safeParse(json)

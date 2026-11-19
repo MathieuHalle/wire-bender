@@ -61,7 +61,12 @@ describe('the "New board" form', () => {
 
   it('the menu: Custom first, then every preset', () => {
     expect(PRESET_ITEMS[0]).toEqual({ label: 'Custom', value: 'custom' })
-    expect(PRESET_ITEMS).toHaveLength(5)
+    expect(PRESET_ITEMS).toHaveLength(9)
     expect(PRESET_ITEMS.map(i => i.value)).toContain('chogori-22004515')
+    expect(PRESET_ITEMS.map(i => i.value)).toContain('bb-400')
+  })
+  it('a breadboard preset shows its size, fixed, as a breadboard', () => {
+    expect(shownSize({ name: 'x', preset: 'bb-400', cols: 3, rows: 3, type: 'one-sided', shape: 'round', cornerHoles: 2 }))
+      .toEqual({ cols: 30, rows: 18, type: 'breadboard', shape: 'rect', fixed: true })
   })
 })

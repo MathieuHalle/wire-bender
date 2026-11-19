@@ -97,11 +97,11 @@ const viewBox = computed(() => {
 })
 
 /** The edge numbering, shared with the 3D view (`edgeLabels`). */
-const labels = computed(() => edgeLabels(geo.value.cols, geo.value.rows))
+const labels = computed(() => edgeLabels(props.board.board))
 const colLabels = computed(() =>
   labels.value.cols.map(c => ({ n: c.text, x: geo.value.pt({ col: c.col, row: 1 }).x })))
 const rowLabels = computed(() =>
-  labels.value.rows.map(r => ({ name: r.text, y: geo.value.pt({ col: 1, row: r.row }).y })))
+  labels.value.rows.map(r => ({ name: r.text, row: r.row, y: geo.value.pt({ col: 1, row: r.row }).y })))
 
 // ---- Pointer -> hole / segment ------------------------------------------------------
 const rootEl = ref<HTMLDivElement | null>(null)
@@ -390,7 +390,7 @@ const ringed = computed(() => {
           </template>
           <template
             v-for="r in rowLabels"
-            :key="`r${r.name}`"
+            :key="`r${r.row}`"
           >
             <text
               :x="extent.x0 - MARGIN / 2"

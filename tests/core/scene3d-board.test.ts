@@ -95,11 +95,11 @@ describe('scene3d board', () => {
 
 describe('edge labels', () => {
   it('numbers columns 1..cols and letters rows A.., the same for 2D and 3D', () => {
-    expect(edgeLabels(3, 2)).toEqual({
+    expect(edgeLabels({ cols: 3, rows: 2 })).toEqual({
       cols: [{ col: 1, text: '1' }, { col: 2, text: '2' }, { col: 3, text: '3' }],
       rows: [{ row: 1, text: 'A' }, { row: 2, text: 'B' }]
     })
-    const big = edgeLabels(60, 40)
+    const big = edgeLabels({ cols: 60, rows: 40 })
     expect(big.cols.at(-1)).toEqual({ col: 60, text: '60' })
     expect(big.rows[25]).toEqual({ row: 26, text: 'Z' })
     expect(big.rows.at(-1)).toEqual({ row: 40, text: 'AN' })
