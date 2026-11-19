@@ -306,11 +306,8 @@ The layouts come from sellers' drawings; they're to be confirmed on a real board
 ### Task 10: Docs and wrap-up
 
 - **README:** breadboard boards, jumpers with the pencil, and the presets list.
-- **Spec:** correct the design where the plan changed it:
-  - The pencil draws jumpers; the app had no wire tool.
-  - The 170 has 12 grid rows.
-  - `rowLabels` is in the file.
-  - Adjacency is grouped per pair of strips.
+- **Spec:** bring it in line with anything the tasks changed (the jumper pencil, the 170's 12
+  rows, `rowLabels` in the file and the row order are already in it).
 - **Backlog:** release 1 done once merged. Before release: confirm the four layouts on a real
   board (the hole counts in Task 9 check the arithmetic, not the board).
 - `pnpm test`, `pnpm typecheck`, `pnpm lint` → PASS.
