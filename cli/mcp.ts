@@ -5,6 +5,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 import { ADVISORY } from '~core/advisory'
+import { PRESET_IDS } from '~core/boardPresets'
 import { apiCall, BOARD_KEY, configFrom } from './client'
 
 /** One API call: what `apiCall` does, with the server and token already bound. */
@@ -101,9 +102,24 @@ export function createMcpServer(call: Call): McpServer {
   }, ({ board: key, n }) => api('POST', `${board(key)}/revisions/${n}/restore`))
 
   server.registerTool('create_board', {
-    description: `Create a new board of yours from board data; returns its id. ${RULES}`,
-    inputSchema: { data: dataArg }
-  }, ({ data }) => api('POST', '/api/boards', { board: data }))
+    description: 'Create a new board of yours; returns its id. Send one of: `data` (a whole board file); `name` and `preset`; '
+      + `or \`name\`, \`cols\`, \`rows\`, \`type\` and optionally \`shape\` (an empty board). ${RULES}`,
+    inputSchema: {
+      data: dataArg.optional(),
+      name: z.string().optional().describe('The new board\'s name (with preset, or with the size fields)'),
+      preset: z.string().optional().describe(`A board preset id: ${PRESET_IDS.join(', ')}`),
+      cols: z.number().int().optional().describe('Columns, for an empty board'),
+      rows: z.number().int().optional().describe('Rows, for an empty board'),
+      type: z.enum(['one-sided', 'two-sided']).optional().describe('Copper sides, for an empty board'),
+      shape: z.record(z.string(), z.unknown()).optional()
+        .describe('The board\'s `shape`, for an empty board: { "kind": "round" } or { "kind": "corners", "corners": { ... } } (see the board format)')
+    }
+  }, ({ data, ...fields }) => {
+    const rest = Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== undefined))
+    if (data && Object.keys(rest).length) return text('Send either data, or name with a preset or the size fields, not both.', true)
+    if (!data && rest.name === undefined) return text('Send data (a whole board file), or a name with a preset or the size fields.', true)
+    return api('POST', '/api/boards', data ? { board: data } : rest)
+  })
 
   return server
 }
