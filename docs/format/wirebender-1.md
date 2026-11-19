@@ -24,7 +24,7 @@ Two things are optional when you write a file: `revision` (default `0`) and `ben
 
 ## Sides
 
-A side is `"top"` or `"bottom"`. Parts sit on the top. Solder pads are on the bottom, and on the top too when `board.type` is `two-sided`. A `one-sided` board has no top pads, so a top trail, or a joint on a top wire, is an error.
+A side is `"top"` or `"bottom"`. Parts sit on the top. Solder pads are on the bottom, and on the top too when `board.type` is `two-sided`. A `one-sided` board has no top pads, so a top trail, or a joint on a top wire, is an error. A `breadboard` has no sides to solder: parts and jumpers plug in from the top.
 
 ## Top-level fields
 
@@ -51,9 +51,11 @@ A side is `"top"` or `"bottom"`. Parts sit on the top. Solder pads are on the bo
 | `cols` | integer, 1 or more | Number of columns. |
 | `rows` | integer, 1 or more | Number of rows. |
 | `pitchMm` | number, above 0 | Distance between holes, in mm. |
-| `type` | `"one-sided"` or `"two-sided"` | Whether there are pads on the top side too. |
+| `type` | `"one-sided"`, `"two-sided"` or `"breadboard"` | Whether there are pads on the top side too. A `breadboard` is soldered nowhere: its `strips` are the clips inside the holes, and leads and wire ends plug into them. |
 | `blocked` | array | Holes you must not use (mounting holes, cut-outs). Each item is `{ "holes": [hole, ...], "reason": string }`. |
-| `shape` | object, optional | The board's outline when it is not the full rectangle. `{ "kind": "round" }`: a circle centred on the grid, as wide as the shorter side (`min(cols, rows)` pitches). `{ "kind": "corners", "corners": { ... } }`: a rectangle with cut corners; each of `topLeft`, `topRight`, `bottomLeft`, `bottomRight` (as seen from the top) may be `{ "cut": "chamfer" \| "notch", "holes": n }`, `n` a whole number from 1. A **notch** removes the `n × n` holes at the corner; a **chamfer** removes the holes nearer the corner than a 45° line (`n` = 1: the corner hole; 2: three holes). Without `shape`, the board is the full rectangle. |
+| `shape` | object, optional | The board's outline when it is not the full rectangle. `{ "kind": "round" }`: a circle centred on the grid, as wide as the shorter side (`min(cols, rows)` pitches). `{ "kind": "corners", "corners": { ... } }`: a rectangle with cut corners; each of `topLeft`, `topRight`, `bottomLeft`, `bottomRight` (as seen from the top) may be `{ "cut": "chamfer" \| "notch", "holes": n }`, `n` a whole number from 1. A **notch** removes the `n × n` holes at the corner; a **chamfer** removes the holes nearer the corner than a 45° line (`n` = 1: the corner hole; 2: three holes). `{ "kind": "strips" }`: only the holes on a strip exist (a breadboard's channel and the gaps between rail groups); the outline stays the rectangle. Without `shape`, the board is the full rectangle. |
+| `strips` | array, optional | Copper the board comes with. Each strip is `{ "from": hole, "to": hole }` along one row or one column, and joins every hole from `from` to `to`. On a `one-sided` board (a stripboard) strips are copper on the bottom: every hole on one is soldered to it. On a `breadboard` they are the clips. |
+| `rowLabels` | array of strings, optional | Display only: the printed name of each row, one per row, `""` for a row with none (as `+`, `-`, `a` … `j` on a breadboard). Files, the API and the MCP still name holes by the grid (`D12`); the app shows `a12`. |
 
 ### `netClasses` and `nets`
 
@@ -147,6 +149,9 @@ The JSON Schema covers the shape: keys, types, enums, and number ranges. A reade
 - **`corners` names a cut.** `{ "kind": "corners", "corners": {} }` is refused: for a plain rectangle, leave `shape` out.
 - **Corner cuts leave every edge a hole.** The two cuts on one edge (for the top edge, `topLeft` and `topRight`) add up to fewer holes than that edge has.
 - **Opposite corner cuts stay apart.** The cuts at `topLeft` and `bottomRight` (and at `topRight` and `bottomLeft`) may not overlap or meet: the board would come apart in pieces.
+- **Strips are straight and apart.** A strip runs along one row or one column, and no two strips share a hole. The `strips` shape needs at least one strip, and so does a `breadboard`.
+- **Row labels.** `rowLabels` has one entry per row. Labels that aren't `""` are unique, and none is made of capital letters only (`A`, `AB`), so a printed name is never read as a grid name.
+- **Nothing soldered on a breadboard.** A `breadboard` has no `trails`, `legFolds` or `solderBridges`, and its wires lie on the `top` with no `joints` and no `bareSegments`.
 - **Holes outside the shape are missing.** A hole of the grid exists only if its centre is at least a quarter pitch inside the outline. Nothing may sit on a missing hole, but that is a check error (`Off the board`), not a format error: a board whose shape hides an item still reads.
 - **Straight steps.** In a trail, and in a laid wire, two neighbouring points share a row or a column. Flying wires are exempt.
 - **Known footprints.** `footprint` must be a built-in footprint id.

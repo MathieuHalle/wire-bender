@@ -41,6 +41,7 @@ function shapeOf(d: NewBoardDraft): BoardShape | undefined {
 function choiceOf(shape: BoardShape | undefined): ShapeChoice {
   if (!shape) return 'rect'
   if (shape.kind === 'round') return 'round'
+  if (shape.kind === 'strips') return 'rect' // a breadboard: its gaps are strips, the outline a rectangle
   return Object.values(shape.corners)[0]?.cut ?? 'rect'
 }
 

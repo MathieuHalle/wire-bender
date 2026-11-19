@@ -37,7 +37,8 @@
           "type": "string",
           "enum": [
             "one-sided",
-            "two-sided"
+            "two-sided",
+            "breadboard"
           ]
         },
         "blocked": {
@@ -184,8 +185,46 @@
                 "corners"
               ],
               "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "const": "strips"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
             }
           ]
+        },
+        "strips": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "from",
+              "to"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "rowLabels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
         }
       },
       "required": [
