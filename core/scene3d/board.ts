@@ -32,14 +32,15 @@ export function boardGeometry(board: BoardFile): Pick<Scene3D, 'board' | 'holes'
       ...(board.board.shape ? { outline: outlinePoints(board.board, EDGE_MARGIN_PITCH).map(p => ({ x: p.x, z: p.y })) } : {})
     },
     holes,
-    labels: edgeLabelsMm(cols, rows, pitchMm),
+    labels: edgeLabelsMm(board.board),
     pads: { top: type === 'two-sided' ? holes.map(h => ({ ...h })) : [], bottom: holes.map(h => ({ ...h })) }
   }
 }
 
 /** The 2D view's edge numbering (`edgeLabels`), placed LABEL_OFFSET_PITCH past the outer holes. */
-function edgeLabelsMm(cols: number, rows: number, pitchMm: number): EdgeLabel[] {
-  const { cols: colLabels, rows: rowLabels } = edgeLabels(cols, rows)
+function edgeLabelsMm(b: BoardFile['board']): EdgeLabel[] {
+  const { cols, rows, pitchMm } = b
+  const { cols: colLabels, rows: rowLabels } = edgeLabels(b)
   const off = LABEL_OFFSET_PITCH * pitchMm
   const at = (n: number) => (n - 1) * pitchMm
   return [

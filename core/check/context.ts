@@ -7,6 +7,7 @@ import { placePart, type PlacedPart } from '../footprints'
 import { holeKey, holeName, parseHole, pathHoles, type Hole } from '../holes'
 import type { BoardFile, HoleName, PinRole, Side } from '../schema'
 import { holeExists } from '../boardShape'
+import { holeLabel, stripLabel } from '../holeLabel'
 
 export type Severity = 'error' | 'warning' | 'caution'
 export type RuleId = 'openNet' | 'short' | 'singleLeadNet' | 'contention' | 'twoInOneHole'
@@ -53,6 +54,8 @@ export interface CheckContext {
   sides: Side[]
   /** The strips' conductor ids (`B1-B10`). */
   stripIds: Set<string>
+  /** A hole as messages name it: `a12 (D12)` on a board with printed row names (`holeLabel`). */
+  label(h: Hole): string
   onBoard(h: Hole): boolean
 }
 
@@ -100,6 +103,7 @@ export function buildContext(board: BoardFile): CheckContext {
     runById: new Map(runs.map(r => [r.id, r])),
     sides: board.board.type === 'two-sided' ? ['bottom', 'top'] : ['bottom'],
     stripIds: new Set((board.board.strips ?? []).map(stripId)),
+    label: h => holeLabel(board.board, h),
     // In the grid and inside the board's shape.
     onBoard: h => holeExists(board.board, h)
   }
@@ -115,13 +119,7 @@ export function joinAnd(xs: string[]): string {
 export function runLabel(ctx: CheckContext, id: string): string {
   const r = ctx.runById.get(id)
   if (r) return `${r.kind} ${id}`
-  return ctx.stripIds.has(id) ? stripLabel(id) : id
-}
-
-/** "strip B1–B10" for a strip conductor id (`B1-B10`, see `stripId`). */
-export function stripLabel(id: string): string {
-  const [from, to] = id.split('-')
-  return `strip ${from}–${to}`
+  return ctx.stripIds.has(id) ? stripLabel(ctx.board.board, id) : id
 }
 
 /** Hole names for a finding, without repeats; holes off the board are left out. */

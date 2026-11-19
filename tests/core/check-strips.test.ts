@@ -52,7 +52,7 @@ describe('shorts through strips', () => {
     const b = mk({ board: breadboard400(), parts: [dip8('D5', 0)] })
     const s = rules(b, 'short')
     expect(s.length).toBeGreaterThan(0)
-    expect(s[0]!.message).toContain('Via: strip D5–H5.')
+    expect(s[0]!.message).toContain('Via: strip j5–f5 (D5–H5).')
     expect(s[0]!.message).toMatch(/Move one of the parts to another strip\.$/)
   })
   it('names a strip a bare trail touches', () => {

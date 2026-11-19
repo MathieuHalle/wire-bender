@@ -2,10 +2,11 @@
 //
 // Spacing rules between nets: keepAway (by net class, any distance) and adjacent
 // (4-neighbour holes, in severity buckets).
-import { holeKey, holeName, type Hole } from '../holes'
+import { holeKey, type Hole } from '../holes'
 import { stripId } from '../connectivity'
 import { stripIndex } from '../strips'
-import { names, stripLabel, type AdjacencyLevel, type CheckContext, type Finding } from './context'
+import { stripLabel } from '../holeLabel'
+import { names, type AdjacencyLevel, type CheckContext, type Finding } from './context'
 
 const LEVEL_WORDS: Record<AdjacencyLevel, string> = {
   supply: 'shorts the supply',
@@ -132,7 +133,7 @@ export function spacingRules(ctx: CheckContext): Finding[] {
   for (const { a, b, level } of pairs.values())
     out.push({
       rule: 'adjacent', severity: 'caution', level, holes: names(ctx, [a.hole, b.hole]),
-      message: `Adjacent: ${a.net} at ${holeName(a.hole)} next to ${b.net} at ${holeName(b.hole)} (${LEVEL_WORDS[level]})`
+      message: `Adjacent: ${a.net} at ${ctx.label(a.hole)} next to ${b.net} at ${ctx.label(b.hole)} (${LEVEL_WORDS[level]})`
     })
   const strips = board.board.strips ?? []
   for (const { ia, ib, list, level } of stripPairs.values()) {
@@ -140,8 +141,8 @@ export function spacingRules(ctx: CheckContext): Finding[] {
     const more = list.length > 1 ? `, and ${list.length - 1} more` : ''
     out.push({
       rule: 'adjacent', severity: 'caution', level, holes: names(ctx, list.flatMap(p => [p.a.hole, p.b.hole])),
-      message: `Adjacent: ${a.net} ${stripLabel(stripId(strips[ia]!))} runs next to ${b.net} ${stripLabel(stripId(strips[ib]!))} `
-        + `(${holeName(a.hole)} next to ${holeName(b.hole)}${more}) (${LEVEL_WORDS[level]})`
+      message: `Adjacent: ${a.net} ${stripLabel(board.board, stripId(strips[ia]!))} runs next to ${b.net} ${stripLabel(board.board, stripId(strips[ib]!))} `
+        + `(${ctx.label(a.hole)} next to ${ctx.label(b.hole)}${more}) (${LEVEL_WORDS[level]})`
     })
   }
   return out

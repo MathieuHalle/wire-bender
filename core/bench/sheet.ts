@@ -1,6 +1,7 @@
 // Bench sheet model: what to place and in which order, which legs to fold, and the
 // beep / no-beep meter lists. Pure data; the export renders it.
 import { holeName, tryParseHole, type Hole } from '../holes'
+import { printedName } from '../holeLabel'
 import { bodyHeightMm, FOOTPRINT_PITCH_MM, isStanding, placePart, type PlacedPart } from '../footprints'
 import { buildConnectivity } from '../connectivity'
 import { runCheck, type CheckResult, type Finding } from '../check'
@@ -36,14 +37,15 @@ export interface BenchModel {
 const SUPPLY_GROUP = 'Shorts the supply'
 const MCU_GROUP = 'Kills the MCU'
 
-const rowName = (row: number) => holeName({ col: 1, row }).replace(/\d+$/, '')
+/** A row as the board prints it: its label (`j`) on a breadboard, else its letters. */
+const rowName = (board: BoardFile, row: number) => board.board.rowLabels?.[row - 1] || holeName({ col: 1, row }).replace(/\d+$/, '')
 
 /**
  * Which way a tab or flat side faces: the placed part's tab direction, else from the pin
  * centroid toward the body centre. `pitch` is the one the body rect was placed at (pin
  * holes in mm are (col - 1) * pitch).
  */
-function facing(pp: PlacedPart, pitch: number): string {
+function facing(board: BoardFile, pp: PlacedPart, pitch: number): string {
   const cx = pp.pins.reduce((a, p) => a + p.hole.col, 0) / pp.pins.length
   const cy = pp.pins.reduce((a, p) => a + p.hole.row, 0) / pp.pins.length
   const r = pp.bodyRectMm
@@ -53,24 +55,25 @@ function facing(pp: PlacedPart, pitch: number): string {
   const rows = pp.pins.map(p => p.hole.row)
   if (Math.abs(dy) > Math.abs(dx)) {
     const row = dy < 0 ? Math.min(...rows) - 1 : Math.max(...rows) + 1
-    return row < 1 ? 'toward the top edge' : `toward row ${rowName(row)}`
+    return row < 1 ? 'toward the top edge' : `toward row ${rowName(board, row)}`
   }
   const col = dx < 0 ? Math.min(...cols) - 1 : Math.max(...cols) + 1
   return col < 1 ? 'toward the left edge' : `toward column ${col}`
 }
 
-function orientation(pp: PlacedPart, pitch: number): string {
+function orientation(board: BoardFile, pp: PlacedPart, pitch: number): string {
   const pin = (name: string) => pp.pins.find(p => p.name === name)
+  const at = (h: Hole) => printedName(board.board, h)
   switch (pp.fp.mark) {
     case 'pin1': {
       const p = pin('1') ?? pp.pins[0]!
-      return `pin 1 at ${holeName(p.hole)}`
+      return `pin 1 at ${at(p.hole)}`
     }
-    case 'stripe-b': return `stripe (cathode) at ${holeName(pin('b')!.hole)}`
-    case 'tab': return `metal tab ${facing(pp, pitch)}`
-    case 'flat': return `flat side ${facing(pp, pitch)}`
-    case 'flat-b': return `cathode (flat side) at ${holeName(pin('b')!.hole)}`
-    case 'minus-b': return `minus (stripe) at ${holeName(pin('b')!.hole)}`
+    case 'stripe-b': return `stripe (cathode) at ${at(pin('b')!.hole)}`
+    case 'tab': return `metal tab ${facing(board, pp, pitch)}`
+    case 'flat': return `flat side ${facing(board, pp, pitch)}`
+    case 'flat-b': return `cathode (flat side) at ${at(pin('b')!.hole)}`
+    case 'minus-b': return `minus (stripe) at ${at(pin('b')!.hole)}`
     default: return 'either way'
   }
 }
@@ -91,10 +94,10 @@ export function benchModel(board: BoardFile): BenchModel {
       ref: pp.part.ref,
       name: pp.part.label ?? pp.fp.name,
       ...(pp.part.value !== undefined ? { value: pp.part.value } : {}),
-      holes: pp.pins.map(p => `${p.name}:${holeName(p.hole)}`).join(' '),
+      holes: pp.pins.map(p => `${p.name}:${printedName(board.board, p.hole)}`).join(' '),
       heightMm: h,
       // placePart lays bodies out on the footprint grid, so facing compares on that grid.
-      orientation: orientation(pp, FOOTPRINT_PITCH_MM),
+      orientation: orientation(board, pp, FOOTPRINT_PITCH_MM),
       mounting: isStanding(pp.part, pp.fp) ? 'standing' : pp.fp.twoLead && !pp.fp.body.round ? 'lying' : 'upright'
     }))
 
@@ -104,7 +107,7 @@ export function benchModel(board: BoardFile): BenchModel {
       const id = `${pp.part.ref}.${p.name}`
       leads.set(id, { id, hole: p.hole, net: p.net })
     }
-  const probe = (id: string) => `${id} (${holeName(leads.get(id)!.hole)})`
+  const probe = (id: string) => `${id} (${printedName(board.board, leads.get(id)!.hole)})`
 
   const legFolds: LegFoldRow[] = []
   for (const f of board.legFolds) {
@@ -160,7 +163,8 @@ export function benchModel(board: BoardFile): BenchModel {
   const leadAt = (h: HoleName): string => {
     const hole = tryParseHole(h)
     const lead = hole && [...leads.values()].filter(l => l.hole.col === hole.col && l.hole.row === hole.row).map(l => l.id).sort()[0]
-    return lead ? `${lead} (${h})` : `hole ${h}`
+    const shown = hole ? printedName(board.board, hole) : h
+    return lead ? `${lead} (${shown})` : `hole ${shown}`
   }
   for (const f of check.findings) {
     if (f.rule !== 'adjacent' || (f.level !== 'supply' && f.level !== 'mcu') || f.holes.length < 2) continue

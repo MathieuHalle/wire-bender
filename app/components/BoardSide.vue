@@ -97,7 +97,7 @@ const viewBox = computed(() => {
 })
 
 /** The edge numbering, shared with the 3D view (`edgeLabels`). */
-const labels = computed(() => edgeLabels(geo.value.cols, geo.value.rows))
+const labels = computed(() => edgeLabels(props.board.board))
 const colLabels = computed(() =>
   labels.value.cols.map(c => ({ n: c.text, x: geo.value.pt({ col: c.col, row: 1 }).x })))
 const rowLabels = computed(() =>
