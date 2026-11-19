@@ -23,8 +23,6 @@ rails). Start with a design conversation, as the Move tool did.
 *Noted 2026-11-14, from the v0.1.1 release run.* This repo's workflows moved on 2026-11-19
 (build-push v7, setup-buildx v4, login v4, metadata v6, upload-artifact v7, download-artifact v8;
 `pnpm/action-setup` v5, not v6, which bootstraps through pnpm 11 while this repo is on pnpm 9).
-Left:
-
-- The SaaS repo's `deploy.yml`: `aws-actions/configure-aws-credentials@v4` to `@v6` (node24;
-  check its v5 and v6 notes first).
-- Done when a CI run, a release (`v*.*.*` tag) and a SaaS deploy show no Node 20 annotation.
+The SaaS repo's `deploy.yml` moved to `configure-aws-credentials@v6`; CI (d44d3e4) and a SaaS
+deploy (abf79aa) ran with no Node 20 annotation. Left: done when a release (`v*.*.*` tag) shows
+none either (it is the only run that uses login, metadata, upload- and download-artifact).
