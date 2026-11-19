@@ -20,10 +20,10 @@ const errors = (board: Record<string, unknown>, rest: Record<string, unknown> = 
 /** An 830-hole breadboard layout: clip strips per column, four 50-hole rails in groups of 5. */
 function bb830() {
   const L = rowToLetters
-  const strips: { from: string, to: string }[] = []
+  const strips: { from: string, to: string, skip?: string[] }[] = []
   for (let c = 1; c <= 63; c++) strips.push({ from: `${L(4)}${c}`, to: `${L(8)}${c}` }, { from: `${L(11)}${c}`, to: `${L(15)}${c}` })
   for (const row of [1, 2, 17, 18])
-    for (let g = 0; g < 10; g++) strips.push({ from: `${L(row)}${3 + g * 6}`, to: `${L(row)}${7 + g * 6}` })
+    strips.push({ from: `${L(row)}3`, to: `${L(row)}61`, skip: [8, 14, 20, 26, 32, 38, 44, 50, 56].map(c => `${L(row)}${c}`) })
   return { cols: 63, rows: 18, pitchMm: 2.54, type: 'breadboard' as const, blocked: [], shape: { kind: 'strips' as const }, strips }
 }
 
@@ -76,6 +76,19 @@ describe('the format', () => {
   })
   it('refuses a strip off the grid', () => {
     expect(errors({ strips: [{ from: 'A1', to: 'A11' }] })).toEqual(['board.strips[0].to: hole A11 is outside the 10 x 10 board'])
+  })
+  it('reads skip holes between the ends, and refuses others', () => {
+    expect(errors({ strips: [{ from: 'A1', to: 'A10', skip: ['A5'] }] })).toEqual([])
+    expect(errors({ strips: [{ from: 'A1', to: 'A10', skip: ['A1', 'B5'] }] })).toEqual([
+      'board.strips[0].skip[0]: A1 is not between A1 and A10',
+      'board.strips[0].skip[1]: B5 is not between A1 and A10'
+    ])
+  })
+  it('leaves skip holes out of the strips shape, and the strip joined across them', () => {
+    const b = mk({ board: { shape: { kind: 'strips' }, strips: [{ from: 'A1', to: 'A10', skip: ['A5'] }] } }).board
+    expect(holeExists(b, H('A5'))).toBe(false)
+    expect(holeExists(b, H('A6'))).toBe(true)
+    expect(existingHoles(b)).toHaveLength(9)
   })
   it('refuses overlapping strips', () => {
     expect(errors({ strips: [{ from: 'A1', to: 'A5' }, { from: 'A1', to: 'E1' }] }))

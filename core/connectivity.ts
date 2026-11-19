@@ -14,7 +14,7 @@
 // so a lead there is soldered to it and a bare conductor passing over touches it. On a
 // breadboard the strip is the clip and the "bottom pad" is where a lead or jumper end plugs in.
 import { holeKey, parseHole, pathHoles, type Hole } from './holes'
-import { stripHoles } from './strips'
+import { stripDrilled } from './strips'
 import { placePart } from './footprints'
 import type { BoardFile, Side } from './schema'
 
@@ -165,7 +165,7 @@ export function buildConnectivity(board: BoardFile): Connectivity {
   }
   for (const f of board.legFolds) addSolder(parseHole(f.to), 'bottom', f.lead)
   // Every strip hole has copper on the bottom: the strip's own pad.
-  const strips = (board.board.strips ?? []).map(st => ({ id: stripId(st), holes: stripHoles(st) }))
+  const strips = (board.board.strips ?? []).map(st => ({ id: stripId(st), holes: stripDrilled(st) }))
   for (const st of strips) for (const h of st.holes) addSolder(h, 'bottom', st.id)
   for (const [node, s] of solder) add(node, { kind: 'pad', hole: s.hole, side: s.side })
   for (const st of strips) {

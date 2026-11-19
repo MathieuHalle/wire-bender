@@ -54,7 +54,7 @@ export interface BoardFile {
     /** Absent: the full `cols × rows` rectangle. Holes outside the shape are missing (`core/boardShape.ts`). */
     shape?: BoardShape
     /** Copper the board comes with, each a straight run along a row or a column (`core/strips.ts`). */
-    strips?: { from: HoleName, to: HoleName }[]
+    strips?: { from: HoleName, to: HoleName, skip?: HoleName[] }[]
     /** Display only: the printed name of each row (`""` for none), as on a breadboard's print. */
     rowLabels?: string[]
   }
@@ -127,7 +127,7 @@ export const boardFileSchema = z.strictObject({
     type: z.enum(['one-sided', 'two-sided', 'breadboard']),
     blocked: z.array(z.strictObject({ holes: z.array(hole), reason: z.string() })),
     shape: boardShape.optional(),
-    strips: z.array(z.strictObject({ from: hole, to: hole })).optional(),
+    strips: z.array(z.strictObject({ from: hole, to: hole, skip: z.array(hole).optional() })).optional(),
     rowLabels: z.array(z.string()).optional()
   }),
   netClasses: z.record(z.string(), z.strictObject({ color: z.string().optional() })),
@@ -182,6 +182,7 @@ function checkHoles(b: BoardFile): string[] {
   b.board.strips?.forEach((st, i) => {
     check(`board.strips[${i}].from`, st.from)
     check(`board.strips[${i}].to`, st.to)
+    st.skip?.forEach((n, j) => check(`board.strips[${i}].skip[${j}]`, n))
   })
   b.parts.forEach((p, i) => {
     check(`parts[${i}].at`, p.at)
@@ -254,6 +255,10 @@ function checkStrips(b: BoardFile): string[] {
       errors.push(`board.strips[${i}]: ${st.from} to ${st.to} is not along one row or column`)
       return
     }
+    const inner = new Set(hs.slice(1, -1).map(holeNameOf))
+    st.skip?.forEach((n, j) => {
+      if (!inner.has(n)) errors.push(`board.strips[${i}].skip[${j}]: ${n} is not between ${st.from} and ${st.to}`)
+    })
     for (const h of hs) {
       const name = `${h.col}|${h.row}`
       const other = owner.get(name)

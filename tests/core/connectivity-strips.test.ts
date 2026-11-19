@@ -77,3 +77,10 @@ describe('strips on a breadboard', () => {
     expect(conn.contacts).toEqual([])
   })
 })
+
+describe('a rail with skipped holes', () => {
+  it('joins its groups across the gaps', () => {
+    const b = mk({ board: { cols: 12, rows: 1, shape: { kind: 'strips' }, strips: [{ from: 'A1', to: 'A11', skip: ['A6'] }] }, parts: [header('J1', 'A1', 'X'), header('J2', 'A11', 'X')] })
+    expect(groupOf(b, 'J1.1')).toBe(groupOf(b, 'J2.1'))
+  })
+})

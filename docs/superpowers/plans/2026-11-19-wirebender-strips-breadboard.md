@@ -291,8 +291,9 @@ The layouts come from sellers' drawings; they're to be confirmed on a real board
 - **Rows (170):** 1–5 `j`–`f`, 6 and 7 the channel, 8–12 `e`–`a`.
 - **Clip strips:** one per column on each half (rows 4–8 and 11–15; on the 170, 1–5 and 8–12).
 - **Rails:** groups of 5 with one empty hole between them, centred on the columns. On the 400
-  that's 29 places from column 2 to 30; on the 830, 59 places from column 3 to 61. A split rail is
-  two strips, broken at the middle gap.
+  that's 29 places from column 2 to 30; on the 830, 59 places from column 3 to 61. A rail is one
+  strip whose gaps are `skip` holes (one metal clip runs under the whole rail). A split rail is two
+  strips, broken at the middle gap.
 - **Shape:** `{ kind: 'strips' }`; `type: 'breadboard'`.
 
 - [ ] **Step 1: Failing tests:**
