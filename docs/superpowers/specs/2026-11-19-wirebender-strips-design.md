@@ -108,7 +108,8 @@ Four steps, each one released on its own:
 - **Stripboard:** a **Cut** tool that toggles a cut at a hole on the bottom side. A cut is drawn
   as a bare ring with no copper. Proposed cuts from a finding show as dashed rings, and clicking
   one places it.
-- **Breadboard:** the trail pencil and the fold tool are hidden. The wire tool makes jumpers. The
+- **Breadboard:** the trail pencil draws jumpers instead (laid wires on the top; the app
+  had no wire tool before), and the fold and joint tools are hidden. The
   bottom side is not shown.
 - **3D:** copper strips on a stripboard's bottom, with the cuts removed. A breadboard is a white
   block with its holes and red and blue rail lines, and parts and jumpers standing in it.
@@ -123,8 +124,9 @@ The owner's reference is the 400-hole half breadboard (BPS-BB400 style): an ivor
 halves of 5-hole clip strips across a centre channel, and two rails along each long edge, marked
 with red `+` and blue `-` lines. Its holes are grouped in fives, with a space between groups.
 
-- **Grid rows, top to bottom:** rail, rail, one empty row, `a`–`e`, two empty rows (the channel:
-  `e` to `f` is 0.3", so a DIP chip straddles it), `f`–`j`, one empty row, rail, rail. That's 18
+- **Grid rows, top to bottom:** rail, rail, one empty row, `j`–`f`, two empty rows (the channel:
+  `e` to `f` is 0.3", so a DIP chip straddles it), `e`–`a` (row `a` at the bottom, as on most
+  prints), one empty row, rail, rail. That's 18
   grid rows. Empty rows are missing holes (`shape: strips`).
 - **Clip strips:** one strip per column on each side, `a`–`e` and `f`–`j`, 5 holes.
 - **Rails:** groups of 5 with one missing hole between groups, on the grid columns. A rail is one
@@ -133,9 +135,9 @@ with red `+` and blue `-` lines. Its holes are grouped in fives, with a space be
   reach either way), so the grid is kept.
 - **Sizes:** **830** (63 columns, rails of 50 holes in 10 groups; many are split in the middle, so
   the preset splits them and says so in the name, with an unsplit one as well), **400** (30
-  columns, rails of 25 holes in 5 groups, not split), **170** (17 columns, no rails, 10 grid rows).
+  columns, rails of 25 holes in 5 groups, not split), **170** (17 columns, no rails, 12 grid rows).
   Taken from sellers' drawings: confirm on a real board before release.
-- **Printed names (owner: yes):** the preset carries a display-only label for each grid row (`+`,
+- **Printed names (owner: yes):** the board file carries (`board.rowLabels`) a display-only label for each grid row (`+`,
   `-`, `a`–`j`, nothing for empty rows) and numbers columns 1, 5, 10, … like the print. The edges
   of 2D and 3D, the bench sheet and findings show these names, as in `a12` (the file and the API
   keep grid names, as in `D12`). A finding gives both when they differ: `a12 (D12)`.
