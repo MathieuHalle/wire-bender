@@ -21,8 +21,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      # Reads the pnpm version from package.json (packageManager).
-      - uses: pnpm/action-setup@v4
+      # Reads the pnpm version from package.json (packageManager). v5, not v6: v6 bootstraps
+      # through pnpm 11, and this repo is on pnpm 9.
+      - uses: pnpm/action-setup@v5
       - uses: actions/setup-node@v5
         with:
           node-version: 24 # the Docker image's Node
@@ -38,8 +39,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/build-push-action@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
         with:
           context: .
           push: false

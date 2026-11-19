@@ -20,17 +20,11 @@ rails). Start with a design conversation, as the Move tool did.
 
 ## GitHub Actions still on Node 20
 
-*Noted 2026-11-14, from the v0.1.1 release run.* GitHub runs these actions on Node 24 with a
-warning ("Node.js 20 is deprecated … forced to run on Node.js 24"); once Node 20 support is
-removed they may stop working. Move each to the newest major that targets Node 24 (check its
-releases page and changelog for breaking changes first).
+*Noted 2026-11-14, from the v0.1.1 release run.* This repo's workflows moved on 2026-11-19
+(build-push v7, setup-buildx v4, login v4, metadata v6, upload-artifact v7, download-artifact v8;
+`pnpm/action-setup` v5, not v6, which bootstraps through pnpm 11 while this repo is on pnpm 9).
+Left:
 
-| Action | Used in | Warned |
-|---|---|---|
-| `docker/build-push-action@v6` | `ci.yml` (image), `release.yml` (image) | yes |
-| `docker/setup-buildx-action@v3` | `ci.yml`, `release.yml` (image, merge) | yes |
-| `pnpm/action-setup@v4` | `ci.yml` (check) | yes |
-| `aws-actions/configure-aws-credentials@v4` | the SaaS repo's `deploy.yml` (not this repo) | yes |
-| `docker/login-action@v3`, `docker/metadata-action@v5`, `actions/upload-artifact@v4`, `actions/download-artifact@v4` | `release.yml` | not yet: check while there |
-
-Done when a CI run, a release (`v*.*.*` tag) and a SaaS deploy show no Node 20 annotation.
+- The SaaS repo's `deploy.yml`: `aws-actions/configure-aws-credentials@v4` to `@v6` (node24;
+  check its v5 and v6 notes first).
+- Done when a CI run, a release (`v*.*.*` tag) and a SaaS deploy show no Node 20 annotation.
