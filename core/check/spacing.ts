@@ -3,7 +3,9 @@
 // Spacing rules between nets: keepAway (by net class, any distance) and adjacent
 // (4-neighbour holes, in severity buckets).
 import { holeKey, holeName, type Hole } from '../holes'
-import { names, type AdjacencyLevel, type CheckContext, type Finding } from './context'
+import { stripId } from '../connectivity'
+import { stripIndex } from '../strips'
+import { names, stripLabel, type AdjacencyLevel, type CheckContext, type Finding } from './context'
 
 const LEVEL_WORDS: Record<AdjacencyLevel, string> = {
   supply: 'shorts the supply',
@@ -100,14 +102,30 @@ export function spacingRules(ctx: CheckContext): Finding[] {
     return only
   })
   const pairs = new Map<string, { a: NetHole, b: NetHole, level: AdjacencyLevel }>()
-  for (const [si, at] of perSide.entries())
+  // Two holes on two different strips: one finding per strip pair (two strips side by side
+  // would otherwise give one per hole along them).
+  const onStrip = stripIndex(board.board)
+  const stripPairs = new Map<string, { ia: number, ib: number, list: { a: NetHole, b: NetHole }[], level: AdjacencyLevel }>()
+  // A breadboard has no solder to bridge two neighbouring holes: nothing to report.
+  const soldered = board.board.type !== 'breadboard'
+  if (soldered) for (const [si, at] of perSide.entries())
     for (const a of at.values())
       for (const step of [{ col: 1, row: 0 }, { col: 0, row: 1 }]) {
         const b = at.get(holeKey({ col: a.hole.col + step.col, row: a.hole.row + step.row }))
         if (!b || b.net === a.net) continue
         if (insulatedOnly[si]!.has(holeKey(a.hole)) || insulatedOnly[si]!.has(holeKey(b.hole))) continue
-        const k = `${holeKey(a.hole)}|${holeKey(b.hole)}`
         const level = levelFor(a, b)
+        const ia = onStrip.get(holeKey(a.hole))
+        const ib = onStrip.get(holeKey(b.hole))
+        if (ia !== undefined && ib !== undefined && ia !== ib) {
+          const sk = `${si}|${Math.min(ia, ib)}|${Math.max(ia, ib)}`
+          const e = stripPairs.get(sk) ?? { ia, ib, list: [], level }
+          e.list.push({ a, b })
+          if (LEVEL_RANK[level] > LEVEL_RANK[e.level]) e.level = level
+          stripPairs.set(sk, e)
+          continue
+        }
+        const k = `${holeKey(a.hole)}|${holeKey(b.hole)}`
         const prev = pairs.get(k)
         if (!prev || LEVEL_RANK[level] > LEVEL_RANK[prev.level]) pairs.set(k, { a, b, level })
       }
@@ -116,6 +134,16 @@ export function spacingRules(ctx: CheckContext): Finding[] {
       rule: 'adjacent', severity: 'caution', level, holes: names(ctx, [a.hole, b.hole]),
       message: `Adjacent: ${a.net} at ${holeName(a.hole)} next to ${b.net} at ${holeName(b.hole)} (${LEVEL_WORDS[level]})`
     })
+  const strips = board.board.strips ?? []
+  for (const { ia, ib, list, level } of stripPairs.values()) {
+    const { a, b } = list[0]!
+    const more = list.length > 1 ? `, and ${list.length - 1} more` : ''
+    out.push({
+      rule: 'adjacent', severity: 'caution', level, holes: names(ctx, list.flatMap(p => [p.a.hole, p.b.hole])),
+      message: `Adjacent: ${a.net} ${stripLabel(stripId(strips[ia]!))} runs next to ${b.net} ${stripLabel(stripId(strips[ib]!))} `
+        + `(${holeName(a.hole)} next to ${holeName(b.hole)}${more}) (${LEVEL_WORDS[level]})`
+    })
+  }
   return out
 }
 
