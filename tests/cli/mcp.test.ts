@@ -130,6 +130,27 @@ describe('mcp server', () => {
     }
   })
 
+  it('create_board makes a board from a preset or a size and shape, as POST /api/boards does', async () => {
+    const { client, call } = await connect(() => ({ status: 200, json: { id: 'n1' } }))
+    await client.callTool({ name: 'create_board', arguments: { name: 'Cable', preset: 'chogori-22004515' } })
+    const shape = { kind: 'round' }
+    await client.callTool({ name: 'create_board', arguments: { name: 'Disc', cols: 9, rows: 9, type: 'one-sided', shape } })
+    expect(call.mock.calls).toEqual([
+      ['POST', '/api/boards', { name: 'Cable', preset: 'chogori-22004515' }],
+      ['POST', '/api/boards', { name: 'Disc', cols: 9, rows: 9, type: 'one-sided', shape }]
+    ])
+  })
+
+  it('create_board refuses data with other fields, or no data and no name, without calling', async () => {
+    const { client, call } = await connect(() => ({ status: 200, json: { id: 'n1' } }))
+    const both = await client.callTool({ name: 'create_board', arguments: { data: { name: 'x' }, preset: 'proto-5x7' } })
+    expect(isError(both)).toBe(true)
+    expect(textOf(both)).toBe('Send either data, or name with a preset or the size fields, not both.')
+    const neither = await client.callTool({ name: 'create_board', arguments: { preset: 'proto-5x7' } })
+    expect(isError(neither)).toBe(true)
+    expect(call).not.toHaveBeenCalled()
+  })
+
   it('a network failure says Cannot reach', async () => {
     const { client } = await connect(() => ({ status: 0, json: { error: 'Cannot reach http://nowhere:9: fetch failed' } }))
     const r = await client.callTool({ name: 'list_revisions', arguments: { board: 'b1' } })

@@ -53,9 +53,9 @@ export function moveCopy(moving: Moving | null): MoveCopy | null {
 }
 
 /**
- * What each side draws of the held item: the side it was picked on gets the copy. A held part's
- * leg folds are bent on the bottom, so a part picked on top with folds also gives the bottom a
- * copy of just its folds.
+ * What each side draws of the held item: the side it was picked on gets the copy. Parts are
+ * picked on top only; the bottom also gets a held part, so it fades the part's own drawing
+ * there, and its copy is just the part's leg folds (bent on the bottom; none drawn if it has none).
  */
 export function moveSides(held: Held | null, preview: MoveResult | null): Record<Side, Moving | null> {
   const out: Record<Side, Moving | null> = { top: null, bottom: null }
@@ -64,17 +64,12 @@ export function moveSides(held: Held | null, preview: MoveResult | null): Record
   const key = pick.kind === 'part' ? `part:${pick.ref}` : `wire:${pick.id}`
   const base = { board: preview.board, key, ok: preview.reason === null, ghost: preview.ghost }
   out[held.side] = base
-  if (pick.kind === 'part' && held.side !== 'bottom' && preview.board.legFolds.some(f => f.lead.startsWith(`${pick.ref}.`)))
-    out.bottom = { ...base, folds: true }
+  if (pick.kind === 'part') out.bottom = { ...base, folds: true }
   return out
 }
 
-/**
- * An SVG `matrix(a b c d e f)` taking `geo.pt(h)` to `geo.pt(mapHole(h, p))` for every hole: the
- * affine map fixed by the grabbed hole and its neighbours one column and one row on. It needs no
- * hole names, so it draws a copy past the board's top or left edge; mirrored sides need no case.
- */
-export function ghostTransform(geo: Pick<Geo, 'pt'>, p: Placement): string {
+/** The affine map behind `ghostTransform`, as SVG's `a b c d e f`. */
+function ghostMatrix(geo: Pick<Geo, 'pt'>, p: Placement): [number, number, number, number, number, number] {
   const at = (h: Hole) => geo.pt(h)
   const right = { col: p.from.col + 1, row: p.from.row }
   const down = { col: p.from.col, row: p.from.row + 1 }
@@ -92,5 +87,25 @@ export function ghostTransform(geo: Pick<Geo, 'pt'>, p: Placement): string {
   const d = (y2.y * x.x - x2.y * y.x) / det
   const e = o2.x - (a * o.x + c * o.y)
   const f = o2.y - (b * o.x + d * o.y)
-  return `matrix(${a} ${b} ${c} ${d} ${e} ${f})`
+  return [a, b, c, d, e, f]
+}
+
+/**
+ * An SVG `matrix(a b c d e f)` taking `geo.pt(h)` to `geo.pt(mapHole(h, p))` for every hole: the
+ * affine map fixed by the grabbed hole and its neighbours one column and one row on. It needs no
+ * hole names, so it draws a copy past the board's top or left edge; mirrored sides need no case.
+ */
+export function ghostTransform(geo: Pick<Geo, 'pt'>, p: Placement): string {
+  return `matrix(${ghostMatrix(geo, p).join(' ')})`
+}
+
+/**
+ * How far `ghostTransform` turns the drawing, in degrees (a placement only turns, so on either
+ * side the map is a rotation). The copy's labels turn back by this about their anchor, so they
+ * read upright, as an allowed copy's do.
+ */
+export function ghostTurn(geo: Pick<Geo, 'pt'>, p: Placement): number {
+  const [a, b] = ghostMatrix(geo, p)
+  const deg = Math.round((Math.atan2(b, a) * 180) / Math.PI)
+  return deg === -180 ? 180 : deg + 0 // + 0 normalises -0
 }

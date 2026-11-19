@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { parseHole } from './holes'
 import { FOOTPRINTS } from './footprints'
-import { outlineIsSimple } from './boardShape'
+import { existingHoles, outlineIsSimple } from './boardShape'
 
 export type HoleName = string
 export type Side = 'top' | 'bottom'
@@ -186,10 +186,17 @@ function checkHoles(b: BoardFile): string[] {
   return errors
 }
 
-/** Two corner cuts on one edge must leave at least one hole on it. */
+/**
+ * A shape must leave holes: a round board needs one (1 wide and an even number long has none),
+ * corners must name a cut, two cuts on one edge must leave a hole on it, and cuts on opposite
+ * corners may not split the board.
+ */
 function checkShape(b: BoardFile): string[] {
   const s = b.board.shape
+  if (s?.kind === 'round' && existingHoles(b.board).length === 0)
+    return [`board.shape: a round ${b.board.cols} × ${b.board.rows} board has no hole`]
   if (s?.kind !== 'corners') return []
+  if (!Object.values(s.corners).some(Boolean)) return ['board.shape: corners names no corner cut (leave shape out for a rectangle)']
   const n = (c: Corner) => s.corners[c]?.holes ?? 0
   const { cols, rows } = b.board
   const edges: [string, Corner, Corner, number][] = [

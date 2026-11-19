@@ -15,6 +15,8 @@ const props = defineProps<{
   dimKey?: string | null
   /** Draws every wire in this colour (the Move copy where it cannot go). */
   tint?: string | null
+  /** The Move copy drawn turned by this many degrees (`ghostTurn`): labels turn back, to read upright. */
+  upright?: number
 }>()
 
 /** How faded the wire held by the Move tool is drawn. */
@@ -109,6 +111,7 @@ const dim = (lit: boolean) => (props.lit && !lit ? 0.35 : 1)
           v-if="w.flying"
           :x="p.x + 1.05"
           :y="p.y - 1.05"
+          :transform="upright ? `rotate(${-upright} ${p.x} ${p.y})` : undefined"
           font-size="1.05"
           font-weight="600"
           :fill="w.color"

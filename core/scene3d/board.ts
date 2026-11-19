@@ -17,7 +17,8 @@ export function boardGeometry(board: BoardFile): Pick<Scene3D, 'board' | 'holes'
     return { x: m.x, z: m.y }
   })
   // A margin of EDGE_MARGIN_PITCH past the outer holes on every side, wide enough for the
-  // printed numbers. It is the same on all four sides, so the centre (and every hole) stays put.
+  // printed numbers on a rectangle. It is the same on all four sides, so the centre (and every
+  // hole) stays put.
   const margin = EDGE_MARGIN_PITCH * pitchMm
   const widthMm = (cols - 1) * pitchMm + 2 * margin
   const depthMm = (rows - 1) * pitchMm + 2 * margin
@@ -26,7 +27,8 @@ export function boardGeometry(board: BoardFile): Pick<Scene3D, 'board' | 'holes'
       widthMm, depthMm, thicknessMm: BOARD_THICKNESS_MM,
       center: [((cols - 1) * pitchMm) / 2, -BOARD_THICKNESS_MM / 2, ((rows - 1) * pitchMm) / 2],
       pitchMm,
-      // The same margin as the box, so the printed numbers stay on the board.
+      // The same margin as the box. The numbers stay on the bounding rectangle, so on a round
+      // board, and beside a cut corner, they print off the board (a design call).
       ...(board.board.shape ? { outline: outlinePoints(board.board, EDGE_MARGIN_PITCH).map(p => ({ x: p.x, z: p.y })) } : {})
     },
     holes,

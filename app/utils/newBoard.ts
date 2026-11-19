@@ -5,17 +5,20 @@ import type { BoardShape, CornerCut } from '~core/schema'
 /** The form's shapes: corner cuts apply to all four corners. */
 export type ShapeChoice = 'rect' | 'round' | 'chamfer' | 'notch'
 
-/** `cols`, `rows`, `type`, `shape` and `cornerHoles` are the Custom values: a preset never writes over them. */
+/**
+ * `cols`, `rows`, `type`, `shape` and `cornerHoles` are the Custom values: a preset never writes
+ * over them. A number field left empty is null and is sent as it is: the server says what is wrong.
+ */
 export interface NewBoardDraft {
   name: string
   /** `custom` or a preset id. */
   preset: string
-  cols: number
-  rows: number
+  cols: number | null
+  rows: number | null
   type: BoardSides
   shape: ShapeChoice
   /** How deep the corner cuts go, in holes (chamfer, notch). */
-  cornerHoles: number
+  cornerHoles: number | null
 }
 
 export const SHAPE_ITEMS: { label: string, value: ShapeChoice }[] = [
@@ -29,7 +32,8 @@ export const SHAPE_ITEMS: { label: string, value: ShapeChoice }[] = [
 function shapeOf(d: NewBoardDraft): BoardShape | undefined {
   if (d.shape === 'rect') return undefined
   if (d.shape === 'round') return { kind: 'round' }
-  const cut: CornerCut = { cut: d.shape, holes: d.cornerHoles }
+  // An empty corner size goes as null: the server refuses it with its own message.
+  const cut = { cut: d.shape, holes: d.cornerHoles } as CornerCut
   return { kind: 'corners', corners: { topLeft: cut, topRight: cut, bottomLeft: cut, bottomRight: cut } }
 }
 
@@ -49,14 +53,14 @@ export const PRESET_ITEMS: { label: string, value: string }[] = [
 const presetOf = (d: NewBoardDraft) => BOARD_PRESETS.find(p => p.id === d.preset)
 
 /** What `POST /api/boards` gets: today's body for Custom (with its shape, if not a rectangle), else just the preset's id. */
-export function newBoardBody(d: NewBoardDraft): { name: string, preset: string } | { name: string, cols: number, rows: number, type: BoardSides, shape?: BoardShape } {
+export function newBoardBody(d: NewBoardDraft): { name: string, preset: string } | { name: string, cols: number | null, rows: number | null, type: BoardSides, shape?: BoardShape } {
   if (presetOf(d)) return { name: d.name, preset: d.preset }
   const shape = shapeOf(d)
   return { name: d.name, cols: d.cols, rows: d.rows, type: d.type, ...(shape ? { shape } : {}) }
 }
 
 /** What the form shows: the preset's size and shape (fixed) or the Custom values (editable). */
-export function shownSize(d: NewBoardDraft): { cols: number, rows: number, type: BoardSides, shape: ShapeChoice, fixed: boolean } {
+export function shownSize(d: NewBoardDraft): { cols: number | null, rows: number | null, type: BoardSides, shape: ShapeChoice, fixed: boolean } {
   const p = presetOf(d)
   return p
     ? { cols: p.cols, rows: p.rows, type: p.type, shape: choiceOf(p.shape), fixed: true }

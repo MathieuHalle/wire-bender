@@ -35,6 +35,12 @@ describe('the shape in the "New board" form', () => {
 })
 
 describe('the "New board" form', () => {
+  it('an emptied number field is sent empty (null), for the server to refuse', () => {
+    expect(newBoardBody(draft({ cols: null, rows: 6 }))).toEqual({ name: 'B', cols: null, rows: 6, type: 'one-sided' })
+    expect(newBoardBody(draft({ rows: null }))).toMatchObject({ rows: null })
+    expect(newBoardBody(draft({ shape: 'notch', cornerHoles: null }))).toMatchObject({ shape: { kind: 'corners', corners: { topLeft: { cut: 'notch', holes: null } } } })
+  })
+
   it('Custom sends today\'s body', () => {
     expect(newBoardBody(draft({ cols: 10, rows: 6, type: 'two-sided' }))).toEqual({ name: 'B', cols: 10, rows: 6, type: 'two-sided' })
   })

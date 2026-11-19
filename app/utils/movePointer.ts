@@ -1,4 +1,5 @@
 import type { Hole } from '~core/holes'
+import type { Moving } from './moveCopy'
 
 // Only a mouse moves the Move tool's target by hovering. A finger's jiggle (or a pen
 // hovering) would set the target under the tap, and the tap would then place at once
@@ -21,4 +22,14 @@ export function hoverHole(fc: number, fr: number, exists: (h: Hole) => boolean, 
   if (!exists(h)) return null
   if (!snapAll && Math.hypot(fc - h.col, fr - h.row) > 0.5) return null
   return h
+}
+
+/**
+ * Whether a side's hover snaps every point to a hole (`hoverHole`'s `snapAll`): only in the Move
+ * tool while this side holds the item, as only then does a click there round to a hole. With
+ * nothing held a click picks, so the gaps between holes have no hole, as in the other tools.
+ * (The bottom's copy of a part's folds, `folds`, is not holding: clicks there do nothing.)
+ */
+export function hoverSnaps(tool: string, moving: Moving | null | undefined): boolean {
+  return tool === 'move' && !!moving && !moving.folds
 }

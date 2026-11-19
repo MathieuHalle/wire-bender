@@ -325,7 +325,7 @@ pnpm wirebender pull <board> --bundle [-o board.wirebender.zip] [--force]
 
 ## MCP server for Claude Code
 
-`pnpm wirebender mcp` is an MCP server on stdio. Its tools are `list_boards`, `get_board`, `replace_board`, `check_board`, `list_revisions`, `get_revision`, `undo`, `redo`, `restore_revision` and `create_board`; they follow the editing rules under API (`get_board`, then `replace_board` with `baseRevision`).
+`pnpm wirebender mcp` is an MCP server on stdio. Its tools are `list_boards`, `get_board`, `replace_board`, `check_board`, `list_revisions`, `get_revision`, `undo`, `redo`, `restore_revision` and `create_board`; they follow the editing rules under API (`get_board`, then `replace_board` with `baseRevision`). `create_board` takes what `POST /api/boards` takes: a whole board file (`data`), a `name` and a `preset`, or a `name` with `cols`, `rows`, `type` and an optional `shape`.
 
 Register it with Claude Code. Replace `wb_...` with your token, and `/path/to/wire-bender` with this folder (`--silent` is required, or pnpm's own output breaks the protocol):
 

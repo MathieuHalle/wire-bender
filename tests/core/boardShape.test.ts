@@ -191,6 +191,19 @@ describe('the shape in the board file', () => {
       .toEqual(['board.shape: the left edge\'s corner cuts leave no hole (1 + 0 of 1)'])
   })
 
+  it('a round board with no hole is an error (1 wide, an even number long)', () => {
+    for (const [cols, rows] of [[2, 1], [1, 4], [4, 1]])
+      expect(errors(board({ kind: 'round' }, cols, rows))).toEqual([`board.shape: a round ${cols} × ${rows} board has no hole`])
+    // Odd lengths keep the middle hole; 2 × 2 keeps all four.
+    expect(errors(board({ kind: 'round' }, 3, 1))).toEqual([])
+    expect(errors(board({ kind: 'round' }, 2, 2))).toEqual([])
+  })
+
+  it('corners with no cut is an error (no shape is written by leaving it out)', () => {
+    expect(errors(board({ kind: 'corners', corners: {} })))
+      .toEqual(['board.shape: corners names no corner cut (leave shape out for a rectangle)'])
+  })
+
   it('an item on a missing hole is not a format error (the check reports it)', () => {
     const b = mk({
       board: { cols: 10, rows: 10, shape: { kind: 'round' } } as never,

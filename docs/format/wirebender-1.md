@@ -143,6 +143,8 @@ The JSON Schema covers the shape: keys, types, enums, and number ranges. A reade
 
 - **Hole names.** Every hole is a string like `B7`: capital letters, then a number from 1 with no leading zero. The schema only says "string".
 - **Holes in range.** Every hole must lie inside `board.cols` by `board.rows`.
+- **A round board has a hole.** A round board 1 hole wide and an even number long (`2 × 1`, `1 × 4`, …) has none, as every hole centre is half a pitch from the circle's centre. Such a board is refused.
+- **`corners` names a cut.** `{ "kind": "corners", "corners": {} }` is refused: for a plain rectangle, leave `shape` out.
 - **Corner cuts leave every edge a hole.** The two cuts on one edge (for the top edge, `topLeft` and `topRight`) add up to fewer holes than that edge has.
 - **Opposite corner cuts stay apart.** The cuts at `topLeft` and `bottomRight` (and at `topRight` and `bottomLeft`) may not overlap or meet: the board would come apart in pieces.
 - **Holes outside the shape are missing.** A hole of the grid exists only if its centre is at least a quarter pitch inside the outline. Nothing may sit on a missing hole, but that is a check error (`Off the board`), not a format error: a board whose shape hides an item still reads.

@@ -65,7 +65,7 @@ async function create() {
               :model-value="size.cols"
               :disabled="size.fixed"
               :min="1"
-              @update:model-value="(v: number | null) => (draft.cols = v ?? 1)"
+              @update:model-value="(v: number | null) => (draft.cols = v)"
             />
           </UFormField>
           <UFormField label="Rows">
@@ -73,7 +73,7 @@ async function create() {
               :model-value="size.rows"
               :disabled="size.fixed"
               :min="1"
-              @update:model-value="(v: number | null) => (draft.rows = v ?? 1)"
+              @update:model-value="(v: number | null) => (draft.rows = v)"
             />
           </UFormField>
         </div>
@@ -106,7 +106,7 @@ async function create() {
               :model-value="draft.cornerHoles"
               :disabled="size.fixed"
               :min="1"
-              @update:model-value="(v: number | null) => (draft.cornerHoles = v ?? 1)"
+              @update:model-value="(v: number | null) => (draft.cornerHoles = v)"
             />
           </UFormField>
         </div>
