@@ -1,10 +1,15 @@
-import type { BoardFile, Side, Trail } from './schema'
+import type { BoardFile, Side, Trail, Wire } from './schema'
 import { holeKey, holeName, parseHole, straightRun, walkHoles, type Hole } from './holes'
 import { placePart } from './footprints'
 import { buildConnectivity } from './connectivity'
 import { holeExists } from './boardShape'
 
-export interface Drawing { trailId: string, side: Side }
+/**
+ * What the pencil is drawing: a trail, or on a breadboard a jumper (`jumper`: `trailId` is then
+ * the wire's id). A jumper needs two points to exist (a wire has at least two), so until the
+ * second click its first hole is kept here as `start` and the board is unchanged.
+ */
+export interface Drawing { trailId: string, side: Side, jumper?: true, start?: string }
 export type EditResult = { ok: true, board: BoardFile, drawing: Drawing | null } | { ok: false, reason: string }
 
 const fail = (reason: string): EditResult => ({ ok: false, reason })
@@ -37,6 +42,19 @@ function hasOtherTrace(board: BoardFile, side: Side, h: Hole, exceptTrailId: str
   const name = holeName(h)
   return board.wires.some(w => (w.points[0] === name || w.points[w.points.length - 1] === name))
 }
+
+/** The hole the drawing goes on from (its last point), or null when it is gone. */
+export function drawingEnd(board: BoardFile, d: Drawing): string | null {
+  if (d.jumper) {
+    if (d.start) return d.start
+    const w = board.wires.find(x => x.id === d.trailId)
+    return w ? w.points[w.points.length - 1]! : null
+  }
+  const t = board.trails.find(x => x.id === d.trailId)
+  return t && t.points.length ? t.points[t.points.length - 1]! : null
+}
+
+const NO_SOLDER = 'A breadboard has no solder: the pencil draws jumpers.'
 
 function rejection(board: BoardFile, side: Side, h: Hole): string | null {
   const name = holeName(h)
@@ -91,6 +109,7 @@ function leadJoints(board: BoardFile, t: Trail, from: Hole, to: Hole): Trail {
 }
 
 export function pencilClick(board: BoardFile, side: Side, hole: Hole, drawing: Drawing | null): EditResult {
+  if (board.board.type === 'breadboard') return fail(NO_SOLDER)
   const reason = rejection(board, side, hole)
   if (reason) return fail(reason)
   const name = holeName(hole)
@@ -128,8 +147,59 @@ export function pencilClick(board: BoardFile, side: Side, hole: Hole, drawing: D
   }
 }
 
+/** First unused wire id: "W1", "W2", ... (trail and wire ids are unique together). */
+export function nextWireId(board: BoardFile): string {
+  const used = new Set([...board.wires.map(w => w.id), ...board.trails.map(t => t.id)])
+  let n = 1
+  while (used.has(`W${n}`)) n++
+  return `W${n}`
+}
+
+/**
+ * The pencil on a breadboard: a jumper, a laid insulated wire on the top whose ends plug in. The
+ * first click picks the start (nothing changes yet), each further click adds a corner along a row
+ * or a column, and clicking the last hole again ends it. Holes under a part's body are fine: a
+ * jumper end goes in beside the legs as on the bench.
+ */
+export function jumperClick(board: BoardFile, hole: Hole, drawing: Drawing | null): EditResult {
+  const name = holeName(hole)
+  if (!holeExists(board.board, hole)) return fail(`Hole ${name} is off the board.`)
+  const k = holeKey(hole)
+  for (const b of board.board.blocked)
+    if (b.holes.some(n => holeKey(parseHole(n)) === k)) return fail(`Hole ${name} is blocked: ${b.reason}`)
+  if (!drawing) return { ok: true, board, drawing: { trailId: nextWireId(board), side: 'top', jumper: true, start: name } }
+  const last = drawingEnd(board, drawing)
+  if (last === null) return fail(`Jumper ${drawing.trailId} no longer exists.`)
+  if (last === name) return { ok: true, board, drawing: null } // the last hole again: done
+  const lh = parseHole(last)
+  if (lh.col !== hole.col && lh.row !== hole.row)
+    return fail('Jumpers run along a row or a column here: click a hole in the same row or column.')
+  if (drawing.start) {
+    const w: Wire = { id: drawing.trailId, kind: 'laid', side: 'top', points: [drawing.start, name], bareSegments: [], joints: [] }
+    return { ok: true, board: { ...board, wires: [...board.wires, w] }, drawing: { trailId: w.id, side: 'top', jumper: true } }
+  }
+  const wires = board.wires.map(w => (w.id === drawing.trailId ? { ...w, points: [...w.points, name] } : w))
+  return { ok: true, board: { ...board, wires }, drawing }
+}
+
+/** On a breadboard, erasing a jumper's segment takes the whole jumper out (it isn't cut in two). */
+function eraseJumper(board: BoardFile, a: Hole, b: Hole): EditResult {
+  const ka = holeKey(a)
+  const kb = holeKey(b)
+  const hit = board.wires.find((w) => {
+    const path = expand(w.points)
+    return path.some((h, i) => {
+      const n = path[i + 1]
+      return n !== undefined && ((holeKey(h) === ka && holeKey(n) === kb) || (holeKey(h) === kb && holeKey(n) === ka))
+    })
+  })
+  if (!hit) return fail(`No jumper between ${holeName(a)} and ${holeName(b)}.`)
+  return { ok: true, board: { ...board, wires: board.wires.filter(w => w !== hit) }, drawing: null }
+}
+
 /** Remove the stretch between adjacent holes a and b from the first trail on `side` that runs over it. */
 export function eraseSegment(board: BoardFile, side: Side, a: Hole, b: Hole): EditResult {
+  if (board.board.type === 'breadboard') return eraseJumper(board, a, b)
   const none = fail(`No trail segment between ${holeName(a)} and ${holeName(b)} on this side.`)
   if (Math.abs(a.col - b.col) + Math.abs(a.row - b.row) !== 1) return none
   const ka = holeKey(a)
@@ -177,6 +247,7 @@ export function eraseSegment(board: BoardFile, side: Side, a: Hole, b: Hole): Ed
  * have one. A trail ending there is soldered anyway and left alone.
  */
 export function toggleJoint(board: BoardFile, side: Side, hole: Hole): EditResult {
+  if (board.board.type === 'breadboard') return fail(NO_SOLDER)
   const name = holeName(hole)
   const passing = board.trails.filter(t => t.side === side && trailPasses(t, hole))
   if (passing.length === 0) return fail(`No trail on this side at ${name}.`)

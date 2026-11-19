@@ -6,6 +6,7 @@ import { runCheck, type Finding } from '~core/check'
 import { tagNets, type Tag } from '~core/scene3d'
 import { placePart } from '~core/footprints'
 import { buildConnectivity } from '~core/connectivity'
+import { drawingEnd } from '~core/edit'
 import { jointSide, LOCKED_TITLE, makeGeo, PAUSED_TITLE, pageKey, RETURN_KEY, returnEntry, SIGN_IN_TITLE, sideBox, sideFrames, VIEW_TITLE, type View } from '~/utils/boardView'
 import { NO_ACCESS } from '~/composables/useLiveBoard'
 import { fallbackAlert } from '~/utils/board3dFallback'
@@ -279,14 +280,16 @@ function onAddJoint(f: Finding) {
   addJoint(side, hole)
 }
 
-/** The last point of the trail being drawn, on the side it is drawn on. */
+/** The last point of the trail or jumper being drawn, on the side it is drawn on. */
 const drawFrom = computed(() => {
   const d = drawing.value
-  const t = d && board.value?.trails.find(x => x.id === d.trailId)
-  return t && t.points.length ? { side: d!.side, hole: parseHole(t.points[t.points.length - 1]!) } : null
+  const end = d && board.value ? drawingEnd(board.value, d) : null
+  return end ? { side: d!.side, hole: parseHole(end) } : null
 })
 const hint = computed(() => (drawing.value
-  ? `Drawing ${drawing.value.trailId} on ${drawing.value.side}: click the last hole again or press Esc to end`
+  ? drawing.value.jumper
+    ? `Drawing jumper ${drawing.value.trailId}: click the last hole again or press Esc to end`
+    : `Drawing ${drawing.value.trailId} on ${drawing.value.side}: click the last hole again or press Esc to end`
   : moveHint(held.value, preview.value, lockedTitle.value === PAUSED_TITLE)))
 
 /** What the Move tool holds, as each side draws it (a held part's leg folds on the bottom too). */
@@ -860,6 +863,7 @@ const sideTitle = (s: Side) => (s === 'top'
             :locked="lockedTitle !== null"
             :locked-title="lockedTitle ?? undefined"
             :view-only="viewOnly"
+            :breadboard="board?.board.type === 'breadboard'"
             @undo="cancel(); undo()"
             @redo="cancel(); redo()"
           />

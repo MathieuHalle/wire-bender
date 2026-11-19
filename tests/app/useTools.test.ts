@@ -5,7 +5,7 @@ import { parseHole } from '~core/holes'
 import type { BoardFile } from '~core/schema'
 import { stable } from '#shared/yboard'
 import { createTools } from '../../app/composables/useTools'
-import { axial, mk, trail } from '../core/helpers'
+import { axial, breadboard400, mk, trail } from '../core/helpers'
 
 const h = parseHole
 
@@ -678,5 +678,37 @@ describe('the Move tool', () => {
     const ev = spyKey('ArrowLeft')
     t.onKeydown(ev)
     expect(ev.prevented).toBe(false)
+  })
+})
+
+describe('on a breadboard', () => {
+  const bb = () => mk({ board: breadboard400() })
+  test('the pencil draws a jumper: one undo step per wire change, none for the start', () => {
+    const { deps, board, applied } = fakeBoard(bb())
+    const t = createTools(deps)
+    t.tool.value = 'pencil'
+    t.onHoleClick('top', h('D3'))
+    expect(applied).toHaveLength(0)
+    expect(t.drawing.value?.start).toBe('D3')
+    t.onHoleClick('top', h('D9'))
+    t.onHoleClick('top', h('D9'))
+    expect(applied).toHaveLength(1)
+    expect(board.value!.wires.map(w => w.points)).toEqual([['D3', 'D9']])
+    expect(t.drawing.value).toBeNull()
+  })
+  test('Esc before the second click leaves nothing', () => {
+    const { deps, board } = fakeBoard(bb())
+    const t = createTools(deps)
+    t.tool.value = 'pencil'
+    t.onHoleClick('top', h('D3'))
+    t.onKeydown(key('Escape'))
+    expect(t.drawing.value).toBeNull()
+    expect(board.value!.wires).toEqual([])
+  })
+  test('the J key does nothing', () => {
+    const { deps } = fakeBoard(bb())
+    const t = createTools(deps)
+    t.onKeydown(key('j'))
+    expect(t.tool.value).toBe('inspect')
   })
 })
