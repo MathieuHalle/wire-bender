@@ -16,6 +16,7 @@ import { CANVAS_CONTEXT } from '~/utils/canvasContext'
 import { ghostTransform, moveCopy, type Moving } from '~/utils/moveCopy'
 // Named apart from the `hoverHole` prop.
 import { hoverHole as holeUnder } from '~/utils/movePointer'
+import { bandEnd } from '~/utils/rubberBand'
 
 const props = withDefaults(defineProps<{
   board: BoardFile
@@ -227,17 +228,13 @@ const tip = computed(() => {
 })
 
 // ---- Rubber band and finding marks -------------------------------------------------
-/** From the last drawn point to the pointer, snapped to that point's row or column. */
+/** From the last drawn point to the pointer, snapped to that point's row or column, up to the last hole the board has. */
 const band = computed(() => {
   const from = props.drawFrom
   const p = pointer.value
   if (!from || !p) return null
   const g = geo.value
-  const clamp = (v: number, max: number) => Math.min(max, Math.max(1, Math.round(v)))
-  const to = Math.abs(p.fc - from.col) >= Math.abs(p.fr - from.row)
-    ? { col: clamp(p.fc, g.cols), row: from.row }
-    : { col: from.col, row: clamp(p.fr, g.rows) }
-  return { a: g.pt(from), b: g.pt(to) }
+  return { a: g.pt(from), b: g.pt(bandEnd(from, p.fc, p.fr, inBoard)) }
 })
 
 const marks = computed(() => props.markHoles.map(h => ({ k: holeKey(h), ...geo.value.pt(h) })))
