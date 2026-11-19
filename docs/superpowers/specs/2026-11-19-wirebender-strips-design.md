@@ -98,7 +98,9 @@ Four steps, each one released on its own:
 - **A lead or wire end in a cut hole:** a warning.
 - **A cut nothing needs:** a note when both sides of the cut carry the same net or nothing.
 - **Adjacency and keep-away:** strips side by side are reported once per pair of strips (with the
-  closest holes), not once per hole.
+  closest holes), not once per hole. On a breadboard there is no adjacency finding at all: with
+  nothing soldered, nothing can bridge two neighbouring holes (found in Task 3). Keep-away still
+  applies.
 - Findings still end with the advisory line.
 
 ## The app (my calls)
@@ -140,7 +142,8 @@ with red `+` and blue `-` lines. Its holes are grouped in fives, with a space be
 - **Printed names (owner: yes):** the board file carries (`board.rowLabels`) a display-only label for each grid row (`+`,
   `-`, `a`–`j`, nothing for empty rows) and numbers columns 1, 5, 10, … like the print. The edges
   of 2D and 3D, the bench sheet and findings show these names, as in `a12` (the file and the API
-  keep grid names, as in `D12`). A finding gives both when they differ: `a12 (D12)`.
+  keep grid names, as in `D12`). A finding gives both when they differ: `a12 (D12)`. Labels may repeat (both pairs of
+  rails print `+` and `-`), so a rail hole always keeps its grid name: `+3 (A3)`.
 - **2D look:** an ivory board, square holes, the channel drawn as a groove, the red and blue rail
   lines with `+` and `-` at both ends, and the printed row letters and column numbers. A clip
   strip lights up whole when hovered, so the owner can see what is joined.
