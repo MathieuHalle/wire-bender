@@ -50,6 +50,12 @@ export default defineNuxtConfig({
   // `pnpm dev` listens on the network (--host) and Vite serves project files under
   // /_nuxt/ before the access check runs: never the data folder or a database.
   vite: {
+    // Bundled at startup: found at runtime instead, Vite re-bundles during the first page load
+    // and the page ends up with two copies of @unhead/vue ("useHead() was called without
+    // provide context"). The list is the one Vite printed for this app.
+    optimizeDeps: {
+      include: ['zod', 'yjs', 'y-websocket', 'lib0/decoding', 'lib0/encoding']
+    },
     server: {
       fs: {
         deny: ['.env', '.env.*', '*.{crt,pem}', '**/.git/**', '**/.data/**', '**/*.sqlite', '**/*.sqlite-*', '**/backups/**']
