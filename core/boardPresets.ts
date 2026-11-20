@@ -2,6 +2,7 @@
 // ordinary `wirebender/1` board: a size, a pitch, copper sides, and optionally starting parts,
 // nets and blocked holes. One list, shared by the app and the server.
 import { BENCH_DEFAULTS, type BoardFile, type BoardShape, type Part } from './schema'
+import { rowToLetters } from './holes'
 
 export type BoardSides = 'one-sided' | 'two-sided'
 
@@ -49,6 +50,15 @@ const proto = (id: string, name: string, cols: number, rows: number): BoardPrese
   ({ id, name, cols, rows, pitchMm: 2.54, type: 'two-sided' })
 
 const rowName = (row: number) => String.fromCharCode(64 + row)
+
+/** A strip along every row, from column 1 to the last (a stripboard's copper). */
+export function rowStrips(cols: number, rows: number): NonNullable<BoardFile['board']['strips']> {
+  return Array.from({ length: rows }, (_, i) => ({ from: `${rowToLetters(i + 1)}1`, to: `${rowToLetters(i + 1)}${cols}` }))
+}
+
+/** A Veroboard: one-sided, copper strips along the long side (hole counts from sellers' listings: unconfirmed). */
+const stripboard = (id: string, name: string, cols: number, rows: number): BoardPreset =>
+  ({ id, name, cols, rows, pitchMm: 2.54, type: 'one-sided', strips: rowStrips(cols, rows) })
 
 /**
  * A solderless breadboard (layouts from sellers' drawings: to confirm on a real board). Clip
@@ -110,7 +120,9 @@ export const BOARD_PRESETS: BoardPreset[] = [
   breadboard('bb-830', 'Breadboard 830 (split rails)', 63, 'split'),
   breadboard('bb-830-full', 'Breadboard 830', 63, 'full'),
   breadboard('bb-400', 'Breadboard 400', 30, 'full'),
-  breadboard('bb-170', 'Breadboard 170', 17, 'none')
+  breadboard('bb-170', 'Breadboard 170', 17, 'none'),
+  stripboard('vero-95x127', 'Stripboard (Veroboard) 95 × 127 mm', 50, 36),
+  stripboard('vero-64x95', 'Stripboard (Veroboard) 64 × 95 mm', 37, 24)
 ]
 
 /** Every id `POST /api/boards` accepts as `preset`: `custom` (today's size fields) first. */

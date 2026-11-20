@@ -111,6 +111,7 @@ export function createMcpServer(call: Call): McpServer {
       cols: z.number().int().optional().describe('Columns, for an empty board'),
       rows: z.number().int().optional().describe('Rows, for an empty board'),
       type: z.enum(['one-sided', 'two-sided']).optional().describe('Copper sides, for an empty board'),
+      copper: z.enum(['pads', 'strips']).optional().describe('For an empty board: pads (a perfboard, the default) or strips (a stripboard: a copper strip along every row)'),
       shape: z.record(z.string(), z.unknown()).optional()
         .describe('The board\'s `shape`, for an empty board: { "kind": "round" } or { "kind": "corners", "corners": { ... } } (see the board format)')
     }

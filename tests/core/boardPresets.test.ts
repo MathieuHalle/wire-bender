@@ -14,7 +14,7 @@ describe('board presets', () => {
   })
 
   it('the ids are unique and stable', () => {
-    expect(PRESET_IDS).toEqual(['custom', 'proto-4x6', 'proto-5x7', 'proto-7x9', 'chogori-22004515', 'bb-830', 'bb-830-full', 'bb-400', 'bb-170'])
+    expect(PRESET_IDS).toEqual(['custom', 'proto-4x6', 'proto-5x7', 'proto-7x9', 'chogori-22004515', 'bb-830', 'bb-830-full', 'bb-400', 'bb-170', 'vero-95x127', 'vero-64x95'])
     expect(new Set(PRESET_IDS).size).toBe(PRESET_IDS.length)
   })
 
@@ -86,5 +86,15 @@ describe('breadboard presets', () => {
   it('matches the 400 the core tests use', () => {
     const { cols, rows, type, shape, strips, rowLabels } = bb('bb-400').board
     expect({ cols, rows, type, shape, strips, rowLabels }).toEqual(breadboard400())
+  })
+})
+
+describe('stripboard presets', () => {
+  it.each([['vero-95x127', 50, 36], ['vero-64x95', 37, 24]])('%s: one-sided, %i holes by %i strips, one strip per row', (id, cols, rows) => {
+    const b = presetBoard(id, 'x')!
+    expect(parseBoard(b).ok).toBe(true)
+    expect(b.board).toMatchObject({ cols, rows, type: 'one-sided' })
+    expect(b.board.strips).toHaveLength(rows)
+    expect(b.board.strips![0]).toEqual({ from: 'A1', to: `A${cols}` })
   })
 })
