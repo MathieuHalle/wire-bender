@@ -4,6 +4,7 @@
 import { FOOTPRINT_PITCH_MM, LEG_DIAMETER_MM, TAB_CLEARANCE_MM, tabPlateMm, type Rect } from '../footprints'
 import { holeKey, holeMm, parseHole, type Hole } from '../holes'
 import type { HoleName } from '../schema'
+import { blockedReasons } from '../features'
 import { joinAnd, names, type CheckContext, type Finding, type Run } from './context'
 
 /** Bodies may touch: only an overlap beyond this in both axes is a collision. */
@@ -180,8 +181,8 @@ export function placementRules(ctx: CheckContext): Finding[] {
     offShape(`leg fold of ${f.lead} at`, f.to, lead ? [lead.hole] : [])
   }
 
-  const reason = new Map<string, string>()
-  for (const b of board.board.blocked) for (const n of b.holes) reason.set(holeKey(parseHole(n)), b.reason)
+  // Blocked as written, and around each mounting hole (its clearance).
+  const reason = blockedReasons(board.board, ctx.onBoard)
   if (reason.size) {
     const used = new Occupancy()
     for (const l of ctx.leads) used.add(l.hole, l.id)

@@ -4,6 +4,7 @@
 // hole that is drawn is a hole that can be used.
 import { holeKey, holeMm, type Hole } from './holes'
 import { stripIndex } from './strips'
+import { underOpening } from './features'
 import type { BoardFile, Corner } from './schema'
 
 type Board = BoardFile['board']
@@ -23,6 +24,11 @@ const fromCorner = (b: Board, h: Hole, c: Corner) => ({
 /** True when the board has this hole: in the grid, and inside its shape. */
 export function holeExists(b: Board, h: Hole): boolean {
   if (h.col < 1 || h.row < 1 || h.col > b.cols || h.row > b.rows) return false
+  return inShape(b, h) && !underOpening(b, h)
+}
+
+/** In the board's shape (round, corners, strips), cutouts and mounting holes aside. */
+function inShape(b: Board, h: Hole): boolean {
   const s = b.shape
   if (!s) return true
   if (s.kind === 'strips') return stripIndex(b).has(holeKey(h))
