@@ -11,6 +11,7 @@ import type { BoardFile, Side } from '../core/schema'
 import { safeColor } from '../core/color'
 import { ghostWires, sideMap, type Flip, type SideMap } from '../core/sideView'
 import { existingHoles, shapeOutline } from '../core/boardShape'
+import { stripSegments } from '../core/strips'
 
 export { safeColor }
 
@@ -245,6 +246,16 @@ export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: b
   if (!shape) s.rect(-half, -half, g.span + p, height + p, `rx="0.6" ${body}`)
   else if (shape.kind === 'circle') s.circle({ x: shape.cx, y: shape.cy }, shape.r, body)
   else s.poly([...shape.points, shape.points[0]!], `${body} stroke-linejoin="round"`)
+  // A stripboard's copper, on the bottom: a band per piece of strip, a gap and a ring at each cut.
+  if (side === 'bottom' && board.board.type !== 'breadboard') {
+    const w = p * 0.84
+    for (const seg of stripSegments(board.board, board.cuts)) {
+      const a = g.pt(seg.holes[0]!)
+      const b = g.pt(seg.holes[seg.holes.length - 1]!)
+      s.rect(Math.min(a.x, b.x) - w / 2, Math.min(a.y, b.y) - w / 2, Math.abs(b.x - a.x) + w, Math.abs(b.y - a.y) + w, `rx="0.3" fill="#e9c9a0" stroke="#b9854c" stroke-width="0.1"`)
+    }
+    for (const n of board.cuts ?? []) s.circle(g.pt(parseHole(n)), 1.05, `data-cut="${esc(n)}" fill="none" stroke="#8a5a2b" stroke-width="0.25"`)
+  }
   for (const h of existingHoles(board.board))
     s.circle(g.pt(h), 0.5, `fill="#ffffff" stroke="${HOLE}" stroke-width="0.18"`)
   for (const bl of board.board.blocked)

@@ -503,3 +503,23 @@ describe('benchHtml on a breadboard', () => {
     expect(rows.find(r => r.ref === 'R1')!.holes).toBe('a:a12 b:a16')
   })
 })
+
+describe('benchHtml on a stripboard', () => {
+  const b = mk({ name: 'sb', board: { strips: [{ from: 'B1', to: 'B10' }, { from: 'C1', to: 'C10' }] }, parts: [axial('R1', 'B2', 'B6', 'X', 'Y')], cuts: ['C7', 'B4'] })
+  const html = benchHtml(b, { date: DATE })
+  it('lists the cuts first, row by row, before the placement', () => {
+    expect(benchModel(b).cuts).toEqual([{ hole: 'B4', strip: 'B1–B10' }, { hole: 'C7', strip: 'C1–C10' }])
+    expect(html.indexOf('id="cuts"')).toBeGreaterThan(0)
+    expect(html.indexOf('id="cuts"')).toBeLessThan(html.indexOf('id="placement"'))
+    expect(text(html)).toContain('Cut the strips')
+  })
+  it('draws the strips and the cuts on the bottom overview', () => {
+    const svg = boardOverviewSvg(b, 'bottom')
+    expect(svg).toContain('data-cut="B4"')
+    expect(svg).toContain('data-cut="C7"')
+    expect(boardOverviewSvg(b, 'top')).not.toContain('data-cut')
+  })
+  it('a board without strips has no cut section', () => {
+    expect(benchHtml(small(), { date: DATE })).not.toContain('id="cuts"')
+  })
+})

@@ -6,6 +6,7 @@ import { benchModel, type BenchModel, type MeterRow } from '../core/bench/sheet'
 import { netLabel, type WireCard } from '../core/bench/cards'
 import type { BoardFile, Side } from '../core/schema'
 import { printedName } from '../core/holeLabel'
+import { isStripboard, stripSegments } from '../core/strips'
 import { parseHole } from '../core/holes'
 import { sideMap, type Flip, type SideMap } from '../core/sideView'
 import {
@@ -177,6 +178,16 @@ function table(cols: string[], rows: (string[] | string)[], cls = ''): string {
     ? `<tr class="group"><th colspan="${cols.length}">${esc(r)}</th></tr>`
     : `<tr>${r.map((cell, i) => `<td data-label="${esc(cols[i] ?? '')}">${cell}</td>`).join('')}</tr>`).join('\n')
   return `<table${cls ? ` class="${cls}"` : ''}>${head}<tbody>\n${body}\n</tbody></table>`
+}
+
+/** A stripboard's cuts, first: a checklist, done before anything is soldered. */
+function cuts(m: BenchModel, id: (k: string) => string): string {
+  const rows = m.cuts.map(c => [tick(id(`cut:${c.hole}`)), `<strong class="mono">${esc(c.hole)}</strong>`, `<span class="mono">${esc(c.strip)}</span>`])
+  return `<section id="cuts" class="page">
+<h2>Cut the strips</h2>
+<p class="hint">First, before placing anything: on the copper side, cut the strip at each hole (a 3–4 mm drill bit turned by hand, or a spot-face cutter) until no copper joins the two sides. Check each cut with the meter: no beep across it.</p>
+${rows.length ? table(['Done', 'Hole', 'Strip'], rows) : '<p>No cuts.</p>'}
+</section>`
 }
 
 function placement(m: BenchModel, id: (k: string) => string, breadboard = false): string {
@@ -557,6 +568,7 @@ export function benchHtml(board: BoardFile, opts: { hash?: string, date?: string
   const bb = isBreadboard(board)
   const parts = [
     ...(bb ? topOnly(board, m.paper, printable) : [overview(board, printable, flip), enlarged(board, m.paper, flip)]),
+    ...(isStripboard(board.board) ? [cuts(m, id)] : []),
     placement(m, id, bb), cards(m, board, printable, id, map),
     ...(bb ? [] : [legFolds(m, board.board.pitchMm, id, map)]), meter(m, id)
   ].map(html => (bb ? breadboardWording(html) : html)).map(html => ({ html, ...sectionHead(html) }))
