@@ -53,6 +53,35 @@ export function existingHoles(b: Board): Hole[] {
   return out
 }
 
+/** How far the board reaches past a mounting hole's edge, mm, when the hole sits beyond the margin. */
+const MOUNT_EDGE_MM = 1.5
+
+/**
+ * The board's rectangle in board mm: `marginPitch` past the outer hole centres, grown where a
+ * mounting hole (of a board without a `shape`) sits beyond it, so the hole has board around it.
+ */
+export function boardRectMm(b: Board, marginPitch = 0.5): { x0: number, y0: number, x1: number, y1: number } {
+  const p = b.pitchMm
+  const r = { x0: -marginPitch * p, y0: -marginPitch * p, x1: (b.cols - 1 + marginPitch) * p, y1: (b.rows - 1 + marginPitch) * p }
+  if (b.shape) return r
+  for (const m of b.mountingHoles ?? []) {
+    const e = m.diameterMm / 2 + MOUNT_EDGE_MM
+    r.x0 = Math.min(r.x0, m.x - e)
+    r.y0 = Math.min(r.y0, m.y - e)
+    r.x1 = Math.max(r.x1, m.x + e)
+    r.y1 = Math.max(r.y1, m.y + e)
+  }
+  return r
+}
+
+/** True when a mounting hole makes a plain board larger than its margin (`boardRectMm`). */
+export function rectGrown(b: Board, marginPitch = 0.5): boolean {
+  if (b.shape || !b.mountingHoles?.length) return false
+  const p = b.pitchMm
+  const r = boardRectMm(b, marginPitch)
+  return r.x0 < -marginPitch * p || r.y0 < -marginPitch * p || r.x1 > (b.cols - 1 + marginPitch) * p || r.y1 > (b.rows - 1 + marginPitch) * p
+}
+
 /** Board mm, A1 at (0, 0): x right, y down. */
 export type Outline = { kind: 'circle', cx: number, cy: number, r: number } | { kind: 'polygon', points: { x: number, y: number }[] }
 
@@ -65,6 +94,10 @@ export function boardOutline(b: Board, marginPitch = 0.5): Outline {
   const m = marginPitch
   if (b.shape?.kind === 'round')
     return { kind: 'circle', cx: ((b.cols - 1) * p) / 2, cy: ((b.rows - 1) * p) / 2, r: (Math.min(b.cols, b.rows) / 2 - 0.5 + m) * p }
+  if (!b.shape) {
+    const r = boardRectMm(b, m)
+    return { kind: 'polygon', points: [{ x: r.x0, y: r.y0 }, { x: r.x1, y: r.y0 }, { x: r.x1, y: r.y1 }, { x: r.x0, y: r.y1 }] }
+  }
   const corners = b.shape?.kind === 'corners' ? b.shape.corners : {}
   const points: { x: number, y: number }[] = []
   for (const c of CORNERS) {
@@ -102,7 +135,7 @@ export function shapeOutline(
   map: { x(v: number): number, y(v: number): number },
   marginPitch = 0.5
 ): { kind: 'circle', cx: number, cy: number, r: number } | { kind: 'polygon', points: { x: number, y: number }[] } | null {
-  if (!b.shape) return null
+  if (!b.shape && !rectGrown(b, marginPitch)) return null
   const o = boardOutline(b, marginPitch)
   if (o.kind === 'circle') return { kind: 'circle', cx: map.x(o.cx), cy: map.y(o.cy), r: o.r }
   return { kind: 'polygon', points: o.points.map(p => ({ x: map.x(p.x), y: map.y(p.y) })) }

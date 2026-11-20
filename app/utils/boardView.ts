@@ -6,6 +6,7 @@ import { sideMap, type Flip, type Mirror, type SideMap } from '~core/sideView'
 import type { BoardFile, Side } from '~core/schema'
 import type { Conductor, Connectivity } from '~core/connectivity'
 import type { PlacedPart } from '~core/footprints'
+import { boardRectMm } from '~core/boardShape'
 
 /** `navigate` only pans (any left-drag) and never edits; the others click to act (`move` picks up, then places). */
 export type Tool = 'navigate' | 'inspect' | 'pencil' | 'erase' | 'joint' | 'move' | 'cut'
@@ -20,10 +21,17 @@ export type Group = Connectivity['groups'][number]
 export interface Geo extends SideMap {
   cols: number
   rows: number
+  /** The board's edge in drawing mm (half a pitch past the outer holes, grown round a mounting hole beyond it). */
+  edge: { x0: number, y0: number, x1: number, y1: number }
 }
 
 export function makeGeo(board: BoardFile, mirror: Mirror): Geo {
-  return { ...sideMap(board, mirror), cols: board.board.cols, rows: board.board.rows }
+  const m = sideMap(board, mirror)
+  const r = boardRectMm(board.board, 0.5)
+  const xs = [m.x(r.x0), m.x(r.x1)]
+  const ys = [m.y(r.y0), m.y(r.y1)]
+  const edge = { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }
+  return { ...m, cols: board.board.cols, rows: board.board.rows, edge }
 }
 
 export const FALLBACK_NET = '#8a7a55'
@@ -76,11 +84,7 @@ export const SIDE_MARGIN = 3
  * same mirrored or not; only its x (lr) or y (tb) moves.
  */
 export function sideExtent(geo: Geo, placed: PlacedPart[]): { x0: number, y0: number, x1: number, y1: number } {
-  const half = geo.pitch / 2
-  let x0 = -half
-  let y0 = -half
-  let x1 = geo.span + half
-  let y1 = (geo.rows - 1) * geo.pitch + half
+  let { x0, y0, x1, y1 } = geo.edge
   for (const p of placed) {
     const r = geo.rect(p.bodyRectMm)
     x0 = Math.min(x0, r.x)

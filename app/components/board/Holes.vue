@@ -8,10 +8,19 @@ import { holeKey, parseHole } from '~core/holes'
 import type { BoardFile, Side } from '~core/schema'
 import type { Geo, Lit } from '~/utils/boardView'
 import { channelRect, railLines, stripBands } from '~/utils/breadboardLook'
+import { boardPath, mountRings, noGoCells } from '~/utils/boardPath'
 
 const props = defineProps<{ board: BoardFile, side: Side, geo: Geo, lit: Lit | null }>()
 
 const breadboard = computed(() => props.board.board.type === 'breadboard')
+/** With cutouts or mounting holes: the board as one path with them cut out of it. */
+const openingsPath = computed(() =>
+  props.board.board.cutouts?.length || props.board.board.mountingHoles?.length ? boardPath(props.board, props.geo) : null)
+const rings = computed(() => mountRings(props.board, props.geo))
+/** No-go zones (and round mounting holes): a hatched patch on each blocked hole. */
+const noGo = computed(() => noGoCells(props.board, props.geo))
+// Both sides are on one page: each side's pattern has its own id.
+const hatchId = computed(() => `nogo-hatch-${props.side}`)
 const hasPads = computed(() => !breadboard.value && (props.side === 'bottom' || props.board.board.type === 'two-sided'))
 
 const outline = computed(() => {
@@ -47,8 +56,17 @@ const litPads = computed(() => {
 
 <template>
   <g pointer-events="none">
+    <path
+      v-if="openingsPath"
+      :d="openingsPath"
+      fill-rule="evenodd"
+      :fill="fill"
+      :stroke="edge"
+      stroke-width="0.25"
+      stroke-linejoin="round"
+    />
     <circle
-      v-if="shape?.kind === 'circle'"
+      v-else-if="shape?.kind === 'circle'"
       :cx="shape.cx"
       :cy="shape.cy"
       :r="shape.r"
@@ -74,6 +92,45 @@ const litPads = computed(() => {
       :fill="fill"
       :stroke="edge"
       stroke-width="0.25"
+    />
+    <defs>
+      <pattern
+        :id="hatchId"
+        width="0.9"
+        height="0.9"
+        patternUnits="userSpaceOnUse"
+        patternTransform="rotate(45)"
+      >
+        <line
+          x1="0"
+          y1="0"
+          x2="0"
+          y2="0.9"
+          stroke="#c8321e"
+          stroke-width="0.22"
+          stroke-opacity="0.45"
+        />
+      </pattern>
+    </defs>
+    <rect
+      v-for="c in noGo"
+      :key="`ng${c.k}`"
+      :x="c.x - geo.pitch / 2"
+      :y="c.y - geo.pitch / 2"
+      :width="geo.pitch"
+      :height="geo.pitch"
+      :fill="`url(#${hatchId})`"
+    />
+    <circle
+      v-for="(m, i) in rings"
+      :key="`mr${i}`"
+      :cx="m.cx"
+      :cy="m.cy"
+      :r="m.r"
+      fill="none"
+      stroke="#8b8f86"
+      stroke-width="0.25"
+      stroke-dasharray="0.8 0.5"
     />
     <rect
       v-if="channel"
