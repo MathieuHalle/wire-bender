@@ -67,3 +67,19 @@ describe('mounting holes', () => {
     expect(existingHoles(mk().board)).toHaveLength(100)
   })
 })
+
+describe('bodies over openings', () => {
+  const dip = (at: string) => ({ ref: 'U1', footprint: 'dip8', at, rotation: 0 as const, pins: {} })
+  it('warns of a body over a cutout or a mounting hole\'s clearance', () => {
+    const b = mk({ board: { cutouts: [{ kind: 'round', x: 5 * p, y: 4.5 * p, diameterMm: 2, reason: 'pot shaft' }] }, parts: [dip('D5')] })
+    expect(runCheck(b).findings.filter(f => f.rule === 'overOpening').map(f => f.message))
+      .toEqual(['Over an opening: the body of U1 reaches over the round cutout (pot shaft)'])
+    const m = mk({ board: { mountingHoles: [{ x: 3 * p, y: 4.5 * p, diameterMm: 3.2, clearanceMm: 1.5 }] }, parts: [dip('B2')] })
+    expect(runCheck(m).findings.filter(f => f.rule === 'overOpening').map(f => f.message))
+      .toEqual(['Over an opening: the body of U1 reaches over the mounting hole near F4'])
+  })
+  it('says nothing for a body clear of them', () => {
+    const b = mk({ board: { cutouts: [{ kind: 'grid', from: 'H8', to: 'I9' }] }, parts: [dip('A1')] })
+    expect(runCheck(b).findings.filter(f => f.rule === 'overOpening')).toEqual([])
+  })
+})
