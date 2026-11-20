@@ -759,3 +759,17 @@ describe('the Block tool', () => {
     expect(t.blockStart.value).toBeNull()
   })
 })
+
+describe('the Block tool, changing kind', () => {
+  test('forgets a first corner', () => {
+    const { deps, board } = fakeBoard(mk())
+    const t = createTools(deps)
+    t.tool.value = 'block'
+    t.onBlockPoint({ col: 3, row: 3 })
+    t.blockKind.value = 'mount'
+    expect(t.blockStart.value).toBeNull()
+    t.onBlockPoint({ col: 6.5, row: 6.5 })
+    expect(board.value!.board.mountingHoles).toHaveLength(1)
+    expect(board.value!.board.blocked).toEqual([])
+  })
+})

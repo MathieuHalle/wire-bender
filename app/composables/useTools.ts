@@ -369,6 +369,10 @@ export function createTools(deps: ToolDeps) {
   }
 
   // Switching tool ends the drawing and puts back what Move holds.
+  // A first corner belongs to the kind it was given for: changing the kind forgets it.
+  watch(blockKind, () => {
+    blockStart.value = null
+  }, { flush: 'sync' })
   watch(tool, () => {
     endDrawing()
     blockStart.value = null

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { holeKey as holeKeyOf, holeName as holeNameOf, parseHole } from './holes'
 import { FOOTPRINTS } from './footprints'
-import { existingHoles, outlineIsSimple } from './boardShape'
+import { existingHoles, holeExists, outlineIsSimple } from './boardShape'
 import { stripHoles, stripIndex } from './strips'
 import { cutoutShape, signedDistance, type FeatureShape } from './features'
 
@@ -289,6 +289,13 @@ function checkStrips(b: BoardFile): string[] {
     st.skip?.forEach((n, j) => {
       if (!inner.has(n)) errors.push(`board.strips[${i}].skip[${j}]: ${n} is not between ${st.from} and ${st.to}`)
     })
+    // On a round or cut board, a strip stays on it (the strips shape makes its own holes).
+    const shaped = b.board.shape && b.board.shape.kind !== 'strips'
+    const off = shaped ? hs.find(h => h.col <= b.board.cols && h.row <= b.board.rows && !holeExists({ ...b.board, cutouts: undefined, mountingHoles: undefined }, h)) : undefined
+    if (off) {
+      errors.push(`board.strips[${i}]: ${holeNameOf(off)} is off the board's shape`)
+      return
+    }
     for (const h of hs) {
       const name = `${h.col}|${h.row}`
       const other = owner.get(name)
@@ -308,7 +315,9 @@ function checkStrips(b: BoardFile): string[] {
     else if (seen.has(n)) errors.push(`cuts[${i}]: duplicate ${n}`)
     else {
       try {
-        if (!drilled.has(holeKeyOf(parseHole(n)))) errors.push(`cuts[${i}]: ${n} is not on a strip`)
+        const h = parseHole(n)
+        if (!drilled.has(holeKeyOf(h))) errors.push(`cuts[${i}]: ${n} is not on a strip`)
+        else if (!holeExists(b.board, h)) errors.push(`cuts[${i}]: ${n} is not on the board (an opening took it)`)
       } catch {
         // a bad name: reported by checkHoles
       }

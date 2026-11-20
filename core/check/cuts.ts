@@ -19,7 +19,17 @@ export function cutRules(ctx: CheckContext): Finding[] {
     if (t.side !== 'bottom' || !t.points.length) continue
     for (const n of [t.points[0]!, t.points[t.points.length - 1]!, ...t.joints]) busy.add(holeKey(parseHole(n)))
   }
+  for (const w of board.wires) if (w.side === 'bottom') for (const n of w.joints) busy.add(holeKey(parseHole(n)))
   for (const f of board.legFolds) busy.add(holeKey(parseHole(f.to)))
+  // Bottom trail ends and joints, by hole: soldered to the copper there.
+  const trailAt = new Map<string, string[]>()
+  for (const t of board.trails) {
+    if (t.side !== 'bottom' || !t.points.length) continue
+    for (const n of new Set([t.points[0]!, t.points[t.points.length - 1]!, ...t.joints])) {
+      const k = holeKey(parseHole(n))
+      trailAt.set(k, [...(trailAt.get(k) ?? []), `trail ${t.id}`])
+    }
+  }
 
   // ---- cutProposal: a strip piece whose leads carry two nets --------------------------------
   for (const seg of stripSegments(bb, cuts)) {
@@ -51,7 +61,10 @@ export function cutRules(ctx: CheckContext): Finding[] {
   // ---- onCut: something soldered in a hole with no copper ----------------------------------
   for (const n of cutSet) {
     const h = parseHole(n)
-    const what = [...(ctx.leadsAt.get(holeKey(h)) ?? []), ...(ctx.wireEndsAt.get(holeKey(h)) ?? []).map(id => `wire ${id}`)]
+    const what = [
+      ...(ctx.leadsAt.get(holeKey(h)) ?? []), ...(ctx.wireEndsAt.get(holeKey(h)) ?? []).map(id => `wire ${id}`),
+      ...(trailAt.get(holeKey(h)) ?? [])
+    ]
     if (what.length)
       out.push({
         rule: 'onCut', severity: 'warning', holes: names(ctx, [h]),
@@ -60,18 +73,24 @@ export function cutRules(ctx: CheckContext): Finding[] {
   }
 
   // ---- idleCut: both sides carry the same net, or one side carries nothing -------------------
+  // Cuts side by side (a double cut) are judged as one: the nets past the whole run of them.
   const netsBeside = (h: Hole | undefined): string[] | null => {
-    if (!h || cutSet.has(holeName(h))) return null
+    if (!h) return null
     const gi = ctx.conn.groupAtHole(h, 'bottom')
     const g = gi === null ? null : ctx.conn.groups[gi]!
     return g && g.leads.length ? g.nets : null
   }
   for (const s of bb.strips ?? []) {
     const hs = stripDrilled(s)
+    const isCut = (i: number) => cutSet.has(holeName(hs[i]!))
     hs.forEach((h, i) => {
-      if (!cutSet.has(holeName(h))) return
-      const a = netsBeside(hs[i - 1])
-      const b = netsBeside(hs[i + 1])
+      if (!isCut(i)) return
+      let lo = i - 1
+      while (lo >= 0 && isCut(lo)) lo--
+      let hi = i + 1
+      while (hi < hs.length && isCut(hi)) hi++
+      const a = netsBeside(hs[lo])
+      const b = netsBeside(hs[hi])
       const same = a && b && a.length === 1 && b.length === 1 && a[0] === b[0]
       if (a && b && !same) return
       out.push({

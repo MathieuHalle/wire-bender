@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { runCheck } from '~core/check'
 import { parseBoard, type BoardFile } from '~core/schema'
+import { holeExists } from '~core/boardShape'
 import { blankBoard, PRESET_IDS, presetBoard, rowStrips, type BoardSides } from '~core/boardPresets'
 import { parseFlip } from '~core/sideView'
 import { statsLine, ADVISORY } from '../../cli/format'
@@ -62,8 +63,18 @@ function emptyBoard(json: Record<string, unknown>): unknown {
   const b = blankBoard(json.name as string, { cols: json.cols as number, rows: json.rows as number, pitchMm: 2.54, type: json.type as BoardSides })
   // A shape is passed through as sent: parseBoard says what is wrong with it.
   const shaped = 'shape' in json ? { ...b, board: { ...b.board, shape: json.shape } } : b
-  const strips = json.copper === 'strips' && Number.isSafeInteger(json.cols) && Number.isSafeInteger(json.rows) && (json.cols as number) > 0 && (json.rows as number) > 0
-  return strips ? { ...shaped, board: { ...shaped.board, strips: rowStrips(json.cols as number, json.rows as number) } } : shaped
+  const wantsStrips = json.copper === 'strips' && Number.isSafeInteger(json.cols) && Number.isSafeInteger(json.rows) && (json.cols as number) > 0 && (json.rows as number) > 0
+  if (!wantsStrips) return shaped
+  // On a round or cut board, each row's strip runs between its own first and last hole. A shape
+  // the format refuses is left for parseBoard to name.
+  const settings = shaped.board as BoardFile['board']
+  let strips: BoardFile['board']['strips']
+  try {
+    strips = rowStrips(json.cols as number, json.rows as number, h => holeExists(settings, h))
+  } catch {
+    strips = rowStrips(json.cols as number, json.rows as number)
+  }
+  return { ...shaped, board: { ...shaped.board, strips } }
 }
 
 const COPPER_ERROR = 'copper: must be pads or strips'

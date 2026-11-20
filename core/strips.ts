@@ -4,6 +4,7 @@
 // drawings all read strips through here.
 import { holeKey, holeName, parseHole, type Hole } from './holes'
 import type { BoardFile } from './schema'
+import { underOpening } from './features'
 
 type Board = BoardFile['board']
 /** `skip`: holes along the strip with no hole drilled (a breadboard rail's gaps); its copper runs past them. */
@@ -61,11 +62,21 @@ export const isStripboard = (b: Board): boolean => b.type !== 'breadboard' && (b
 export interface StripSegment { id: string, strip: number, holes: Hole[] }
 
 /**
- * Every strip cut into its pieces at `cuts` (the cut holes belong to no piece: the copper there is
- * gone). A strip with no cut is one piece, `from-to`. Pieces with no hole left are dropped.
+ * Every strip cut into its pieces at `cuts` and at the openings it crosses (a cutout or a drilled
+ * mounting hole takes the copper with it); those holes belong to no piece. A strip cut nowhere is
+ * one piece, `from-to`. Pieces with no hole left are dropped. (`skip` holes are different: never
+ * drilled, but the copper runs past them.)
  */
 export function stripSegments(b: Board, cuts: readonly string[] = []): StripSegment[] {
   const cut = new Set(cuts)
+  if (b.cutouts?.length || b.mountingHoles?.length)
+    for (const s of b.strips ?? []) {
+      try {
+        for (const h of stripDrilled(s)) if (underOpening(b, h)) cut.add(holeName(h))
+      } catch {
+        // a bad name: the format reports it
+      }
+    }
   const out: StripSegment[] = []
   ;(b.strips ?? []).forEach((s, i) => {
     let hs: Hole[]

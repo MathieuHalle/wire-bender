@@ -51,9 +51,17 @@ const proto = (id: string, name: string, cols: number, rows: number): BoardPrese
 
 const rowName = (row: number) => String.fromCharCode(64 + row)
 
-/** A strip along every row, from column 1 to the last (a stripboard's copper). */
-export function rowStrips(cols: number, rows: number): NonNullable<BoardFile['board']['strips']> {
-  return Array.from({ length: rows }, (_, i) => ({ from: `${rowToLetters(i + 1)}1`, to: `${rowToLetters(i + 1)}${cols}` }))
+/**
+ * A strip along every row, from column 1 to the last (a stripboard's copper); on a shaped board
+ * (`exists`), from the row's first hole to its last, and none on a row with no hole.
+ */
+export function rowStrips(cols: number, rows: number, exists: (h: { col: number, row: number }) => boolean = () => true): NonNullable<BoardFile['board']['strips']> {
+  const out: NonNullable<BoardFile['board']['strips']> = []
+  for (let row = 1; row <= rows; row++) {
+    const cs = Array.from({ length: cols }, (_, i) => i + 1).filter(col => exists({ col, row }))
+    if (cs.length) out.push({ from: `${rowToLetters(row)}${cs[0]}`, to: `${rowToLetters(row)}${cs[cs.length - 1]}` })
+  }
+  return out
 }
 
 /** A Veroboard: one-sided, copper strips along the long side (hole counts from sellers' listings: unconfirmed). */

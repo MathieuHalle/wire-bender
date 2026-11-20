@@ -158,7 +158,8 @@ The JSON Schema covers the shape: keys, types, enums, and number ranges. A reade
 - **Opposite corner cuts stay apart.** The cuts at `topLeft` and `bottomRight` (and at `topRight` and `bottomLeft`) may not overlap or meet: the board would come apart in pieces.
 - **Strips are straight and apart.** A strip runs along one row or one column, and no two strips share a hole. A `skip` hole lies between the strip's ends. The `strips` shape needs at least one strip, and so does a `breadboard`.
 - **Row labels.** `rowLabels` has one entry per row, and no label is made of capital letters only (`A`, `AB`), so a printed name is never read as a grid name. Labels may repeat (a breadboard prints `+` and `-` on both pairs of rails); a reader shows a repeated one with its grid name.
-- **Cuts are on strips.** Each hole in `cuts` is a drilled hole of a strip, listed once. A `breadboard` has no `cuts`.
+- **Cuts are on strips.** Each hole in `cuts` is a drilled hole of a strip that the board has (not under an opening), listed once. A `breadboard` has no `cuts`.
+- **Strips stay on the shape.** On a round or cut board, a strip's holes are all inside the shape. A cutout or mounting hole across a strip takes its copper: the strip is split there, as by a cut.
 - **Nothing soldered on a breadboard.** A `breadboard` has no `trails`, `legFolds` or `solderBridges`, and its wires lie on the `top` with no `joints` and no `bareSegments`.
 - **Cutouts stay inside.** A cutout may not reach the board's rectangle (half a pitch past the outer holes: at the edge it would be a corner cut) and may not overlap or touch another cutout. A mounting hole's centre is within 10 mm of the hole grid.
 - **Holes under cutouts and mounting holes are missing.** A grid hole whose centre is inside a cutout or a mounting hole, or less than a quarter pitch from its edge, doesn't exist, as for a shape.
