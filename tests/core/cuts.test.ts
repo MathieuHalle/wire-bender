@@ -85,3 +85,19 @@ describe('toggleCut', () => {
     expect(toggleCut(mk({ board: breadboard400() }), parseHole('D5'))).toEqual({ ok: false, reason: 'A breadboard\'s clips can\'t be cut.' })
   })
 })
+
+describe('adjacency on cut strips', () => {
+  it('reports each pair of pieces on its own, named by the piece', () => {
+    const b = mk({
+      board: strips,
+      netClasses: { p: {}, g: {} }, nets: { V: { class: 'p' }, G: { class: 'g' }, W: { class: 'p' }, H: { class: 'g' } },
+      rules: { keepAway: [], adjacency: [{ classes: ['p', 'g'], level: 'supply' }] },
+      parts: [header('J1', 'B1', 'V'), header('J2', 'C1', 'G'), header('J3', 'B10', 'W'), header('J4', 'C10', 'H')],
+      cuts: ['B5', 'C5']
+    })
+    expect(rule(b, 'adjacent').map(f => f.message).sort()).toEqual([
+      'Adjacent: V strip B1–B4 runs next to G strip C1–C4 (B1 next to C1, and 3 more) (shorts the supply)',
+      'Adjacent: W strip B6–B10 runs next to H strip C6–C10 (B6 next to C6, and 4 more) (shorts the supply)'
+    ])
+  })
+})
