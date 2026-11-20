@@ -8,6 +8,7 @@ import { parseHole, type Hole } from '~core/holes'
 import { eraseSegment, jumperClick, pencilClick, toggleCut, toggleJoint, type Drawing, type EditResult } from '~core/edit'
 import { movePart, moveWire, moveWireEnd, pickAt, type Bend, type MoveResult, type Pick as MovePick, type Turns } from '~core/move'
 import { holeExists } from '~core/boardShape'
+import { addGridCutout, addMountingHole, addZone, removeFeatureAt, type FeatureEdit, type MountSize } from '~core/editFeatures'
 import { isStripboard } from '~core/strips'
 import type { Tool } from '~/utils/boardView'
 import { stable } from '#shared/yboard'
@@ -39,7 +40,7 @@ export interface ToolDeps {
 /** A second click this soon on the hole where a drawing just ended is the rest of a double click. */
 const DOUBLE_CLICK_MS = 500
 
-const TOOL_KEYS: Record<string, Tool> = { h: 'navigate', i: 'inspect', p: 'pencil', e: 'erase', j: 'joint', m: 'move', c: 'cut' }
+const TOOL_KEYS: Record<string, Tool> = { h: 'navigate', i: 'inspect', p: 'pencil', e: 'erase', j: 'joint', m: 'move', c: 'cut', b: 'block' }
 
 /** What the Move tool holds: the pick, the side it was picked on, where it would land, how it is turned and bent. */
 export interface Held {
@@ -65,6 +66,9 @@ function moveHeld(board: BoardFile, h: Held): MoveResult {
   return moveWireEnd(board, pick.id, pick.end, target, h.bend)
 }
 
+/** What the Block tool makes: a no-go zone, a cutout, or a mounting hole. */
+export type BlockKind = 'zone' | 'cutout' | 'mount'
+
 /** Typing in a field must never trigger a shortcut. */
 export function isTyping(target: EventTarget | null): boolean {
   const t = target as HTMLElement | null
@@ -87,6 +91,11 @@ export function createTools(deps: ToolDeps) {
   let ended: { side: Side, col: number, row: number, at: number } | null = null
   /** What the Move tool holds, if anything. */
   const held = ref<Held | null>(null)
+  /** The Block tool's settings (the Edit tab), and the first corner it was given. */
+  const blockKind = ref<BlockKind>('zone')
+  const blockReason = ref('keep clear')
+  const mountSize = ref<MountSize>('M3')
+  const blockStart = ref<Hole | null>(null)
   /** The held item at its target, on the board as it is now. */
   const preview: ComputedRef<MoveResult | null> = computed(() => {
     const b = deps.board.value
@@ -159,6 +168,44 @@ export function createTools(deps: ToolDeps) {
     const cur = deps.board.value
     if (!cur || tool.value !== 'erase') return
     take(eraseSegment(cur, side, a, b), cur)
+  }
+
+  /** Applies a Block tool edit; says what it did, or why not. */
+  function takeFeature(r: FeatureEdit, removed = false) {
+    if (locked()) return
+    if (!r.ok) {
+      message.value = r.reason
+      deps.notify(r.reason)
+      return
+    }
+    message.value = null
+    if (deps.apply(r.board) !== false && removed) deps.notify(`Removed ${r.what}.`)
+  }
+
+  /**
+   * Block tool, at a point (fractional hole coordinates): on a feature, takes it away; else a
+   * mounting hole goes there, or (zone, cutout) the first click is a corner and the second the other.
+   */
+  function onBlockPoint(point: { col: number, row: number }) {
+    const b = deps.board.value
+    if (!b || tool.value !== 'block' || locked()) return
+    const p = b.board.pitchMm
+    const at = { x: (point.col - 1) * p, y: (point.row - 1) * p }
+    const start = blockStart.value
+    if (!start) {
+      const gone = removeFeatureAt(b, at)
+      if (gone) return takeFeature(gone, true)
+      if (blockKind.value === 'mount') return takeFeature(addMountingHole(b, at, mountSize.value))
+    }
+    const hole = { col: Math.round(point.col), row: Math.round(point.row) }
+    if (!holeExists(b.board, hole)) return
+    if (!start) {
+      blockStart.value = hole
+      return
+    }
+    blockStart.value = null
+    const reason = blockReason.value.trim() || 'keep clear'
+    takeFeature(blockKind.value === 'cutout' ? addGridCutout(b, start, hole, reason) : addZone(b, start, hole, reason))
   }
 
   /** Applies toggleCut at a hole whatever the tool (the findings panel's "Cut here"). */
@@ -311,6 +358,7 @@ export function createTools(deps: ToolDeps) {
     }
     if (e.key === 'Escape') {
       endDrawing()
+      blockStart.value = null
       return
     }
     const t = TOOL_KEYS[key]
@@ -323,6 +371,7 @@ export function createTools(deps: ToolDeps) {
   // Switching tool ends the drawing and puts back what Move holds.
   watch(tool, () => {
     endDrawing()
+    blockStart.value = null
     cancel()
   }, { flush: 'sync' })
   // Undo, a reload or an outside edit can take the drawn trail away.
@@ -343,7 +392,8 @@ export function createTools(deps: ToolDeps) {
 
   return {
     tool, drawing, message, onHoleClick, onSegmentClick, addJoint, addCut, endDrawing, onKeydown,
-    held, preview, onMoveClick, onMoveHover, rotate, switchBend, place, cancel
+    held, preview, onMoveClick, onMoveHover, rotate, switchBend, place, cancel,
+    blockKind, blockReason, mountSize, blockStart, onBlockPoint
   }
 }
 

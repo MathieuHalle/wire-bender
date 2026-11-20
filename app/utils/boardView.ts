@@ -9,7 +9,7 @@ import type { PlacedPart } from '~core/footprints'
 import { boardRectMm } from '~core/boardShape'
 
 /** `navigate` only pans (any left-drag) and never edits; the others click to act (`move` picks up, then places). */
-export type Tool = 'navigate' | 'inspect' | 'pencil' | 'erase' | 'joint' | 'move' | 'cut'
+export type Tool = 'navigate' | 'inspect' | 'pencil' | 'erase' | 'joint' | 'move' | 'cut' | 'block'
 /** Frame both sides on the canvas, frame one side, or the 3D view. */
 export type View = 'both' | Side | '3d'
 export type Group = Connectivity['groups'][number]
