@@ -730,3 +730,32 @@ describe('the Cut tool', () => {
     expect(t.tool.value).toBe('inspect')
   })
 })
+
+describe('the Block tool', () => {
+  test('B picks it; two clicks make a zone, a click on it takes it away', () => {
+    const { deps, board, applied, notes } = fakeBoard(mk())
+    const t = createTools(deps)
+    t.onKeydown(key('b'))
+    expect(t.tool.value).toBe('block')
+    t.onBlockPoint({ col: 2, row: 2 })
+    expect(t.blockStart.value).toEqual({ col: 2, row: 2 })
+    t.onBlockPoint({ col: 3.1, row: 2.9 })
+    expect(board.value!.board.blocked).toEqual([{ holes: ['B2', 'B3', 'C2', 'C3'], reason: 'keep clear' }])
+    t.onBlockPoint({ col: 2, row: 3 })
+    expect(board.value!.board.blocked).toEqual([])
+    expect(notes).toEqual(['Removed the no-go zone (keep clear).'])
+    expect(applied).toHaveLength(2)
+  })
+  test('a mounting hole goes where clicked; Esc forgets a first corner', () => {
+    const { deps, board } = fakeBoard(mk())
+    const t = createTools(deps)
+    t.tool.value = 'block'
+    t.blockKind.value = 'mount'
+    t.onBlockPoint({ col: 5.5, row: 5.5 })
+    expect(board.value!.board.mountingHoles).toHaveLength(1)
+    t.blockKind.value = 'zone'
+    t.onBlockPoint({ col: 1, row: 1 })
+    t.onKeydown(key('Escape'))
+    expect(t.blockStart.value).toBeNull()
+  })
+})

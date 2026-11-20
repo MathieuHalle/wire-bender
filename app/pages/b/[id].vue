@@ -90,7 +90,8 @@ const lockedTitle = computed(() => (previewing.value
     : readOnly.value ? PAUSED_TITLE : view.value === '3d' ? LOCKED_TITLE : null))
 const {
   tool, drawing, onHoleClick, onSegmentClick, addJoint, addCut, endDrawing,
-  held, preview, onMoveClick, onMoveHover, rotate, switchBend, place, cancel
+  held, preview, onMoveClick, onMoveHover, rotate, switchBend, place, cancel,
+  blockKind, blockReason, mountSize, blockStart, onBlockPoint
 } = useTools(live, {
   locked: () => lockedTitle.value !== null,
   paused: () => lockedTitle.value === PAUSED_TITLE,
@@ -252,6 +253,8 @@ const picked = ref<Finding | null>(null)
 const pickedItem = ref<string | null>(null)
 /** Names that don't parse are skipped: a finding never breaks the drawing. */
 const markHoles = computed(() => {
+  // The Block tool's first corner, until the second.
+  if (blockStart.value) return [blockStart.value]
   if (picked.value) return picked.value.holes.flatMap(n => tryParseHole(n) ?? [])
   const k = pickedItem.value
   return k ? allItems.value.find(i => i.key === k)?.holes ?? [] : []
@@ -352,7 +355,7 @@ const sideEvents = Object.fromEntries((['top', 'bottom'] as const).map(s => [s, 
     // Only a mouse drags the target along; a tap previews first (a finger's jiggle must not place).
     if (tool.value === 'move' && hoverMovesTarget(pointerType)) onMoveHover(s, h)
   },
-  point: (p: { col: number, row: number }) => onMoveClick(s, p),
+  point: (p: { col: number, row: number }) => (tool.value === 'block' ? onBlockPoint(p) : onMoveClick(s, p)),
   hole: (h: Hole) => (tool.value === 'joint' && editsHidden(s, h)) || onHoleClick(s, h),
   segment: (a: Hole, b: Hole) => (tool.value === 'erase' && editsHidden(s, a, b)) || onSegmentClick(s, a, b)
 }])) as Record<Side, { hover(h: Hole | null, pointerType: string | null): void, point(p: { col: number, row: number }): void, hole(h: Hole): void, segment(a: Hole, b: Hole): void }>
@@ -873,6 +876,9 @@ const sideTitle = (s: Side) => (s === 'top'
         <template #edit>
           <EditPanel
             v-model:tool="tool"
+            v-model:block-kind="blockKind"
+            v-model:block-reason="blockReason"
+            v-model:mount-size="mountSize"
             :layers="layers"
             :can-undo="canUndo"
             :can-redo="canRedo"

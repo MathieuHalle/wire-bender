@@ -3,6 +3,7 @@ import { holeKey as holeKeyOf, holeName as holeNameOf, parseHole } from './holes
 import { FOOTPRINTS } from './footprints'
 import { existingHoles, outlineIsSimple } from './boardShape'
 import { stripHoles, stripIndex } from './strips'
+import { cutoutShape, signedDistance, type FeatureShape } from './features'
 
 export type HoleName = string
 export type Side = 'top' | 'bottom'
@@ -40,6 +41,16 @@ export interface CornerCut { cut: 'chamfer' | 'notch', holes: number }
  * `strips`: only the holes on a strip exist (a breadboard's gaps and channel).
  */
 export type BoardShape = { kind: 'round' } | { kind: 'corners', corners: Partial<Record<Corner, CornerCut>> } | { kind: 'strips' }
+/**
+ * Material removed inside the board. `grid`: the rectangle of holes `from` to `to`, and half a pitch
+ * past them. `rect` and `round`: any size, centred at x, y (board mm from hole A1's centre, y down).
+ */
+export type Cutout
+  = | { kind: 'grid', from: HoleName, to: HoleName, reason?: string }
+    | { kind: 'rect', x: number, y: number, widthMm: number, heightMm: number, reason?: string }
+    | { kind: 'round', x: number, y: number, diameterMm: number, reason?: string }
+/** A hole drilled for a screw or standoff, centred at x, y (board mm from A1); holes within `clearanceMm` of its edge are blocked. */
+export interface MountingHole { x: number, y: number, diameterMm: number, clearanceMm?: number }
 export interface BoardFile {
   format: 'wirebender/1'
   revision: number
@@ -57,6 +68,10 @@ export interface BoardFile {
     strips?: { from: HoleName, to: HoleName, skip?: HoleName[] }[]
     /** Display only: the printed name of each row (`""` for none), as on a breadboard's print. */
     rowLabels?: string[]
+    /** Openings through the board (`core/features.ts`): the holes under them are missing. */
+    cutouts?: Cutout[]
+    /** Mounting holes (`core/features.ts`): holes under them are missing, holes in their clearance blocked. */
+    mountingHoles?: MountingHole[]
   }
   netClasses: Record<string, { color?: string }>
   nets: Record<string, { class?: string, color?: string }>
@@ -130,7 +145,13 @@ export const boardFileSchema = z.strictObject({
     blocked: z.array(z.strictObject({ holes: z.array(hole), reason: z.string() })),
     shape: boardShape.optional(),
     strips: z.array(z.strictObject({ from: hole, to: hole, skip: z.array(hole).optional() })).optional(),
-    rowLabels: z.array(z.string()).optional()
+    rowLabels: z.array(z.string()).optional(),
+    cutouts: z.array(z.discriminatedUnion('kind', [
+      z.strictObject({ kind: z.literal('grid'), from: hole, to: hole, reason: z.string().optional() }),
+      z.strictObject({ kind: z.literal('rect'), x: z.number(), y: z.number(), widthMm: z.number().positive(), heightMm: z.number().positive(), reason: z.string().optional() }),
+      z.strictObject({ kind: z.literal('round'), x: z.number(), y: z.number(), diameterMm: z.number().positive(), reason: z.string().optional() })
+    ])).optional(),
+    mountingHoles: z.array(z.strictObject({ x: z.number(), y: z.number(), diameterMm: z.number().positive(), clearanceMm: z.number().nonnegative().optional() })).optional()
   }),
   netClasses: z.record(z.string(), z.strictObject({ color: z.string().optional() })),
   nets: z.record(z.string(), z.strictObject({ class: z.string().optional(), color: z.string().optional() })),
@@ -182,6 +203,11 @@ function checkHoles(b: BoardFile): string[] {
     }
   }
   b.board.blocked.forEach((bl, i) => bl.holes.forEach((n, j) => check(`board.blocked[${i}].holes[${j}]`, n)))
+  b.board.cutouts?.forEach((c, i) => {
+    if (c.kind !== 'grid') return
+    check(`board.cutouts[${i}].from`, c.from)
+    check(`board.cutouts[${i}].to`, c.to)
+  })
   b.board.strips?.forEach((st, i) => {
     check(`board.strips[${i}].from`, st.from)
     check(`board.strips[${i}].to`, st.to)
@@ -324,6 +350,46 @@ function checkBreadboard(b: BoardFile): string[] {
   return errors
 }
 
+/**
+ * Cutouts lie inside the board's rectangle without touching its edge (a cutout at the edge is a
+ * notch) and apart from each other; mounting holes sit within 10 mm of the hole grid.
+ */
+function checkFeatures(b: BoardFile): string[] {
+  const errors: string[] = []
+  const { cols, rows, pitchMm: p } = b.board
+  const edge = { x0: -p / 2, y0: -p / 2, x1: (cols - 0.5) * p, y1: (rows - 0.5) * p }
+  const shapes: (FeatureShape | null)[] = (b.board.cutouts ?? []).map((c) => {
+    try {
+      return cutoutShape(b.board, c)
+    } catch {
+      return null // a bad hole name: reported by checkHoles
+    }
+  })
+  const box = (s: FeatureShape) => (s.kind === 'rect' ? s : { x0: s.cx - s.r, y0: s.cy - s.r, x1: s.cx + s.r, y1: s.cy + s.r })
+  shapes.forEach((s, i) => {
+    if (!s) return
+    const q = box(s)
+    if (q.x0 <= edge.x0 || q.y0 <= edge.y0 || q.x1 >= edge.x1 || q.y1 >= edge.y1)
+      errors.push(`board.cutouts[${i}]: reaches the board's edge (make it a corner cut or a smaller cutout)`)
+    for (let j = 0; j < i; j++) {
+      const o = shapes[j]
+      if (o && shapesMeet(s, o)) errors.push(`board.cutouts[${i}]: overlaps or touches board.cutouts[${j}]`)
+    }
+  })
+  b.board.mountingHoles?.forEach((m, i) => {
+    if (m.x < edge.x0 - 10 || m.y < edge.y0 - 10 || m.x > edge.x1 + 10 || m.y > edge.y1 + 10)
+      errors.push(`board.mountingHoles[${i}]: more than 10 mm outside the hole grid`)
+  })
+  return errors
+}
+
+/** True when two feature shapes overlap or touch. */
+function shapesMeet(a: FeatureShape, c: FeatureShape): boolean {
+  if (a.kind === 'circle') return signedDistance(c, a.cx, a.cy) <= a.r
+  if (c.kind === 'circle') return signedDistance(a, c.cx, c.cy) <= c.r
+  return a.x0 <= c.x1 && c.x0 <= a.x1 && a.y0 <= c.y1 && c.y0 <= a.y1
+}
+
 function checkStraight(b: BoardFile): string[] {
   const errors: string[] = []
   const walk = (prefix: string, points: HoleName[]) => {
@@ -390,7 +456,7 @@ function checkTopSide(b: BoardFile): string[] {
   return errors
 }
 
-const checks: Check[] = [checkHoles, checkShape, checkStrips, checkRowLabels, checkBreadboard, checkStraight, checkFootprints, checkUnique, checkTopSide]
+const checks: Check[] = [checkHoles, checkShape, checkFeatures, checkStrips, checkRowLabels, checkBreadboard, checkStraight, checkFootprints, checkUnique, checkTopSide]
 
 export function parseBoard(json: unknown): ParseResult {
   const res = boardFileSchema.safeParse(json)

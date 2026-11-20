@@ -13,7 +13,7 @@ import { holeLabel, stripLabel } from '../holeLabel'
 export type Severity = 'error' | 'warning' | 'caution'
 export type RuleId = 'openNet' | 'short' | 'singleLeadNet' | 'contention' | 'twoInOneHole'
   | 'bodyCollision' | 'underBody' | 'touchesTab' | 'blockedHole' | 'keepAway' | 'adjacent' | 'missingJoint'
-  | 'cutProposal' | 'onCut' | 'idleCut'
+  | 'cutProposal' | 'onCut' | 'idleCut' | 'overOpening'
 export type AdjacencyLevel = 'supply' | 'mcu' | 'harmless'
 
 export interface Finding {

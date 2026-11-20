@@ -186,7 +186,8 @@ function onLeave() {
 function onClick(ev: MouseEvent) {
   const p = boardPoint(ev)
   if (!p) return
-  if (props.tool === 'move') return emit('point-click', { col: p.fc, row: p.fr })
+  // Move and Block act at a point (Block: a mounting hole may sit between holes).
+  if (props.tool === 'move' || props.tool === 'block') return emit('point-click', { col: p.fc, row: p.fr })
   if (props.tool === 'erase') {
     // Between two neighbouring holes along a row or column: that segment.
     const c = Math.round(p.fc)

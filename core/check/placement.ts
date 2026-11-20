@@ -3,7 +3,8 @@
 // Placement rules: twoInOneHole, bodyCollision, underBody, touchesTab, blockedHole.
 import { FOOTPRINT_PITCH_MM, LEG_DIAMETER_MM, TAB_CLEARANCE_MM, tabPlateMm, type Rect } from '../footprints'
 import { holeKey, holeMm, parseHole, type Hole } from '../holes'
-import type { HoleName } from '../schema'
+import type { BoardFile, Cutout, HoleName, MountingHole } from '../schema'
+import { blockedReasons, cutoutShape, mountingShapes, signedDistance, type FeatureShape } from '../features'
 import { joinAnd, names, type CheckContext, type Finding, type Run } from './context'
 
 /** Bodies may touch: only an overlap beyond this in both axes is a collision. */
@@ -116,6 +117,27 @@ export function placementRules(ctx: CheckContext): Finding[] {
     }
   }
 
+  // ---- overOpening ----------------------------------------------------------------
+  // A body over a cutout or a mounting hole's clearance: nothing under it to sit on, or a screw
+  // head in the way. Bodies are laid out on the footprint grid: scaled to the board's pitch.
+  const k = board.board.pitchMm / FOOTPRINT_PITCH_MM
+  const features: { what: string, shape: FeatureShape }[] = [
+    ...(board.board.cutouts ?? []).map(c => ({ what: cutoutName(c), shape: cutoutShape(board.board, c) })),
+    ...(board.board.mountingHoles ?? []).map(m => ({ what: `the mounting hole near ${ctx.label(nearestHole(board.board, m))}`, shape: mountingShapes(m).clearance }))
+  ]
+  if (features.length)
+    for (const pp of ctx.placed) {
+      const r = pp.bodyRectMm
+      const body: FeatureShape = { kind: 'rect', x0: r.x * k, y0: r.y * k, x1: (r.x + r.w) * k, y1: (r.y + r.h) * k }
+      for (const f of features) {
+        if (!overlaps(body, f.shape)) continue
+        out.push({
+          rule: 'overOpening', severity: 'warning', holes: names(ctx, pp.pins.map(p => p.hole)),
+          message: `Over an opening: the body of ${pp.part.ref} reaches over ${f.what}`
+        })
+      }
+    }
+
   // ---- touchesTab -----------------------------------------------------------------
   // A metal tab stands above the board and carries its pin's net (TO-220: the drain). Bare
   // metal on the top whose hole centre is within a leg radius plus clearance of the plate
@@ -180,8 +202,8 @@ export function placementRules(ctx: CheckContext): Finding[] {
     offShape(`leg fold of ${f.lead} at`, f.to, lead ? [lead.hole] : [])
   }
 
-  const reason = new Map<string, string>()
-  for (const b of board.board.blocked) for (const n of b.holes) reason.set(holeKey(parseHole(n)), b.reason)
+  // Blocked as written, and around each mounting hole (its clearance).
+  const reason = blockedReasons(board.board, ctx.onBoard)
   if (reason.size) {
     const used = new Occupancy()
     for (const l of ctx.leads) used.add(l.hole, l.id)
@@ -200,4 +222,23 @@ export function placementRules(ctx: CheckContext): Finding[] {
     }
   }
   return out
+}
+
+/** "the cutout C3–D5 (slot)", "the round cutout (pot shaft)". */
+function cutoutName(c: Cutout): string {
+  const why = c.reason ? ` (${c.reason})` : ''
+  return c.kind === 'grid' ? `the cutout ${c.from}–${c.to}${why}` : `the ${c.kind === 'round' ? 'round ' : ''}cutout${why}`
+}
+
+/** The board hole nearest a mounting hole's centre (to name it by), clamped to the grid. */
+function nearestHole(b: BoardFile['board'], m: MountingHole): Hole {
+  const clamp = (v: number, hi: number) => Math.min(Math.max(v, 1), hi)
+  return { col: clamp(Math.round(m.x / b.pitchMm) + 1, b.cols), row: clamp(Math.round(m.y / b.pitchMm) + 1, b.rows) }
+}
+
+/** True when two shapes overlap (touching doesn't count). */
+function overlaps(a: FeatureShape, c: FeatureShape): boolean {
+  if (c.kind === 'circle') return signedDistance(a, c.cx, c.cy) < c.r - 1e-9
+  if (a.kind === 'circle') return signedDistance(c, a.cx, a.cy) < a.r - 1e-9
+  return a.x0 < c.x1 && c.x0 < a.x1 && a.y0 < c.y1 && c.y0 < a.y1
 }

@@ -27,7 +27,10 @@ four breadboard layouts on a real board: which rail is `+` at the top, whether r
 bottom, the rail groups and the 830's split (the preset tests check the hole counts, not the board).
 Step 3 (stripboard: cuts, the Cut tool, cut proposals, the bench sheet's cuts, the two Veroboard
 presets and custom stripboards) was built 2026-11-20 on the `stripboard` branch; its two hole
-counts are unconfirmed, like `proto-4x6`. Next: step 4 (board features).
+counts are unconfirmed, like `proto-4x6`. Step 4 (board features: the Block tool, cutouts,
+mounting holes, in 2D, 3D, the check and the bench sheet) was built 2026-11-20 on the
+`board-features` branch. Left: the proto boards' own mounting holes, once the owner measures them
+(with the `proto-4x6` count).
 
 ## Board presets follow-ups
 

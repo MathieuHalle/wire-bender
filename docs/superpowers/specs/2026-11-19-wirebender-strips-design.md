@@ -232,6 +232,20 @@ Three kinds of feature, from lightest to heaviest:
   measured.
 - The format stays `wirebender/1` (new optional fields).
 
+## Step 4 as built (2026-11-20)
+
+- `board.cutouts` items carry a `kind`: `grid` (`from`, `to`), `rect` and `round` (centred at
+  `x`, `y`, mm from A1). `board.mountingHoles`: `{ x, y, diameterMm, clearanceMm? }`.
+- A hole is missing when its centre is inside a cutout or mounting hole or within ¼ pitch of its
+  edge (the shapes' rule, not "within the radius"). Clearance blocks are derived, never written
+  into `blocked` (`blockedZones`), so moving or removing the hole frees them.
+- A mounting hole beyond the margin grows a plain board's rectangle (1.5 mm past the hole's edge);
+  a shaped board doesn't grow. Cutouts may not reach the rectangle's edge.
+- Block tool (B), in the Edit tab: kind (no-go zone, cutout, mounting hole), reason or size.
+  Editing a zone's reason means removing and redrawing it.
+- The check's `overOpening` warns of a part body over a cutout or a clearance circle.
+- The bench sheet's "Prepare the board" lists them first (mm from A1 and the nearest hole).
+
 ## Owner's answers (2026-11-19)
 
 1. Breadboard row names: show the printed names (above).

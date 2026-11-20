@@ -4,6 +4,7 @@ import { placePart } from './footprints'
 import { buildConnectivity } from './connectivity'
 import { holeExists } from './boardShape'
 import { stripIndex } from './strips'
+import { blockedReasons } from './features'
 
 /**
  * What the pencil is drawing: a trail, or on a breadboard a jumper (`jumper`: `trailId` is then
@@ -63,9 +64,8 @@ function rejection(board: BoardFile, side: Side, h: Hole): string | null {
   // board has never crosses a missing one, so the clicked points are all there is to check.)
   if (!holeExists(board.board, h)) return `Hole ${name} is off the board.`
   const k = holeKey(h)
-  for (const b of board.board.blocked) {
-    if (b.holes.some(n => holeKey(parseHole(n)) === k)) return `Hole ${name} is blocked: ${b.reason}`
-  }
+  const why = blockedReasons(board.board, x => holeExists(board.board, x)).get(k)
+  if (why !== undefined) return `Hole ${name} is blocked: ${why}`
   if (side === 'top') {
     if (board.board.type === 'one-sided') return 'This board has no pads on the top side.'
     for (const p of board.parts) {
@@ -165,9 +165,8 @@ export function nextWireId(board: BoardFile): string {
 export function jumperClick(board: BoardFile, hole: Hole, drawing: Drawing | null): EditResult {
   const name = holeName(hole)
   if (!holeExists(board.board, hole)) return fail(`Hole ${name} is off the board.`)
-  const k = holeKey(hole)
-  for (const b of board.board.blocked)
-    if (b.holes.some(n => holeKey(parseHole(n)) === k)) return fail(`Hole ${name} is blocked: ${b.reason}`)
+  const why = blockedReasons(board.board, x => holeExists(board.board, x)).get(holeKey(hole))
+  if (why !== undefined) return fail(`Hole ${name} is blocked: ${why}`)
   if (!drawing) return { ok: true, board, drawing: { trailId: nextWireId(board), side: 'top', jumper: true, start: name } }
   const last = drawingEnd(board, drawing)
   if (last === null) return fail(`Jumper ${drawing.trailId} no longer exists.`)

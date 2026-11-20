@@ -523,3 +523,23 @@ describe('benchHtml on a stripboard', () => {
     expect(benchHtml(small(), { date: DATE })).not.toContain('id="cuts"')
   })
 })
+
+describe('benchHtml with board features', () => {
+  const b = mk({ name: 'f', board: { cutouts: [{ kind: 'grid', from: 'C3', to: 'D5', reason: 'slot' }], mountingHoles: [{ x: -2.5, y: -2.5, diameterMm: 3.2, clearanceMm: 1.5 }] } })
+  it('lists what to drill and cut out first', () => {
+    expect(benchModel(b).prepare).toEqual([
+      { what: 'Drill a 3.2 mm mounting hole, 1.5 mm clear around it', where: 'centre 2.5 mm left and 2.5 mm up from A1 (near A1)' },
+      { what: 'Cut out the holes C3 to D5, and half a pitch past them (slot)', where: 'C3–D5' }
+    ])
+    const html = benchHtml(b, { date: DATE })
+    expect(html.indexOf('id="prepare"')).toBeLessThan(html.indexOf('id="placement"'))
+  })
+  it('draws the board with its openings', () => {
+    const svg = boardOverviewSvg(b, 'top')
+    expect(svg).toContain('fill-rule="evenodd"')
+    expect(svg).toContain('stroke-dasharray="0.8 0.5"')
+  })
+  it('a plain board has no prepare section', () => {
+    expect(benchHtml(small(), { date: DATE })).not.toContain('id="prepare"')
+  })
+})
