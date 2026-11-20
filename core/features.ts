@@ -45,7 +45,15 @@ export function signedDistance(s: FeatureShape, x: number, y: number): number {
 
 /** Every cutout and drilled mounting hole, as shapes. */
 export function openings(b: Board): FeatureShape[] {
-  return [...(b.cutouts ?? []).map(c => cutoutShape(b, c)), ...(b.mountingHoles ?? []).map(m => mountingShapes(m).hole)]
+  // A grid cutout with a bad hole name is skipped (the format reports it): never a throw.
+  const cut = (b.cutouts ?? []).flatMap((c) => {
+    try {
+      return [cutoutShape(b, c)]
+    } catch {
+      return []
+    }
+  })
+  return [...cut, ...(b.mountingHoles ?? []).map(m => mountingShapes(m).hole)]
 }
 
 /** True when a cutout or a mounting hole takes this hole away (its centre within ¼ pitch of one). */

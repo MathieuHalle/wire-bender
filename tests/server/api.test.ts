@@ -91,6 +91,14 @@ describe('create and import', () => {
       expect((bad.body as { errors: string[] }).errors).toEqual(['copper: must be pads or strips'])
     })
 
+    it('a custom round stripboard: each row\'s strip runs between its own first and last hole', () => {
+      const r = create({ name: 'R', cols: 6, rows: 6, type: 'one-sided', shape: { kind: 'round' }, copper: 'strips' })
+      expect(r.status).toBe(200)
+      const strips = stored((r.body as { id: string }).id).board.strips!
+      expect(strips[0]).toEqual({ from: 'A3', to: 'A4' })
+      expect(strips).toHaveLength(6)
+    })
+
     it('creates a breadboard with its strips and printed row names', () => {
       const r = create({ name: 'Proto', preset: 'bb-400' })
       expect(r.status).toBe(200)

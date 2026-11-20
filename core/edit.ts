@@ -175,7 +175,8 @@ export function jumperClick(board: BoardFile, hole: Hole, drawing: Drawing | nul
   if (lh.col !== hole.col && lh.row !== hole.row)
     return fail('Jumpers run along a row or a column here: click a hole in the same row or column.')
   if (drawing.start) {
-    const w: Wire = { id: drawing.trailId, kind: 'laid', side: 'top', points: [drawing.start, name], bareSegments: [], joints: [] }
+    // The id is taken now, on the board as it is: another edit since the first click may have used it.
+    const w: Wire = { id: nextWireId(board), kind: 'laid', side: 'top', points: [drawing.start, name], bareSegments: [], joints: [] }
     return { ok: true, board: { ...board, wires: [...board.wires, w] }, drawing: { trailId: w.id, side: 'top', jumper: true } }
   }
   const wires = board.wires.map(w => (w.id === drawing.trailId ? { ...w, points: [...w.points, name] } : w))
@@ -190,6 +191,7 @@ export function toggleCut(board: BoardFile, hole: Hole): EditResult {
   const name = holeName(hole)
   if (board.board.type === 'breadboard') return fail('A breadboard\'s clips can\'t be cut.')
   if (!stripIndex(board.board).has(holeKey(hole))) return fail(`Hole ${name} is not on a strip: there is nothing to cut.`)
+  if (!holeExists(board.board, hole)) return fail(`Hole ${name} is off the board.`)
   const cuts = board.cuts ?? []
   const next = cuts.includes(name) ? cuts.filter(c => c !== name) : [...cuts, name]
   const { cuts: _, ...rest } = board
