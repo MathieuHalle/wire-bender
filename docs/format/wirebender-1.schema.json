@@ -575,6 +575,12 @@
         "additionalProperties": false
       }
     },
+    "cuts": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "bench": {
       "default": {
         "endLeadMm": 5,

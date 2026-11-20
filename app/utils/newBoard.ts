@@ -19,7 +19,15 @@ export interface NewBoardDraft {
   shape: ShapeChoice
   /** How deep the corner cuts go, in holes (chamfer, notch). */
   cornerHoles: number | null
+  /** Pads at every hole (a perfboard), or a copper strip along every row (a stripboard). Absent: pads. */
+  copper?: Copper
 }
+
+export type Copper = 'pads' | 'strips'
+export const COPPER_ITEMS: { label: string, value: Copper }[] = [
+  { label: 'Pads (perfboard)', value: 'pads' },
+  { label: 'Strips (stripboard)', value: 'strips' }
+]
 
 export const SHAPE_ITEMS: { label: string, value: ShapeChoice }[] = [
   { label: 'Rectangle', value: 'rect' },
@@ -54,16 +62,16 @@ export const PRESET_ITEMS: { label: string, value: string }[] = [
 const presetOf = (d: NewBoardDraft) => BOARD_PRESETS.find(p => p.id === d.preset)
 
 /** What `POST /api/boards` gets: today's body for Custom (with its shape, if not a rectangle), else just the preset's id. */
-export function newBoardBody(d: NewBoardDraft): { name: string, preset: string } | { name: string, cols: number | null, rows: number | null, type: BoardSides, shape?: BoardShape } {
+export function newBoardBody(d: NewBoardDraft): { name: string, preset: string } | { name: string, cols: number | null, rows: number | null, type: BoardSides, shape?: BoardShape, copper?: 'strips' } {
   if (presetOf(d)) return { name: d.name, preset: d.preset }
   const shape = shapeOf(d)
-  return { name: d.name, cols: d.cols, rows: d.rows, type: d.type, ...(shape ? { shape } : {}) }
+  return { name: d.name, cols: d.cols, rows: d.rows, type: d.type, ...(shape ? { shape } : {}), ...(d.copper === 'strips' ? { copper: 'strips' as const } : {}) }
 }
 
 /** What the form shows: the preset's size and shape (fixed) or the Custom values (editable). */
-export function shownSize(d: NewBoardDraft): { cols: number | null, rows: number | null, type: BoardSides | 'breadboard', shape: ShapeChoice, fixed: boolean } {
+export function shownSize(d: NewBoardDraft): { cols: number | null, rows: number | null, type: BoardSides | 'breadboard', shape: ShapeChoice, copper: Copper, fixed: boolean } {
   const p = presetOf(d)
   return p
-    ? { cols: p.cols, rows: p.rows, type: p.type, shape: choiceOf(p.shape), fixed: true }
-    : { cols: d.cols, rows: d.rows, type: d.type, shape: d.shape, fixed: false }
+    ? { cols: p.cols, rows: p.rows, type: p.type, shape: choiceOf(p.shape), copper: p.strips && p.type !== 'breadboard' ? 'strips' : 'pads', fixed: true }
+    : { cols: d.cols, rows: d.rows, type: d.type, shape: d.shape, copper: d.copper ?? 'pads', fixed: false }
 }

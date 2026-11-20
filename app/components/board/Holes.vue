@@ -28,6 +28,8 @@ const channel = computed(() => (breadboard.value ? channelRect(props.board, prop
 const rails = computed(() => (breadboard.value ? railLines(props.board, props.geo) : []))
 /** A stripboard's copper, on the bottom (a breadboard's strips are inside it, not drawn). */
 const bands = computed(() => (!breadboard.value && props.side === 'bottom' ? stripBands(props.board, props.geo) : []))
+/** A stripboard's cuts: a scraped ring on the bottom, a small cross on the top (so it shows from either side). */
+const cuts = computed(() => (props.board.cuts ?? []).map(n => ({ n, ...props.geo.pt(parseHole(n)) })))
 
 const holes = computed(() => existingHoles(props.board.board).map(h => ({ k: holeKey(h), ...props.geo.pt(h) })))
 
@@ -121,6 +123,18 @@ const litPads = computed(() => {
       stroke="#b9854c"
       stroke-width="0.1"
     />
+    <template v-if="side === 'bottom'">
+      <circle
+        v-for="c in cuts"
+        :key="`cut${c.n}`"
+        :cx="c.x"
+        :cy="c.y"
+        r="1.05"
+        :fill="fill"
+        stroke="#8a5a2b"
+        stroke-width="0.18"
+      />
+    </template>
     <g v-if="hasPads">
       <circle
         v-for="h in holes"
@@ -175,6 +189,18 @@ const litPads = computed(() => {
         fill="#6f7d75"
       />
     </template>
+    <g
+      v-if="side === 'top' && cuts.length"
+      stroke="#8a5a2b"
+      stroke-width="0.2"
+      stroke-linecap="round"
+    >
+      <path
+        v-for="c in cuts"
+        :key="`ct${c.n}`"
+        :d="`M${c.x - 1} ${c.y}H${c.x + 1}`"
+      />
+    </g>
     <g
       stroke="#c8321e"
       stroke-width="0.3"

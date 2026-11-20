@@ -9,6 +9,7 @@ import { buildContext, type Finding, type Severity } from './check/context'
 import { netRules } from './check/nets'
 import { placementRules } from './check/placement'
 import { spacingRules } from './check/spacing'
+import { cutRules } from './check/cuts'
 
 export type { AdjacencyLevel, Finding, RuleId, Severity } from './check/context'
 
@@ -33,7 +34,7 @@ function compareHoleNames(a: string | undefined, b: string | undefined): number 
 
 export function runCheck(board: BoardFile): CheckResult {
   const ctx = buildContext(board)
-  const findings = [...netRules(ctx), ...placementRules(ctx), ...spacingRules(ctx)]
+  const findings = [...netRules(ctx), ...placementRules(ctx), ...spacingRules(ctx), ...cutRules(ctx)]
   findings.sort((a, b) =>
     SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity)
     || (a.rule < b.rule ? -1 : a.rule > b.rule ? 1 : 0)

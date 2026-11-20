@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The "New board" dialog: name, a preset or Custom (size and copper sides), then the new board's page opens.
-import { newBoardBody, PRESET_ITEMS, SHAPE_ITEMS, shownSize, type NewBoardDraft, type ShapeChoice } from '~/utils/newBoard'
+import { COPPER_ITEMS, newBoardBody, PRESET_ITEMS, SHAPE_ITEMS, shownSize, type Copper, type NewBoardDraft, type ShapeChoice } from '~/utils/newBoard'
 import type { BoardSides } from '~core/boardPresets'
 
 const open = defineModel<boolean>('open', { default: false })
@@ -86,6 +86,15 @@ async function create() {
           orientation="horizontal"
           :items="sides"
           @update:model-value="(v: string) => (draft.type = v as BoardSides)"
+        />
+        <URadioGroup
+          v-if="size.type !== 'breadboard'"
+          :model-value="size.copper"
+          :disabled="size.fixed"
+          legend="Holes"
+          orientation="horizontal"
+          :items="COPPER_ITEMS"
+          @update:model-value="(v: string) => (draft.copper = v as Copper)"
         />
         <div class="flex gap-3">
           <UFormField

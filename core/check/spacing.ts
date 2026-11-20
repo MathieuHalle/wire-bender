@@ -3,8 +3,7 @@
 // Spacing rules between nets: keepAway (by net class, any distance) and adjacent
 // (4-neighbour holes, in severity buckets).
 import { holeKey, type Hole } from '../holes'
-import { stripId } from '../connectivity'
-import { stripIndex } from '../strips'
+import { stripSegments } from '../strips'
 import { stripLabel } from '../holeLabel'
 import { names, type AdjacencyLevel, type CheckContext, type Finding } from './context'
 
@@ -103,9 +102,11 @@ export function spacingRules(ctx: CheckContext): Finding[] {
     return only
   })
   const pairs = new Map<string, { a: NetHole, b: NetHole, level: AdjacencyLevel }>()
-  // Two holes on two different strips: one finding per strip pair (two strips side by side
-  // would otherwise give one per hole along them).
-  const onStrip = stripIndex(board.board)
+  // Two holes on two different pieces of strip (strips, or their pieces between cuts): one finding
+  // per pair of pieces (two strips side by side would otherwise give one per hole along them).
+  const segments = stripSegments(board.board, board.cuts)
+  const onStrip = new Map<string, number>()
+  segments.forEach((s, i) => s.holes.forEach(h => onStrip.set(holeKey(h), i)))
   const stripPairs = new Map<string, { ia: number, ib: number, list: { a: NetHole, b: NetHole }[], level: AdjacencyLevel }>()
   // A breadboard has no solder to bridge two neighbouring holes: nothing to report.
   const soldered = board.board.type !== 'breadboard'
@@ -135,13 +136,12 @@ export function spacingRules(ctx: CheckContext): Finding[] {
       rule: 'adjacent', severity: 'caution', level, holes: names(ctx, [a.hole, b.hole]),
       message: `Adjacent: ${a.net} at ${ctx.label(a.hole)} next to ${b.net} at ${ctx.label(b.hole)} (${LEVEL_WORDS[level]})`
     })
-  const strips = board.board.strips ?? []
   for (const { ia, ib, list, level } of stripPairs.values()) {
     const { a, b } = list[0]!
     const more = list.length > 1 ? `, and ${list.length - 1} more` : ''
     out.push({
       rule: 'adjacent', severity: 'caution', level, holes: names(ctx, list.flatMap(p => [p.a.hole, p.b.hole])),
-      message: `Adjacent: ${a.net} ${stripLabel(board.board, stripId(strips[ia]!))} runs next to ${b.net} ${stripLabel(board.board, stripId(strips[ib]!))} `
+      message: `Adjacent: ${a.net} ${stripLabel(board.board, segments[ia]!.id)} runs next to ${b.net} ${stripLabel(board.board, segments[ib]!.id)} `
         + `(${ctx.label(a.hole)} next to ${ctx.label(b.hole)}${more}) (${LEVEL_WORDS[level]})`
     })
   }

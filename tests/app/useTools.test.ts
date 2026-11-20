@@ -712,3 +712,21 @@ describe('on a breadboard', () => {
     expect(t.tool.value).toBe('inspect')
   })
 })
+
+describe('the Cut tool', () => {
+  test('C picks it on a stripboard, and a click cuts (one undo step)', () => {
+    const { deps, board, applied } = fakeBoard(mk({ board: { strips: [{ from: 'B1', to: 'B10' }] } }))
+    const t = createTools(deps)
+    t.onKeydown(key('c'))
+    expect(t.tool.value).toBe('cut')
+    t.onHoleClick('bottom', h('B5'))
+    expect(applied).toHaveLength(1)
+    expect(board.value!.cuts).toEqual(['B5'])
+  })
+  test('C does nothing on a board without strips', () => {
+    const { deps } = fakeBoard(mk())
+    const t = createTools(deps)
+    t.onKeydown(key('c'))
+    expect(t.tool.value).toBe('inspect')
+  })
+})

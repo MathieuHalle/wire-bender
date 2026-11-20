@@ -18,6 +18,8 @@ const props = defineProps<{
   layers: Layers
   /** A breadboard: the pencil draws jumpers, and there is no Joint tool (nothing is soldered). */
   breadboard?: boolean
+  /** A stripboard: the Cut tool cuts its strips (no other board has it). */
+  stripboard?: boolean
 }>()
 const emit = defineEmits<{ undo: [], redo: [] }>()
 
@@ -29,12 +31,16 @@ const TOOLS: { id: Tool, label: string, icon: string, key: string }[] = [
   { id: 'pencil', label: 'Pencil', icon: 'i-lucide-pencil', key: 'P' },
   { id: 'erase', label: 'Erase', icon: 'i-lucide-eraser', key: 'E' },
   { id: 'joint', label: 'Joint', icon: 'i-lucide-circle-dot', key: 'J' },
-  { id: 'move', label: 'Move', icon: 'i-lucide-move', key: 'M' }
+  { id: 'move', label: 'Move', icon: 'i-lucide-move', key: 'M' },
+  { id: 'cut', label: 'Cut', icon: 'i-lucide-scissors', key: 'C' }
 ]
 
-const tools = computed(() => (props.breadboard
-  ? TOOLS.filter(t => t.id !== 'joint').map(t => (t.id === 'pencil' ? { ...t, label: 'Jumper', icon: 'i-lucide-spline' } : t))
-  : TOOLS))
+const tools = computed(() => {
+  const own = TOOLS.filter(t => t.id !== 'cut' || props.stripboard)
+  return props.breadboard
+    ? own.filter(t => t.id !== 'joint').map(t => (t.id === 'pencil' ? { ...t, label: 'Jumper', icon: 'i-lucide-spline' } : t))
+    : own
+})
 
 const lockTitle = computed(() => props.lockedTitle ?? LOCKED_TITLE)
 const blind = computed(() => (props.locked ? null : blindHint(tool.value, props.layers)))

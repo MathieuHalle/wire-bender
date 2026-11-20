@@ -5,9 +5,10 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch, type ComputedRef, type Ref } from 'vue'
 import type { BoardFile, Side } from '~core/schema'
 import { parseHole, type Hole } from '~core/holes'
-import { eraseSegment, jumperClick, pencilClick, toggleJoint, type Drawing, type EditResult } from '~core/edit'
+import { eraseSegment, jumperClick, pencilClick, toggleCut, toggleJoint, type Drawing, type EditResult } from '~core/edit'
 import { movePart, moveWire, moveWireEnd, pickAt, type Bend, type MoveResult, type Pick as MovePick, type Turns } from '~core/move'
 import { holeExists } from '~core/boardShape'
+import { isStripboard } from '~core/strips'
 import type { Tool } from '~/utils/boardView'
 import { stable } from '#shared/yboard'
 import type { LiveBoard } from './useLiveBoard'
@@ -38,7 +39,7 @@ export interface ToolDeps {
 /** A second click this soon on the hole where a drawing just ended is the rest of a double click. */
 const DOUBLE_CLICK_MS = 500
 
-const TOOL_KEYS: Record<string, Tool> = { h: 'navigate', i: 'inspect', p: 'pencil', e: 'erase', j: 'joint', m: 'move' }
+const TOOL_KEYS: Record<string, Tool> = { h: 'navigate', i: 'inspect', p: 'pencil', e: 'erase', j: 'joint', m: 'move', c: 'cut' }
 
 /** What the Move tool holds: the pick, the side it was picked on, where it would land, how it is turned and bent. */
 export interface Held {
@@ -103,7 +104,7 @@ export function createTools(deps: ToolDeps) {
     }
     message.value = null
     // Ending a drawing on its last hole leaves the trails as they were: no undo step.
-    if (r.board.trails !== current.trails || r.board.wires !== current.wires) deps.apply(r.board)
+    if (r.board.trails !== current.trails || r.board.wires !== current.wires || r.board.cuts !== current.cuts) deps.apply(r.board)
     return true
   }
 
@@ -124,6 +125,10 @@ export function createTools(deps: ToolDeps) {
     const b = deps.board.value
     if (!b) return
     const breadboard = b.board.type === 'breadboard'
+    if (tool.value === 'cut') {
+      take(toggleCut(b, hole), b)
+      return
+    }
     if (tool.value === 'joint') {
       if (!breadboard) take(toggleJoint(b, side, hole), b)
       return
@@ -154,6 +159,12 @@ export function createTools(deps: ToolDeps) {
     const cur = deps.board.value
     if (!cur || tool.value !== 'erase') return
     take(eraseSegment(cur, side, a, b), cur)
+  }
+
+  /** Applies toggleCut at a hole whatever the tool (the findings panel's "Cut here"). */
+  function addCut(hole: Hole) {
+    const cur = deps.board.value
+    if (cur) take(toggleCut(cur, hole), cur)
   }
 
   /** Applies toggleJoint at a hole whatever the tool (the findings panel's "Add joint"). */
@@ -303,8 +314,9 @@ export function createTools(deps: ToolDeps) {
       return
     }
     const t = TOOL_KEYS[key]
-    // A breadboard has no solder: no Joint tool.
+    // A breadboard has no solder: no Joint tool. Only a stripboard has strips to cut.
     if (t === 'joint' && deps.board.value?.board.type === 'breadboard') return
+    if (t === 'cut' && !(deps.board.value && isStripboard(deps.board.value.board))) return
     if (t) tool.value = t
   }
 
@@ -330,7 +342,7 @@ export function createTools(deps: ToolDeps) {
   }, { flush: 'sync' })
 
   return {
-    tool, drawing, message, onHoleClick, onSegmentClick, addJoint, endDrawing, onKeydown,
+    tool, drawing, message, onHoleClick, onSegmentClick, addJoint, addCut, endDrawing, onKeydown,
     held, preview, onMoveClick, onMoveHover, rotate, switchBend, place, cancel
   }
 }

@@ -3,6 +3,7 @@ import { holeKey, holeName, parseHole, straightRun, walkHoles, type Hole } from 
 import { placePart } from './footprints'
 import { buildConnectivity } from './connectivity'
 import { holeExists } from './boardShape'
+import { stripIndex } from './strips'
 
 /**
  * What the pencil is drawing: a trail, or on a breadboard a jumper (`jumper`: `trailId` is then
@@ -180,6 +181,20 @@ export function jumperClick(board: BoardFile, hole: Hole, drawing: Drawing | nul
   }
   const wires = board.wires.map(w => (w.id === drawing.trailId ? { ...w, points: [...w.points, name] } : w))
   return { ok: true, board: { ...board, wires }, drawing }
+}
+
+/**
+ * The Cut tool on a stripboard: cut the strip at `hole`, or put the cut back if it is cut there.
+ * Only a drilled strip hole can be cut; a breadboard's clips can't.
+ */
+export function toggleCut(board: BoardFile, hole: Hole): EditResult {
+  const name = holeName(hole)
+  if (board.board.type === 'breadboard') return fail('A breadboard\'s clips can\'t be cut.')
+  if (!stripIndex(board.board).has(holeKey(hole))) return fail(`Hole ${name} is not on a strip: there is nothing to cut.`)
+  const cuts = board.cuts ?? []
+  const next = cuts.includes(name) ? cuts.filter(c => c !== name) : [...cuts, name]
+  const { cuts: _, ...rest } = board
+  return { ok: true, board: next.length ? { ...rest, cuts: next } : rest, drawing: null }
 }
 
 /** On a breadboard, erasing a jumper's segment takes the whole jumper out (it isn't cut in two). */

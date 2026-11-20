@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { runCheck } from '~core/check'
 import { parseBoard, type BoardFile } from '~core/schema'
-import { blankBoard, PRESET_IDS, presetBoard, type BoardSides } from '~core/boardPresets'
+import { blankBoard, PRESET_IDS, presetBoard, rowStrips, type BoardSides } from '~core/boardPresets'
 import { parseFlip } from '~core/sideView'
 import { statsLine, ADVISORY } from '../../cli/format'
 import { tickKey } from '../../export/benchHtml'
@@ -53,13 +53,20 @@ function boardTooLarge(board: BoardFile): ApiResult | null {
   return boardBytes(board) > MAX_BOARD_BYTES ? { status: 413, body: { error: `the board is larger than ${MAX_BOARD_BYTES} bytes` } } : null
 }
 
-/** An empty `wirebender/1` board from `{ name, cols, rows, type }`; parseBoard rejects bad values. */
+/**
+ * An empty `wirebender/1` board from `{ name, cols, rows, type, shape?, copper? }`; parseBoard rejects bad
+ * values. `copper: "strips"` makes a stripboard (a strip along every row).
+ */
 function emptyBoard(json: Record<string, unknown>): unknown {
   // Unchecked here on purpose: parseBoard names what is wrong with cols, rows or type.
   const b = blankBoard(json.name as string, { cols: json.cols as number, rows: json.rows as number, pitchMm: 2.54, type: json.type as BoardSides })
   // A shape is passed through as sent: parseBoard says what is wrong with it.
-  return 'shape' in json ? { ...b, board: { ...b.board, shape: json.shape } } : b
+  const shaped = 'shape' in json ? { ...b, board: { ...b.board, shape: json.shape } } : b
+  const strips = json.copper === 'strips' && Number.isSafeInteger(json.cols) && Number.isSafeInteger(json.rows) && (json.cols as number) > 0 && (json.rows as number) > 0
+  return strips ? { ...shaped, board: { ...shaped.board, strips: rowStrips(json.cols as number, json.rows as number) } } : shaped
 }
+
+const COPPER_ERROR = 'copper: must be pads or strips'
 
 const PRESET_ERROR = `preset: must be one of ${PRESET_IDS.join(', ')}`
 
@@ -79,7 +86,10 @@ export function createOrImport(db: Db, text: string, author = AUTHOR, ownerId = 
   else if (fromPreset) {
     source = typeof json.preset === 'string' ? presetBoard(json.preset, json.name as string) : null
     if (!source) return invalid(PRESET_ERROR)
-  } else source = emptyBoard(json)
+  } else {
+    if ('copper' in json && json.copper !== 'pads' && json.copper !== 'strips') return invalid(COPPER_ERROR)
+    source = emptyBoard(json)
+  }
   const parsed = parseBoard(source)
   if (!parsed.ok) return invalid(...parsed.errors)
   const big = boardTooLarge(parsed.board)

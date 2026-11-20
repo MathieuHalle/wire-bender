@@ -15,7 +15,7 @@ const props = defineProps<{
   /** The check of `board`, when the page has already run it (it also counts the errors for the tab). */
   check?: CheckResult
 }>()
-const emit = defineEmits<{ 'add-joint': [finding: Finding] }>()
+const emit = defineEmits<{ 'add-joint': [finding: Finding], 'add-cut': [finding: Finding] }>()
 /** The finding whose holes are highlighted. */
 const selected = defineModel<Finding | null>('selected', { default: null })
 
@@ -132,6 +132,16 @@ watch(check, (c) => {
               label="Add joint"
               v-bind="lockedAttrs(locked, undefined, lockedTitle)"
               @click="locked || emit('add-joint', f)"
+            />
+            <UButton
+              v-if="f.rule === 'cutProposal' && f.holes.length && f.message.includes('Cut at')"
+              class="mt-0.5"
+              size="xs"
+              variant="soft"
+              icon="i-lucide-scissors"
+              :label="`Cut at ${f.holes[Math.floor((f.holes.length - 1) / 2)]}`"
+              v-bind="lockedAttrs(locked, undefined, lockedTitle)"
+              @click="locked || emit('add-cut', f)"
             />
           </li>
         </ul>

@@ -168,6 +168,17 @@ with red `+` and blue `-` lines. Its holes are grouped in fives, with a space be
    the `proto-4x6` count). It changes `holeExists`, which strips already use, so nothing built
    before has to change.
 
+## Step 3 as built (2026-11-20)
+
+- `cuts` is optional at the top level. A cut splits its strip into pieces named by their own
+  ends (`B1-B3`, `B5-B10`), and its hole has no bottom pad at all.
+- Rules: `cutProposal` (warning: the free holes between two leads of different nets on one
+  piece; none free, "move one of the parts"), `onCut` (warning: a lead or wire end in a cut
+  hole), `idleCut` (caution: the same net on both sides, or nothing on one side). Free holes
+  exclude wire ends, bottom trail ends and joints, and leg-fold targets.
+- The Cut tool (C) only shows on a stripboard; Cut at … on a proposal cuts its middle hole.
+- New board: "Holes: pads or strips" for Custom; the API and MCP take `copper: "strips"`.
+
 ## Step 4: no-go zones, cutouts and mounting holes (my calls)
 
 Today `board.blocked` (holes with a reason) is drawn crossed in 2D, refused by the tools and

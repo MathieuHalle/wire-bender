@@ -68,7 +68,7 @@ describe('create and import', () => {
   })
 
   describe('from a preset', () => {
-    const PRESET_ERROR = 'preset: must be one of custom, proto-4x6, proto-5x7, proto-7x9, chogori-22004515, bb-830, bb-830-full, bb-400, bb-170'
+    const PRESET_ERROR = 'preset: must be one of custom, proto-4x6, proto-5x7, proto-7x9, chogori-22004515, bb-830, bb-830-full, bb-400, bb-170, vero-95x127, vero-64x95'
     const create = (body: unknown) => api.createOrImport(db, JSON.stringify(body))
     const stored = (id: string) => (api.getBoardResponse(db, own(id)).body as { board: BoardFile }).board
 
@@ -78,6 +78,17 @@ describe('create and import', () => {
       const b = stored((r.body as { id: string }).id)
       expect(b).toMatchObject({ name: 'Cable', board: { cols: 2, rows: 2, type: 'one-sided' } })
       expect(b.parts.map(p => p.ref)).toEqual(['J1'])
+    })
+
+    it('makes a custom stripboard with copper: strips, and refuses another copper', () => {
+      const r = create({ name: 'S', cols: 12, rows: 4, type: 'one-sided', copper: 'strips' })
+      expect(r.status).toBe(200)
+      expect(stored((r.body as { id: string }).id).board.strips).toEqual([
+        { from: 'A1', to: 'A12' }, { from: 'B1', to: 'B12' }, { from: 'C1', to: 'C12' }, { from: 'D1', to: 'D12' }
+      ])
+      const bad = create({ name: 'S', cols: 12, rows: 4, type: 'one-sided', copper: 'gold' })
+      expect(bad.status).toBe(422)
+      expect((bad.body as { errors: string[] }).errors).toEqual(['copper: must be pads or strips'])
     })
 
     it('creates a breadboard with its strips and printed row names', () => {

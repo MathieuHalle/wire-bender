@@ -47,3 +47,13 @@ describe('pageKey on a breadboard', () => {
     expect(pageKey('f', 'top', 'both')).toEqual({ view: 'bottom' })
   })
 })
+
+describe('stripboard bands with a cut', () => {
+  it('leaves a gap at the cut', () => {
+    const b = mk({ board: { strips: [{ from: 'A1', to: 'A10' }] }, cuts: ['A4'] })
+    const bands = stripBands(b, makeGeo(b, 'none'))
+    expect(bands).toHaveLength(2)
+    expect(bands[0]!.x + bands[0]!.w).toBeLessThan(3 * p - 0.4 * p)
+    expect(bands[1]!.x).toBeGreaterThan(3 * p + 0.4 * p)
+  })
+})

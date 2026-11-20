@@ -50,23 +50,34 @@ describe('the "New board" form', () => {
   })
 
   it('a preset shows its own size, fixed', () => {
-    expect(shownSize(draft({ preset: 'chogori-22004515' }))).toEqual({ cols: 2, rows: 2, type: 'one-sided', shape: 'round', fixed: true })
+    expect(shownSize(draft({ preset: 'chogori-22004515' }))).toEqual({ cols: 2, rows: 2, type: 'one-sided', shape: 'round', copper: 'pads', fixed: true })
   })
 
   it('back to Custom: the Custom values from before, editable again', () => {
     const d = draft({ preset: 'proto-5x7', cols: 12, rows: 9, type: 'one-sided' })
     expect(shownSize(d)).toMatchObject({ cols: 18, rows: 24, fixed: true })
-    expect(shownSize({ ...d, preset: 'custom' })).toEqual({ cols: 12, rows: 9, type: 'one-sided', shape: 'rect', fixed: false })
+    expect(shownSize({ ...d, preset: 'custom' })).toEqual({ cols: 12, rows: 9, type: 'one-sided', shape: 'rect', copper: 'pads', fixed: false })
   })
 
   it('the menu: Custom first, then every preset', () => {
     expect(PRESET_ITEMS[0]).toEqual({ label: 'Custom', value: 'custom' })
-    expect(PRESET_ITEMS).toHaveLength(9)
+    expect(PRESET_ITEMS).toHaveLength(11)
     expect(PRESET_ITEMS.map(i => i.value)).toContain('chogori-22004515')
     expect(PRESET_ITEMS.map(i => i.value)).toContain('bb-400')
   })
   it('a breadboard preset shows its size, fixed, as a breadboard', () => {
     expect(shownSize({ name: 'x', preset: 'bb-400', cols: 3, rows: 3, type: 'one-sided', shape: 'round', cornerHoles: 2 }))
-      .toEqual({ cols: 30, rows: 18, type: 'breadboard', shape: 'rect', fixed: true })
+      .toEqual({ cols: 30, rows: 18, type: 'breadboard', shape: 'rect', copper: 'pads', fixed: true })
+  })
+})
+
+describe('a stripboard in the "New board" form', () => {
+  const base = { name: 'S', preset: 'custom', cols: 12, rows: 4, type: 'one-sided' as const, shape: 'rect' as const, cornerHoles: 2 }
+  it('sends copper: strips for a custom stripboard, nothing for pads', () => {
+    expect(newBoardBody({ ...base, copper: 'strips' })).toEqual({ name: 'S', cols: 12, rows: 4, type: 'one-sided', copper: 'strips' })
+    expect(newBoardBody({ ...base, copper: 'pads' })).toEqual({ name: 'S', cols: 12, rows: 4, type: 'one-sided' })
+  })
+  it('shows a Veroboard preset as strips', () => {
+    expect(shownSize({ ...base, preset: 'vero-64x95' })).toMatchObject({ cols: 37, rows: 24, copper: 'strips', fixed: true })
   })
 })

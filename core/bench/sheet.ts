@@ -1,6 +1,7 @@
 // Bench sheet model: what to place and in which order, which legs to fold, and the
 // beep / no-beep meter lists. Pure data; the export renders it.
-import { holeName, tryParseHole, type Hole } from '../holes'
+import { holeName, parseHole, tryParseHole, type Hole } from '../holes'
+import { stripHoles } from '../strips'
 import { printedName } from '../holeLabel'
 import { bodyHeightMm, FOOTPRINT_PITCH_MM, isStanding, placePart, type PlacedPart } from '../footprints'
 import { buildConnectivity } from '../connectivity'
@@ -32,7 +33,10 @@ export interface BenchModel {
   mustNotBeep: MeterRow[]
   /** Nets left out of must-beep because their copper is shorted to another net. */
   shortedNets: number
+  /** A stripboard's cuts, row by row: done first, before anything is soldered. */
+  cuts: CutRow[]
 }
+export interface CutRow { hole: HoleName, strip: string }
 
 const SUPPLY_GROUP = 'Shorts the supply'
 const MCU_GROUP = 'Kills the MCU'
@@ -76,6 +80,15 @@ function orientation(board: BoardFile, pp: PlacedPart, pitch: number): string {
     case 'minus-b': return `minus (stripe) at ${at(pin('b')!.hole)}`
     default: return 'either way'
   }
+}
+
+/** Each cut and the strip it is on (`B1–B30`), row by row then column. */
+function cutRows(board: BoardFile): CutRow[] {
+  const strips = board.board.strips ?? []
+  const stripOf = new Map<string, string>()
+  for (const s of strips) for (const h of stripHoles(s)) stripOf.set(holeName(h), `${printedName(board.board, parseHole(s.from))}–${printedName(board.board, parseHole(s.to))}`)
+  return (board.cuts ?? []).map(parseHole).sort((a, b) => a.row - b.row || a.col - b.col)
+    .map(h => ({ hole: printedName(board.board, h), strip: stripOf.get(holeName(h)) ?? '' }))
 }
 
 const byHole = (a: { hole: Hole, id: string }, b: { hole: Hole, id: string }) =>
@@ -182,6 +195,7 @@ export function benchModel(board: BoardFile): BenchModel {
     legFolds,
     mustBeep,
     mustNotBeep,
-    shortedNets
+    shortedNets,
+    cuts: cutRows(board)
   }
 }
