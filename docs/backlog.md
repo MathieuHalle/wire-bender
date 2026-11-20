@@ -25,7 +25,9 @@ Design and plan: `docs/superpowers/specs/2026-11-19-wirebender-strips-design.md`
 breadboard) were built 2026-11-19 on the `strips-design` branch. Before releasing them, check the
 four breadboard layouts on a real board: which rail is `+` at the top, whether row `a` is at the
 bottom, the rail groups and the 830's split (the preset tests check the hole counts, not the board).
-Next: step 3 (stripboard: cuts, the Cut tool, proposals, presets), then step 4 (board features).
+Step 3 (stripboard: cuts, the Cut tool, cut proposals, the bench sheet's cuts, the two Veroboard
+presets and custom stripboards) was built 2026-11-20 on the `stripboard` branch; its two hole
+counts are unconfirmed, like `proto-4x6`. Next: step 4 (board features).
 
 ## Board presets follow-ups
 
