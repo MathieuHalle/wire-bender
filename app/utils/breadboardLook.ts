@@ -2,6 +2,7 @@
 // (`Geo`, mirrored with it): the channel between the clip halves, the red and blue rail lines, and
 // a stripboard's copper bands. Pure geometry; Holes.vue draws it.
 import { parseHole } from '~core/holes'
+import { stripSegments } from '~core/strips'
 import type { BoardFile } from '~core/schema'
 import type { Geo } from './boardView'
 
@@ -57,11 +58,14 @@ export function railLines(board: BoardFile, geo: Geo): RailLine[] {
   return out
 }
 
-/** A stripboard's copper bands, one per strip, under its drilled holes (the bottom side). */
+/**
+ * A stripboard's copper bands under its drilled holes (the bottom side): one per piece of strip
+ * between cuts, so a cut shows as a gap in the copper.
+ */
 export function stripBands(board: BoardFile, geo: Geo): Rect[] {
   const w = geo.pitch * 0.84
-  return (board.board.strips ?? []).map((s) => {
-    const pts = [geo.pt(parseHole(s.from)), geo.pt(parseHole(s.to))]
+  return stripSegments(board.board, board.cuts).map((s) => {
+    const pts = [geo.pt(s.holes[0]!), geo.pt(s.holes[s.holes.length - 1]!)]
     const x0 = Math.min(pts[0]!.x, pts[1]!.x)
     const x1 = Math.max(pts[0]!.x, pts[1]!.x)
     const y0 = Math.min(pts[0]!.y, pts[1]!.y)

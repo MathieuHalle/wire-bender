@@ -36,3 +36,10 @@ describe('a stripboard in 3D', () => {
     expect(s.board.look).toBeUndefined()
   })
 })
+
+describe('a cut stripboard in 3D', () => {
+  it('splits the band at the cut', () => {
+    const s = buildScene(mk({ board: { strips: [{ from: 'A1', to: 'A10' }] }, cuts: ['A4'] }))
+    expect(s.prims.filter(p => p.kind === 'box' && p.color === COLORS.copper)).toHaveLength(2)
+  })
+})

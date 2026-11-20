@@ -2,6 +2,7 @@
 // its top (the channel, the red and blue rail lines). Pure: no Node, DOM or three.js.
 import { parseHole } from '../holes'
 import type { BoardFile } from '../schema'
+import { stripSegments } from '../strips'
 import { BOARD_BOTTOM_Y, COLORS, COPPER_THICKNESS_MM } from './dims'
 import type { Prim, Tag } from './types'
 
@@ -9,14 +10,14 @@ const BOARD_TAG: Tag = { kind: 'board', id: 'board' }
 /** Print and stripes sit this far over the top surface, so they don't z-fight with it. */
 const PRINT_Y = 0.02
 
-/** One copper band per strip under its holes, on the bottom of a stripboard. */
+/** Copper bands under a stripboard's holes, on the bottom: one per piece of strip between cuts. */
 export function stripBandPrims(board: BoardFile): Prim[] {
   if (board.board.type === 'breadboard') return []
   const p = board.board.pitchMm
   const w = p * 0.84
-  return (board.board.strips ?? []).map((s) => {
-    const a = parseHole(s.from)
-    const b = parseHole(s.to)
+  return stripSegments(board.board, board.cuts).map((s) => {
+    const a = s.holes[0]!
+    const b = s.holes[s.holes.length - 1]!
     const x0 = (Math.min(a.col, b.col) - 1) * p
     const x1 = (Math.max(a.col, b.col) - 1) * p
     const z0 = (Math.min(a.row, b.row) - 1) * p
@@ -24,7 +25,7 @@ export function stripBandPrims(board: BoardFile): Prim[] {
     return {
       kind: 'box', center: [(x0 + x1) / 2, BOARD_BOTTOM_Y - COPPER_THICKNESS_MM / 2, (z0 + z1) / 2],
       size: [x1 - x0 + w, COPPER_THICKNESS_MM, z1 - z0 + w], color: COLORS.copper, metal: true,
-      tag: { kind: 'board', id: 'board', label: `strip ${s.from}–${s.to}` }
+      tag: { kind: 'board', id: 'board', label: `strip ${s.id.replace('-', '–')}` }
     } satisfies Prim
   })
 }
