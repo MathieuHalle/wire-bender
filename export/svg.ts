@@ -10,8 +10,9 @@ import type { LegFoldRow } from '../core/bench/sheet'
 import type { BoardFile, Side } from '../core/schema'
 import { safeColor } from '../core/color'
 import { ghostWires, sideMap, type Flip, type SideMap } from '../core/sideView'
-import { existingHoles, shapeOutline } from '../core/boardShape'
+import { existingHoles, shapeOutline, boardRectMm } from '../core/boardShape'
 import { stripSegments } from '../core/strips'
+import { cutoutShape, mountingShapes, type FeatureShape } from '../core/features'
 
 export { safeColor }
 
@@ -63,6 +64,8 @@ type Prim
     | { t: 'circle', cx: number, cy: number, r: number, a: string }
     | { t: 'rect', x: number, y: number, w: number, h: number, a: string }
     | { t: 'poly', pts: Pt[], a: string }
+    /** A path in drawing mm, shifted at render by a transform; `box` is its bounds. */
+    | { t: 'path', d: string, box: Box, a: string }
     | { t: 'text', x: number, y: number, s: string, size: number, anchor: Anchor, a: string }
 
 interface Box { x0: number, y0: number, x1: number, y1: number }
@@ -83,6 +86,10 @@ class Scene {
 
   poly(pts: Pt[], attrs: string) {
     this.prims.push({ t: 'poly', pts, a: attrs })
+  }
+
+  path(p: { d: string, box: Box }, attrs: string) {
+    this.prims.push({ t: 'path', d: p.d, box: p.box, a: attrs })
   }
 
   /**
@@ -106,6 +113,7 @@ class Scene {
       else if (p.t === 'circle') add(p.cx - p.r, p.cy - p.r, p.cx + p.r, p.cy + p.r)
       else if (p.t === 'rect') add(p.x, p.y, p.x + p.w, p.y + p.h)
       else if (p.t === 'poly') for (const q of p.pts) add(q.x, q.y, q.x, q.y)
+      else if (p.t === 'path') add(p.box.x0, p.box.y0, p.box.x1, p.box.y1)
       else {
         const w = textW(p.s, p.size)
         const x0 = p.anchor === 'start' ? p.x : p.anchor === 'end' ? p.x - w : p.x - w / 2
@@ -126,6 +134,7 @@ class Scene {
         case 'circle': return `<circle ${p.a} cx="${X(p.cx)}" cy="${Y(p.cy)}" r="${n(p.r)}"/>`
         case 'rect': return `<rect ${p.a} x="${X(p.x)}" y="${Y(p.y)}" width="${n(p.w)}" height="${n(p.h)}"/>`
         case 'poly': return `<path ${p.a} d="${p.pts.map((q, i) => `${i ? 'L' : 'M'}${X(q.x)} ${Y(q.y)}`).join('')}"/>`
+        case 'path': return `<path ${p.a} transform="translate(${n(dx)} ${n(dy)})" d="${p.d}"/>`
         case 'text': {
           const anchor = p.anchor === 'start' ? '' : ` text-anchor="${p.anchor}"`
           return `<text ${p.a} x="${X(p.x)}" y="${Y(p.y)}" font-size="${n(p.size)}"${anchor}>${esc(p.s)}</text>`
@@ -243,7 +252,14 @@ export function boardOverviewSvg(board: BoardFile, side: Side, opts: { title?: b
   // board and holes (a shaped board: its outline, and only the holes it has)
   const body = `fill="#f4f8f5" stroke="#9fb5a6" stroke-width="0.25"`
   const shape = shapeOutline(board.board, g)
-  if (!shape) s.rect(-half, -half, g.span + p, height + p, `rx="0.6" ${body}`)
+  if (board.board.cutouts?.length || board.board.mountingHoles?.length) {
+    // The board with its openings cut out of it (cutouts, drilled mounting holes).
+    s.path(featureBoardPath(board, g, shape), `fill-rule="evenodd" ${body} stroke-linejoin="round"`)
+    for (const m of board.board.mountingHoles ?? []) {
+      const c = mountingShapes(m).clearance
+      if (m.clearanceMm && c.kind === 'circle') s.circle({ x: g.x(c.cx), y: g.y(c.cy) }, c.r, `fill="none" stroke="${MUTED}" stroke-width="0.2" stroke-dasharray="0.8 0.5"`)
+    }
+  } else if (!shape) s.rect(-half, -half, g.span + p, height + p, `rx="0.6" ${body}`)
   else if (shape.kind === 'circle') s.circle({ x: shape.cx, y: shape.cy }, shape.r, body)
   else s.poly([...shape.points, shape.points[0]!], `${body} stroke-linejoin="round"`)
   // A stripboard's copper, on the bottom: a band per piece of strip, a gap and a ring at each cut.
@@ -837,4 +853,26 @@ export function legFoldSvg(row: LegFoldRow, pitchMm: number, map?: SideMap): str
   s.text({ x: bx.x0, y: bx.y0 - 4.4 }, `${row.lead}: fold ${row.from} → ${row.to}`, 2.6, 'start', 'font-weight="700"')
   s.text({ x: bx.x0, y: bx.y0 - 1.2 }, `solder side (board turned over${flip === 'tb' ? ', mirrored top↔bottom' : ''}), sketch 3×`, MIN_FONT, 'start', `fill="${MUTED}"`)
   return s.fit(1, `leg-fold ${row.lead} from ${row.from} to ${row.to}, solder side sketch`)
+}
+
+/** A board with cutouts or mounting holes as one path (outline, then each opening), as `g` draws it. */
+function featureBoardPath(board: BoardFile, g: SideMap, shape: ReturnType<typeof shapeOutline>): { d: string, box: Box } {
+  const circle = (cx: number, cy: number, r: number) => `M${cx - r} ${cy}A${r} ${r} 0 1 0 ${cx + r} ${cy}A${r} ${r} 0 1 0 ${cx - r} ${cy}Z`
+  const rect = (s: { x0: number, y0: number, x1: number, y1: number }) => {
+    const xs = [g.x(s.x0), g.x(s.x1)]
+    const ys = [g.y(s.y0), g.y(s.y1)]
+    return `M${Math.min(...xs)} ${Math.min(...ys)}H${Math.max(...xs)}V${Math.max(...ys)}H${Math.min(...xs)}Z`
+  }
+  const outline = !shape
+    ? rect(boardRectMm(board.board, 0.5))
+    : shape.kind === 'circle' ? circle(shape.cx, shape.cy, shape.r) : `M${shape.points.map(q => `${q.x} ${q.y}`).join('L')}Z`
+  const open = (f: FeatureShape) => (f.kind === 'circle' ? circle(g.x(f.cx), g.y(f.cy), f.r) : rect(f))
+  const e = boardRectMm(board.board, 0.5)
+  const xs = [g.x(e.x0), g.x(e.x1)]
+  const ys = [g.y(e.y0), g.y(e.y1)]
+  const box = shape?.kind === 'circle'
+    ? { x0: shape.cx - shape.r, y0: shape.cy - shape.r, x1: shape.cx + shape.r, y1: shape.cy + shape.r }
+    : { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) }
+  const d = [outline, ...(board.board.cutouts ?? []).map(c => open(cutoutShape(board.board, c))), ...(board.board.mountingHoles ?? []).map(m => open(mountingShapes(m).hole))].join('')
+  return { d, box }
 }

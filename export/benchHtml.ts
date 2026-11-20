@@ -180,6 +180,16 @@ function table(cols: string[], rows: (string[] | string)[], cls = ''): string {
   return `<table${cls ? ` class="${cls}"` : ''}>${head}<tbody>\n${body}\n</tbody></table>`
 }
 
+/** Mounting holes to drill and cutouts to make, first of all. */
+function prepare(m: BenchModel, id: (k: string) => string): string {
+  const rows = m.prepare.map((r, i) => [tick(id(`prep:${i}`)), esc(r.what), `<span class="mono">${esc(r.where)}</span>`])
+  return `<section id="prepare" class="page">
+<h2>Prepare the board</h2>
+<p class="hint">Before anything else: drill the mounting holes and cut out the openings. Measure from the centre of hole A1, on the top side.</p>
+${table(['Done', 'What', 'Where'], rows)}
+</section>`
+}
+
 /** A stripboard's cuts, first: a checklist, done before anything is soldered. */
 function cuts(m: BenchModel, id: (k: string) => string): string {
   const rows = m.cuts.map(c => [tick(id(`cut:${c.hole}`)), `<strong class="mono">${esc(c.hole)}</strong>`, `<span class="mono">${esc(c.strip)}</span>`])
@@ -568,6 +578,7 @@ export function benchHtml(board: BoardFile, opts: { hash?: string, date?: string
   const bb = isBreadboard(board)
   const parts = [
     ...(bb ? topOnly(board, m.paper, printable) : [overview(board, printable, flip), enlarged(board, m.paper, flip)]),
+    ...(m.prepare.length ? [prepare(m, id)] : []),
     ...(isStripboard(board.board) ? [cuts(m, id)] : []),
     placement(m, id, bb), cards(m, board, printable, id, map),
     ...(bb ? [] : [legFolds(m, board.board.pitchMm, id, map)]), meter(m, id)

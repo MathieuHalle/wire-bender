@@ -35,7 +35,10 @@ export interface BenchModel {
   shortedNets: number
   /** A stripboard's cuts, row by row: done first, before anything is soldered. */
   cuts: CutRow[]
+  /** Openings to make first: mounting holes to drill, cutouts to cut out. */
+  prepare: PrepareRow[]
 }
+export interface PrepareRow { what: string, where: string }
 export interface CutRow { hole: HoleName, strip: string }
 
 const SUPPLY_GROUP = 'Shorts the supply'
@@ -80,6 +83,28 @@ function orientation(board: BoardFile, pp: PlacedPart, pitch: number): string {
     case 'minus-b': return `minus (stripe) at ${at(pin('b')!.hole)}`
     default: return 'either way'
   }
+}
+
+/** Mounting holes and cutouts, with where they go: mm from hole A1's centre, and the nearest hole. */
+function prepareRows(board: BoardFile): PrepareRow[] {
+  const b = board.board
+  const mm = (v: number) => `${Math.round(v * 10) / 10} mm`
+  const near = (x: number, y: number) => {
+    const clamp = (v: number, hi: number) => Math.min(Math.max(v, 1), hi)
+    return printedName(b, { col: clamp(Math.round(x / b.pitchMm) + 1, b.cols), row: clamp(Math.round(y / b.pitchMm) + 1, b.rows) })
+  }
+  const at = (x: number, y: number) =>
+    `centre ${mm(Math.abs(x))} ${x < 0 ? 'left' : 'right'} and ${mm(Math.abs(y))} ${y < 0 ? 'up' : 'down'} from A1 (near ${near(x, y)})`
+  const rows: PrepareRow[] = []
+  for (const m of b.mountingHoles ?? [])
+    rows.push({ what: `Drill a ${m.diameterMm} mm mounting hole${m.clearanceMm ? `, ${m.clearanceMm} mm clear around it` : ''}`, where: at(m.x, m.y) })
+  for (const c of b.cutouts ?? []) {
+    const why = c.reason ? ` (${c.reason})` : ''
+    if (c.kind === 'grid') rows.push({ what: `Cut out the holes ${c.from} to ${c.to}, and half a pitch past them${why}`, where: `${c.from}–${c.to}` })
+    else if (c.kind === 'rect') rows.push({ what: `Cut out a ${mm(c.widthMm)} × ${mm(c.heightMm)} window${why}`, where: at(c.x, c.y) })
+    else rows.push({ what: `Drill a ${mm(c.diameterMm)} hole${why}`, where: at(c.x, c.y) })
+  }
+  return rows
 }
 
 /** Each cut and the strip it is on (`B1–B30`), row by row then column. */
@@ -196,6 +221,7 @@ export function benchModel(board: BoardFile): BenchModel {
     mustBeep,
     mustNotBeep,
     shortedNets,
-    cuts: cutRows(board)
+    cuts: cutRows(board),
+    prepare: prepareRows(board)
   }
 }
