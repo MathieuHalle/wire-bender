@@ -6,7 +6,7 @@ import { benchModel, type BenchModel, type MeterRow } from '../core/bench/sheet'
 import { netLabel, type WireCard } from '../core/bench/cards'
 import type { BoardFile, Side } from '../core/schema'
 import { printedName } from '../core/holeLabel'
-import { isStripboard, stripSegments } from '../core/strips'
+import { isStripboard } from '../core/strips'
 import { parseHole } from '../core/holes'
 import { sideMap, type Flip, type SideMap } from '../core/sideView'
 import {
