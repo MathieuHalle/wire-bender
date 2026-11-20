@@ -75,6 +75,8 @@ export interface Scene3D {
     center: V3
     pitchMm: number
     outline?: XZ[]
+    /** Openings through the slab (cutouts, drilled mounting holes), each a closed x/z outline. */
+    openings?: XZ[][]
     /** A breadboard's look: its colour, the print's colour, and square holes on the top only. Absent: a board's. */
     look?: { color: string, print: string, squareHoles: true }
   }

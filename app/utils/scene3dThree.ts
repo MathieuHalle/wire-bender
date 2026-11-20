@@ -90,8 +90,10 @@ const LATHE_SEGMENTS = 32
  * Vertical walls on an x/z outline from y0 to y1. The shape is drawn in (x, -z) and extruded
  * along +z; turning it -90° about x stands it up (shape y -> -z, extrusion -> +y).
  */
-export function extrudeGeometry(outline: XZ[], y0: number, y1: number): THREE.BufferGeometry {
+export function extrudeGeometry(outline: XZ[], y0: number, y1: number, holes: XZ[][] = []): THREE.BufferGeometry {
   const shape = new THREE.Shape(outline.map(q => new THREE.Vector2(q.x, -q.z)))
+  // Openings through it (cutouts, mounting holes); three.js fixes their winding.
+  for (const h of holes) shape.holes.push(new THREE.Path(h.map(q => new THREE.Vector2(q.x, -q.z))))
   const g = new THREE.ExtrudeGeometry(shape, { depth: Math.max(y1 - y0, 1e-3), bevelEnabled: false, curveSegments: 1 })
   g.rotateX(-Math.PI / 2)
   g.translate(0, y0, 0)
@@ -177,15 +179,21 @@ export function buildMeshes(scene: Scene3D): BuiltMeshes {
     return m
   }
 
-  const { widthMm, depthMm, thicknessMm, center, outline } = scene.board
-  // A round or cut board: its outline, extruded the slab's thickness (already in board x/z).
+  const { widthMm, depthMm, thicknessMm, center, outline, openings } = scene.board
+  // A round or cut board, or one with openings: its outline (a plain one's box if none), extruded
+  // the slab's thickness with the openings through it (already in board x/z).
+  const extruded = outline || openings?.length
+  const box: XZ[] = [
+    { x: center[0] - widthMm / 2, z: center[2] - depthMm / 2 }, { x: center[0] + widthMm / 2, z: center[2] - depthMm / 2 },
+    { x: center[0] + widthMm / 2, z: center[2] + depthMm / 2 }, { x: center[0] - widthMm / 2, z: center[2] + depthMm / 2 }
+  ]
   const slab = new THREE.Mesh(
-    outline
-      ? extrudeGeometry(outline, center[1] - thicknessMm / 2, center[1] + thicknessMm / 2)
+    extruded
+      ? extrudeGeometry(outline ?? box, center[1] - thicknessMm / 2, center[1] + thicknessMm / 2, openings ?? [])
       : new THREE.BoxGeometry(widthMm, thicknessMm, depthMm),
     new THREE.MeshStandardMaterial({ color: scene.board.look?.color ?? COLORS.board, roughness: 0.85 })
   )
-  if (!outline) slab.position.set(...center)
+  if (!extruded) slab.position.set(...center)
   slab.name = 'board'
   slab.userData.tag = { kind: 'board', id: 'board' } satisfies Tag
   group.add(slab)

@@ -75,5 +75,8 @@ export const COLORS = {
   breadboardPrint: '#5d5a52',
   channel: '#dcd4c1',
   railPlus: '#d62839',
-  railMinus: '#1f5fbf'
+  railMinus: '#1f5fbf',
+  /** A blocked hole's patch (no-go zones, round mounting holes). */
+  noGo: '#c8695a',
+  mountRing: '#d8d8d0'
 } as const
